@@ -62,7 +62,6 @@ docs/
   USER_TEST_PROTOCOL.md  用户测试与访谈方案
 .github/workflows/
   ci.yml                 GitHub 自动检查与生产构建
-  pages.yml              GitHub Pages 独立网页自动发布
 ```
 
 ## 项目文档
