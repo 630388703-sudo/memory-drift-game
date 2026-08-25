@@ -67,7 +67,7 @@
     .runner-goal.on{opacity:1;transform:none}.runner-goal b{display:block;color:#f0d57e;font-size:10px}.runner-goal span{color:#f7f3eaaa}.runner-goal .goal-row{display:flex;justify-content:space-between;gap:1rem}.runner-goal .combo{font-size:13px;color:#f0d57e}
     .gate-flash{position:absolute;z-index:8;left:50%;top:29%;padding:.45rem .75rem;transform:translate(-50%,-8px);border:1px solid #efd57b88;background:#263438d8;color:#f7f3ea;font:8px "Courier New",monospace;letter-spacing:.16em;opacity:0;transition:.24s;pointer-events:none}.gate-flash.on{opacity:1;transform:translate(-50%,0)}
     @media(pointer:coarse){.controls{display:flex}.panel{bottom:20%}.pace-hud{bottom:19%}.runner-goal{top:16%}}
-    .interaction-mode{display:flex;align-items:center;gap:.45rem;margin:.55rem 0 .25rem;padding:.42rem .5rem;border-left:2px solid var(--yellow);background:#26343810;font:7px/1.45 "Courier New",monospace;letter-spacing:.1em}.interaction-mode b{color:#8b6e29}.door-inspection{margin:.55rem 0;padding:.55rem .6rem;background:linear-gradient(90deg,#26343812,transparent);border:1px dashed #26343838}.door-inspection strong{display:block;margin-bottom:.25rem;font:10px "Courier New",monospace;letter-spacing:.12em}.door-inspection span{font:9px/1.6 "STSong","Songti SC",serif}.version-list article.card-back{transform:translateY(-7px) rotateY(180deg);background:#cbc3b2}.version-list article.card-back>*{visibility:hidden}.version-list article.card-back:after{content:attr(data-back);visibility:visible;position:absolute;inset:16px;display:grid;place-items:center;padding:12px;border:1px dashed #39474a66;color:#344144;text-align:center;white-space:pre-line;font:italic 12px/1.8 Georgia,"Songti SC",serif;transform:rotateY(180deg);text-shadow:none}.version-list article.card-back:before{visibility:hidden}.interaction-stamps{display:flex;gap:.3rem;margin-top:.5rem}.interaction-stamps i{flex:1;padding:.3rem;border:1px solid #26343825;text-align:center;font:7px "Courier New",monospace;font-style:normal}.interaction-stamps i.done{border-color:#b99a4d;background:#c6aa6224;color:#71591e}
+    .interaction-mode{display:flex;align-items:center;gap:.45rem;margin:.55rem 0 .25rem;padding:.42rem .5rem;border-left:2px solid var(--yellow);background:#26343810;font:7px/1.45 "Courier New",monospace;letter-spacing:.1em}.interaction-mode b{color:#8b6e29}.door-inspection{margin:.55rem 0;padding:.55rem .6rem;background:linear-gradient(90deg,#26343812,transparent);border:1px dashed #26343838}.door-inspection strong{display:block;margin-bottom:.25rem;font:10px "Courier New",monospace;letter-spacing:.12em}.door-inspection span{font:9px/1.6 "STSong","Songti SC",serif}.version-list article.card-back{transform:translateY(-7px) rotateY(180deg);background:#cbc3b2}.version-list article.card-back>*{visibility:hidden}.version-list article.card-back:after{content:attr(data-back);visibility:visible;position:absolute;inset:16px;display:grid;place-items:center;padding:12px;border:1px dashed #39474a66;color:#344144;text-align:center;white-space:pre-line;font:italic 12px/1.8 Georgia,"Songti SC",serif;transform:rotateY(180deg);text-shadow:none}.version-list article.card-back:before{visibility:hidden}.interaction-stamps{display:flex;gap:.3rem;margin-top:.5rem}.interaction-stamps i{flex:1;padding:.3rem;border:1px solid #26343825;text-align:center;font:7px "Courier New",monospace;font-style:normal}.interaction-stamps i.done{border-color:#b99a4d;background:#c6aa6224;color:#71591e}.fragment-list b{display:grid;grid-template-rows:28px auto;place-items:center;gap:.22rem;min-height:57px;padding:.42rem .12rem}.fragment-list b.on{box-shadow:inset 0 -2px var(--yellow),0 5px 12px #28363a16}.fragment-list b.done{opacity:.78}.frag-icon{width:26px;height:26px;overflow:visible;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.fragment-list b.on .frag-icon{filter:drop-shadow(0 0 4px #c6aa6277);transform:scale(1.08)}.frag-label{display:block;font:7px/1.25 "Courier New",monospace;letter-spacing:.04em}.frag-label small{display:block;margin-top:1px;font:6px/1 "STSong","Songti SC",serif;letter-spacing:0}
   </style>
 </head>
 <body>
@@ -301,6 +301,24 @@
     Object.assign(state,{doorScans:new Set(),doorScan:-1,cardBack:false,interactionCount:0});
     const doorEvidenceZh=["门缝里是18:12的冷光；门牌边缘有被覆盖的字迹。","雨声与17:42的钟声同步；影子似乎有两组。","没有门牌，也没有完整影子；但脚步声仍从里面返回。"];
     const doorEvidenceEn=["Cold 18:12 light leaks through; an older room number remains beneath the plate.","Rain aligns with the 17:42 clock; the shadow may contain two sets of footsteps.","No plate and no complete shadow, yet footsteps still return from inside."];
+    const fragmentNames={zh:["照片角","时钟","姓名牌","声波","缺口"],en:["PHOTO","CLOCK","NAME","VOICE","VOID"]};
+    const fragmentIcons=[
+      "<svg class=frag-icon viewBox='0 0 32 32' aria-hidden=true><path d='M5 7h22v18H5zM8 21l6-6 4 4 3-3 4 5'/><circle cx='21.5' cy='11.5' r='2.2'/><path d='M5 13V7h6'/></svg>",
+      "<svg class=frag-icon viewBox='0 0 32 32' aria-hidden=true><circle cx='16' cy='16' r='11'/><path d='M16 9v8l6 3M16 5v2M27 16h-2M16 27v-2M5 16h2'/></svg>",
+      "<svg class=frag-icon viewBox='0 0 32 32' aria-hidden=true><rect x='5' y='8' width='22' height='17' rx='2'/><circle cx='11' cy='15' r='3'/><path d='M16 13h7M16 17h7M9 21h14M12 8V5h8v3'/></svg>",
+      "<svg class=frag-icon viewBox='0 0 32 32' aria-hidden=true><path d='M4 16h3l2-6 3 13 3-17 3 20 3-14 2 8 2-4h3'/><path d='M5 27h22' opacity='.35'/></svg>",
+      "<svg class=frag-icon viewBox='0 0 32 32' aria-hidden=true><path d='M16 4a12 12 0 0 1 9 4M28 14a12 12 0 0 1-2 9M20 27a12 12 0 0 1-10-1M6 21A12 12 0 0 1 5 11M9 7a12 12 0 0 1 3-2'/><path d='M12 11l4 4 5-5M16 15l-3 7 6-2'/></svg>"
+    ];
+    function upgradeFragmentTabs(){const tabs=ui.panel.querySelectorAll(".fragment-list b");tabs.forEach((tab,i)=>{tab.innerHTML=fragmentIcons[i]+"<span class=frag-label>0"+(i+1)+"<small>"+fragmentNames[state.locale][i]+"</small></span>";tab.setAttribute("aria-label","Fragment 0"+(i+1)+" "+fragmentNames[state.locale][i])})}
+    function drawFragmentGlyph(i,x,y,size=36,color="#273235"){
+      ctx.save();ctx.translate(x,y);ctx.strokeStyle=color;ctx.fillStyle="transparent";ctx.lineWidth=Math.max(2,size*.08);ctx.lineCap="round";ctx.lineJoin="round";const s=size/16;ctx.scale(s,s);
+      if(i===0){ctx.strokeRect(-10,-8,20,16);ctx.beginPath();ctx.moveTo(-8,5);ctx.lineTo(-3,0);ctx.lineTo(1,4);ctx.lineTo(5,0);ctx.lineTo(9,5);ctx.stroke();ctx.beginPath();ctx.arc(5,-4,2,0,Math.PI*2);ctx.stroke()}
+      if(i===1){ctx.beginPath();ctx.arc(0,0,10,0,Math.PI*2);ctx.moveTo(0,-6);ctx.lineTo(0,1);ctx.lineTo(6,4);ctx.stroke()}
+      if(i===2){ctx.strokeRect(-10,-7,20,14);ctx.beginPath();ctx.arc(-5,-1,2.5,0,Math.PI*2);ctx.moveTo(0,-3);ctx.lineTo(7,-3);ctx.moveTo(0,1);ctx.lineTo(7,1);ctx.moveTo(-7,5);ctx.lineTo(7,5);ctx.stroke()}
+      if(i===3){ctx.beginPath();ctx.moveTo(-11,0);[-8,-5,-2,1,4,7,10].forEach((px,n)=>ctx.lineTo(px,[0,-6,8,-10,7,-4,0][n]));ctx.stroke()}
+      if(i===4){ctx.setLineDash([3,3]);ctx.beginPath();ctx.arc(0,0,10,.2,5.65);ctx.stroke();ctx.setLineDash([]);ctx.beginPath();ctx.moveTo(-4,-4);ctx.lineTo(1,1);ctx.lineTo(6,-5);ctx.moveTo(1,1);ctx.lineTo(-2,8);ctx.stroke()}
+      ctx.restore()
+    }
     function enhanceInteractionUI(){
       if(state.stage==="archive")ui.panel.insertAdjacentHTML("beforeend","<div class=interaction-mode><b>SCAN + TIMING</b><span>"+(state.locale==="zh"?"移动定位 → 空格探测 → 在黄色共振区再次锁定":"LOCATE → PROBE → LOCK INSIDE THE YELLOW WINDOW")+"</span></div>");
       if(state.stage==="doors"){
@@ -309,7 +327,7 @@
         ui.prompt.textContent=state.locale==="zh"?"← → 选择门 · 空格扫描 · 再按空格进入":"← → SELECT · SPACE SCAN · SPACE AGAIN ENTER";ui.ready.textContent=seen?"CONFIRM ENTRY":"SCAN DOOR";
       }
       if(state.stage==="classroom")ui.panel.insertAdjacentHTML("beforeend","<div class=interaction-mode><b>RHYTHM LOCK</b><span>"+(state.locale==="zh"?"选择答案后，抓住移动回声进入黄色窗口的瞬间":"CHOOSE AN ANSWER, THEN CATCH THE MOVING ECHO IN YELLOW")+"</span></div>");
-      if(state.stage==="reconstruct")ui.panel.insertAdjacentHTML("beforeend","<div class=interaction-mode><b>SPATIAL PUZZLE</b><span>"+(state.locale==="zh"?"九宫格寻位；错误位置会短暂显影正确接口":"SEARCH THE GRID; A WRONG SCAN BRIEFLY REVEALS BOTH SOCKETS")+"</span></div>");
+      if(state.stage==="reconstruct"){upgradeFragmentTabs();ui.panel.insertAdjacentHTML("beforeend","<div class=interaction-mode><b>SPATIAL PUZZLE</b><span>"+(state.locale==="zh"?"九宫格寻位；错误位置会短暂显影正确接口":"SEARCH THE GRID; A WRONG SCAN BRIEFLY REVEALS BOTH SOCKETS")+"</span></div>")}
       if(state.stage==="versions"){
         const cards=ui.panel.querySelectorAll(".version-list article"),back=state.locale==="zh"?["照片背面\n那天，我们一起等雨停。\n字迹来源：无法确认","照片背面\n椅子记得一个没有回来的人。\n字迹来源：无法确认"]:["PHOTO BACK\nWe waited for the rain to stop.\nWriter: unknown","PHOTO BACK\nThe chair remembers someone absent.\nWriter: unknown"];
         cards.forEach((c,i)=>{c.dataset.back=back[i];c.classList.toggle("card-back",state.cardBack&&i===state.version)});
@@ -330,6 +348,11 @@
     };
     const setStageV7=setStage;setStage=function(s){if(s==="doors"){state.doorScans=new Set();state.doorScan=-1}if(s==="versions")state.cardBack=false;setStageV7(s)};
     const resetV7=reset;reset=function(){resetV7();state.doorScans=new Set();state.doorScan=-1;state.cardBack=false;state.interactionCount=0};
+    const workbenchIconsV8=workbenchV2;workbenchV2=function(t){
+      workbenchIconsV8(t);const gx=385,gy=550,cell=155;
+      state.piecePlacements.forEach((p,i)=>{if(p){const x=gx+p.x*cell,y=gy+p.y*cell;ctx.fillStyle=p.v?"#aaa0b0":"#e7d397";ctx.fillRect(x-34,y-34,68,68);drawFragmentGlyph(i,x,y,26,p.v?"#50485a":"#6f5b24")}});
+      if(!state.placed.has(state.pieceIndex)){const x=gx+state.pieceCursor.x*cell,y=gy+state.pieceCursor.y*cell+Math.sin(t*.006)*8;ctx.fillStyle="#f2e4b5";ctx.fillRect(x-43,y-43,86,86);drawFragmentGlyph(state.pieceIndex,x,y,42,"#273235")}
+    };
     setStage("dormant");requestAnimationFrame(visualFrame);
   </script>
 </body>
