@@ -67,6 +67,7 @@
     .runner-goal.on{opacity:1;transform:none}.runner-goal b{display:block;color:#f0d57e;font-size:10px}.runner-goal span{color:#f7f3eaaa}.runner-goal .goal-row{display:flex;justify-content:space-between;gap:1rem}.runner-goal .combo{font-size:13px;color:#f0d57e}
     .gate-flash{position:absolute;z-index:8;left:50%;top:29%;padding:.45rem .75rem;transform:translate(-50%,-8px);border:1px solid #efd57b88;background:#263438d8;color:#f7f3ea;font:8px "Courier New",monospace;letter-spacing:.16em;opacity:0;transition:.24s;pointer-events:none}.gate-flash.on{opacity:1;transform:translate(-50%,0)}
     @media(pointer:coarse){.controls{display:flex}.panel{bottom:20%}.pace-hud{bottom:19%}.runner-goal{top:16%}}
+    .interaction-mode{display:flex;align-items:center;gap:.45rem;margin:.55rem 0 .25rem;padding:.42rem .5rem;border-left:2px solid var(--yellow);background:#26343810;font:7px/1.45 "Courier New",monospace;letter-spacing:.1em}.interaction-mode b{color:#8b6e29}.door-inspection{margin:.55rem 0;padding:.55rem .6rem;background:linear-gradient(90deg,#26343812,transparent);border:1px dashed #26343838}.door-inspection strong{display:block;margin-bottom:.25rem;font:10px "Courier New",monospace;letter-spacing:.12em}.door-inspection span{font:9px/1.6 "STSong","Songti SC",serif}.version-list article.card-back{transform:translateY(-7px) rotateY(180deg);background:#cbc3b2}.version-list article.card-back>*{visibility:hidden}.version-list article.card-back:after{content:attr(data-back);visibility:visible;position:absolute;inset:16px;display:grid;place-items:center;padding:12px;border:1px dashed #39474a66;color:#344144;text-align:center;white-space:pre-line;font:italic 12px/1.8 Georgia,"Songti SC",serif;transform:rotateY(180deg);text-shadow:none}.version-list article.card-back:before{visibility:hidden}.interaction-stamps{display:flex;gap:.3rem;margin-top:.5rem}.interaction-stamps i{flex:1;padding:.3rem;border:1px solid #26343825;text-align:center;font:7px "Courier New",monospace;font-style:normal}.interaction-stamps i.done{border-color:#b99a4d;background:#c6aa6224;color:#71591e}
   </style>
 </head>
 <body>
@@ -200,18 +201,18 @@
       zh:{
         archive:["如何读取一段记忆",[["方向键","移动扫描框"],["空格 × 1","发出共振扫描"],["黄色区 + 空格","稳定锁定锚点"]]],
         corridor:["约30秒 · 找回两段关键记忆",[["看顶部目标","切到提示的左 / 中 / 右轨"],["← / →","穿过三扇发光记忆门"],["空格 / ↑","吸取线索 / 跃过错误影像"]]],
-        doors:["线索不会替你作答",[["← / →","选择三扇门"],["证据栏","核对时间地点人物"],["↑ / 空格","进入当前版本"]]],
+        doors:["先观察，再决定",[["← / →","在三扇门之间切换"],["空格一次","扫描门内声音与光线"],["空格再次","确认并进入已读取的门"]]],
         classroom:["校准循环教室",[["↑ / ↓","选择记忆坐标"],["← / →","切换两种答案"],["黄色区 + 空格","锁定当前回声"]]],
         reconstruct:["重组并不等于复原",[["方向键","移动当前碎片"],["空格","扫描或吸附"],["双重接口","两个位置都可能成立"]]],
-        versions:["保存你愿意相信的版本",[["← / →","切换 A / B"],["↓","查看本局证据"],["空格","保存当前版本"]]]
+        versions:["比较、翻面、保存",[["← / →","切换 A / B"],["↑ / ↓","翻看照片背面 / 展开证据"],["空格","合上照片并保存版本"]]]
       },
       en:{
         archive:["HOW TO READ A MEMORY",[["ARROW KEYS","Move the scan frame"],["SPACE × 1","Emit resonance scan"],["YELLOW + SPACE","Stabilize the anchor"]]],
         corridor:["ABOUT 30 SEC · RECOVER TWO CLUES",[["READ TOP GOAL","Move to the prompted lane"],["← / →","Pass three illuminated memory gates"],["SPACE / ↑","Attract clues / leap through false traces"]]],
-        doors:["EVIDENCE WILL NOT ANSWER FOR YOU",[["← / →","Select a doorway"],["LEDGER","Review time, place, figure"],["↑ / SPACE","Enter this version"]]],
+        doors:["INSPECT BEFORE YOU DECIDE",[["← / →","Move between three doors"],["SPACE ONCE","Scan light and sound inside"],["SPACE AGAIN","Confirm the inspected door"]]],
         classroom:["CALIBRATE THE LOOPING CLASSROOM",[["↑ / ↓","Choose a coordinate"],["← / →","Switch two answers"],["YELLOW + SPACE","Lock the echo"]]],
         reconstruct:["REASSEMBLY IS NOT RECOVERY",[["ARROW KEYS","Move the fragment"],["SPACE","Scan or attach"],["DUAL SOCKET","Both positions may fit"]]],
-        versions:["SAVE THE VERSION YOU ACCEPT",[["← / →","Switch A / B"],["↓","Open your evidence"],["SPACE","Save this version"]]]
+        versions:["COMPARE, FLIP, THEN SAVE",[["← / →","Switch A / B"],["↑ / ↓","Flip photo / open evidence"],["SPACE","Close and save this version"]]]
       }
     };
     const stageLabelsV4={
@@ -296,6 +297,39 @@
     const scanV5=scan;scan=function(){if(state.stage==="corridor"){const f=fragments.find(x=>!state.collected.has(x.id)&&Math.abs(x.at-state.progress)<.11&&Math.abs(x.lane-state.lane)<=1);if(f){state.collected.add(f.id);state.runnerCombo+=2;state.runnerBest=Math.max(state.runnerBest,state.runnerCombo);state.routeReveal=performance.now()+1250;tone(980,.16);flashGate((state.locale==="zh"?"FRAGMENT MAGNET · ":"FRAGMENT MAGNET · ")+f.n);renderUI();return}}scanV5()};
     const corridorV5=corridorV2;corridorV2=function(t){corridorV5(t);const hy=560,fy=1740,project=(at,lane)=>{const d=at-state.progress;if(d<-.08||d>.40)return null;const c=1-clamp((d+.08)/.48);return{x:540+(lane-1)*285*c,y:hy+c*c*(fy-hy)*.84,c}};memoryGates.forEach((g,i)=>{if(state.gateCleared.has(i))return;const p=project(g.at,g.lane);if(!p)return;ctx.save();ctx.globalAlpha=.3+p.c*.62;ctx.strokeStyle="#efd57b";ctx.lineWidth=4+p.c*9;ctx.shadowColor="#efd57b";ctx.shadowBlur=12+p.c*24;const w=90+p.c*120,h=130+p.c*210;ctx.strokeRect(p.x-w/2,p.y-h,w,h);ctx.fillStyle="#f7f3ea";ctx.font=(14+p.c*15)+"px Courier New";ctx.fillText("0"+(i+1),p.x-18,p.y-h+32);ctx.restore()});memorySparks.forEach((s,i)=>{if(state.sparkCollected.has(i))return;const p=project(s.at,s.lane);if(!p)return;ctx.save();ctx.translate(p.x,p.y);ctx.rotate(t*.002+i);ctx.globalAlpha=.55+p.c*.45;ctx.fillStyle="#f3df9f";ctx.shadowColor="#f3df9f";ctx.shadowBlur=18;const q=9+p.c*18;ctx.beginPath();ctx.moveTo(0,-q);ctx.lineTo(q*.55,0);ctx.lineTo(0,q);ctx.lineTo(-q*.55,0);ctx.closePath();ctx.fill();ctx.restore()})};
     const visualFrameV5=visualFrame;visualFrame=function(t){const before=state.progress;visualFrameV5(t);if(state.stage!=="corridor")return;memorySparks.forEach((s,i)=>{if(!state.sparkCollected.has(i)&&before<s.at&&state.progress>=s.at&&state.lane===s.lane){state.sparkCollected.add(i);state.runnerCombo++;state.runnerBest=Math.max(state.runnerBest,state.runnerCombo);tone(620+state.runnerCombo*35,.05);flashGate(state.locale==="zh"?"线索微光已收集 · 空格可远距吸取":"MEMORY SPARK · SPACE CAN ATTRACT")}});memoryGates.forEach((g,i)=>{if(state.gateCleared.has(i)||!(before<g.at&&state.progress>=g.at))return;state.gateCleared.add(i);if(state.lane===g.lane){state.runnerCombo+=2;state.runnerBest=Math.max(state.runnerBest,state.runnerCombo);state.progress=Math.min(.995,state.progress+.012);tone(920,.08);flashGate((state.locale==="zh"?"正确记忆门 · ":"TRUE MEMORY GATE · ")+g.clue)}else if(state.jumpUntil>t){state.runnerCombo++;state.runnerBest=Math.max(state.runnerBest,state.runnerCombo);tone(780,.07);flashGate(state.locale==="zh"?"跃迁通过 · 证据出现重影":"MEMORY LEAP · EVIDENCE ALTERED")}else{state.runnerCombo=0;state.runnerMisses++;state.bias--;tone(360,.1);flashGate(state.locale==="zh"?"错过记忆门 · 已记录为矛盾证据":"MISSED GATE · CONTRADICTION RECORDED",false)}if(i===0&&!state.collected.has(4)){state.collected.add(4);state.chain++}if(i===1&&!state.collected.has(5)){state.collected.add(5);state.chain++}});updateRunnerHud();if(state.gateCleared.size===3&&state.stage==="corridor"){state.progress=.72;setStage("doors");say(state.locale==="zh"?"记忆追逐完成 · 根据刚才的线索选择入口":"CHASE COMPLETE · CHOOSE AN ENTRANCE FROM YOUR CLUES")}};
+    /* Experience V7: each stage uses a distinct interaction form */
+    Object.assign(state,{doorScans:new Set(),doorScan:-1,cardBack:false,interactionCount:0});
+    const doorEvidenceZh=["门缝里是18:12的冷光；门牌边缘有被覆盖的字迹。","雨声与17:42的钟声同步；影子似乎有两组。","没有门牌，也没有完整影子；但脚步声仍从里面返回。"];
+    const doorEvidenceEn=["Cold 18:12 light leaks through; an older room number remains beneath the plate.","Rain aligns with the 17:42 clock; the shadow may contain two sets of footsteps.","No plate and no complete shadow, yet footsteps still return from inside."];
+    function enhanceInteractionUI(){
+      if(state.stage==="archive")ui.panel.insertAdjacentHTML("beforeend","<div class=interaction-mode><b>SCAN + TIMING</b><span>"+(state.locale==="zh"?"移动定位 → 空格探测 → 在黄色共振区再次锁定":"LOCATE → PROBE → LOCK INSIDE THE YELLOW WINDOW")+"</span></div>");
+      if(state.stage==="doors"){
+        const seen=state.doorScans.has(state.door),e=(state.locale==="zh"?doorEvidenceZh:doorEvidenceEn)[state.door];
+        ui.panel.insertAdjacentHTML("beforeend","<div class=interaction-mode><b>INSPECT + DECIDE</b><span>"+(state.locale==="zh"?"先扫描门内回声，再次确认才进入":"SCAN THE ECHO FIRST; CONFIRM AGAIN TO ENTER")+"</span></div>"+(seen?"<div class=door-inspection><strong>DOOR TRACE 0"+(state.door+1)+" · READ</strong><span>"+e+"</span></div>":"")+"<div class=interaction-stamps>"+[0,1,2].map((_,i)=>"<i class='"+(state.doorScans.has(i)?"done":"")+"'>0"+(i+1)+" "+(state.doorScans.has(i)?"READ":"UNREAD")+"</i>").join("")+"</div>");
+        ui.prompt.textContent=state.locale==="zh"?"← → 选择门 · 空格扫描 · 再按空格进入":"← → SELECT · SPACE SCAN · SPACE AGAIN ENTER";ui.ready.textContent=seen?"CONFIRM ENTRY":"SCAN DOOR";
+      }
+      if(state.stage==="classroom")ui.panel.insertAdjacentHTML("beforeend","<div class=interaction-mode><b>RHYTHM LOCK</b><span>"+(state.locale==="zh"?"选择答案后，抓住移动回声进入黄色窗口的瞬间":"CHOOSE AN ANSWER, THEN CATCH THE MOVING ECHO IN YELLOW")+"</span></div>");
+      if(state.stage==="reconstruct")ui.panel.insertAdjacentHTML("beforeend","<div class=interaction-mode><b>SPATIAL PUZZLE</b><span>"+(state.locale==="zh"?"九宫格寻位；错误位置会短暂显影正确接口":"SEARCH THE GRID; A WRONG SCAN BRIEFLY REVEALS BOTH SOCKETS")+"</span></div>");
+      if(state.stage==="versions"){
+        const cards=ui.panel.querySelectorAll(".version-list article"),back=state.locale==="zh"?["照片背面\n那天，我们一起等雨停。\n字迹来源：无法确认","照片背面\n椅子记得一个没有回来的人。\n字迹来源：无法确认"]:["PHOTO BACK\nWe waited for the rain to stop.\nWriter: unknown","PHOTO BACK\nThe chair remembers someone absent.\nWriter: unknown"];
+        cards.forEach((c,i)=>{c.dataset.back=back[i];c.classList.toggle("card-back",state.cardBack&&i===state.version)});
+        ui.panel.insertAdjacentHTML("beforeend","<div class=interaction-mode><b>COMPARE + FLIP</b><span>"+(state.locale==="zh"?"左右切换版本 · 上键翻看照片背面 · 下键展开证据":"LEFT/RIGHT COMPARE · UP FLIP PHOTO · DOWN OPEN EVIDENCE")+"</span></div>");
+        ui.prompt.textContent=state.locale==="zh"?"← → 比较 · ↑ 翻面 · ↓ 证据 · 空格保存":"← → COMPARE · ↑ FLIP · ↓ EVIDENCE · SPACE SAVE";
+      }
+    }
+    const renderUIV7=renderUI;renderUI=function(){renderUIV7();enhanceInteractionUI()};
+    const scanV7=scan;scan=function(){
+      if(state.stage==="doors"&&!state.doorScans.has(state.door)){state.doorScans.add(state.door);state.doorScan=state.door;state.interactionCount++;state.bias+=state.door===1?1:state.door===0?-1:0;tone(720+state.door*70,.16);say(state.locale==="zh"?"DOOR TRACE · 门内证据已显影":"DOOR TRACE · EVIDENCE DEVELOPED");renderUI();return}
+      if(state.stage==="versions"&&state.cardBack){state.cardBack=false;tone(560,.07);renderUI();return}
+      scanV7()
+    };
+    const actionV7=action;action=function(k){
+      if(state.stage==="versions"&&k==="ArrowUp"){state.cardBack=!state.cardBack;state.interactionCount++;tone(state.cardBack?480:680,.08);renderUI();return}
+      if(state.stage==="versions"&&(k==="ArrowLeft"||k==="ArrowRight"))state.cardBack=false;
+      actionV7(k)
+    };
+    const setStageV7=setStage;setStage=function(s){if(s==="doors"){state.doorScans=new Set();state.doorScan=-1}if(s==="versions")state.cardBack=false;setStageV7(s)};
+    const resetV7=reset;reset=function(){resetV7();state.doorScans=new Set();state.doorScan=-1;state.cardBack=false;state.interactionCount=0};
     setStage("dormant");requestAnimationFrame(visualFrame);
   </script>
 </body>
