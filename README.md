@@ -53,7 +53,7 @@ game/
 public/
   og.png                 原创社交预览图
 loot/
-  index.html             可粘贴进 LOOT 的纯网页前两关验证版
+  index.html             可粘贴进 LOOT 的纯网页完整流程验证版
   prompt.md              LOOT 深度创作提示词
 docs/
   GRADUATION_DESIGN.md   毕业设计研究、流程、技术和评价说明
@@ -70,7 +70,7 @@ docs/
 - [用户测试方案](docs/USER_TEST_PROTOCOL.md)
 - [LOOT 单文件验证版](loot/index.html)
 
-LOOT 当前里程碑用于验证竖屏气氛、单次扫描、三轨移动、5 枚碎片和三扇门选择。`loot/index.html` 不使用压力百分比或空格长按判定，已在 LOOT 预览中用键盘完整跑通前两关。正式游戏仍保留为模块化工程，方便下一阶段扩展第三关、A/B 结局和硬件输入。结局导出的 JSON 只包含本次游戏行为，不记录姓名、账号、联系方式、位置或设备身份。
+LOOT 当前里程碑用于验证竖屏气氛、单次扫描、三轨移动、循环教室、五碎片双解重组和 Version A/B 保存。`loot/index.html` 不使用压力百分比或空格长按判定，已在 LOOT 预览中用键盘从待机完整跑到 Version B 结局并验证 10 秒自动重置。正式游戏仍保留为模块化工程，方便后续完善声音、用户测试和硬件输入。结局导出的 JSON 只包含本次游戏行为，不记录姓名、账号、联系方式、位置或设备身份。
 
 ## 替换素材
 
