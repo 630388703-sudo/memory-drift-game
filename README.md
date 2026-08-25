@@ -1,8 +1,8 @@
 # memory-drift-game
 
-《记忆漂移：最后一个下午 / Memory Drift: The Last Afternoon》是一款约 4 分钟的竖屏 2.5D 互动叙事游戏。设计基准为 1080×1920；Canvas 场景、照片、纹理和 Web Audio 声音均为原创程序生成，生产构建不依赖外部素材。
+《记忆漂移：最后一个下午 / Memory Drift: The Last Afternoon》是一款约 5–6 分钟的竖屏 2.5D 互动叙事游戏。设计基准为 1080×1920；Canvas 场景、照片、纹理和 Web Audio 声音均为原创程序生成，生产构建不依赖外部素材。
 
-在线版本：https://memory-drift-game.dsydsy0920900940.chatgpt.site
+在线版本：https://630388703-sudo.github.io/memory-drift-game/
 
 ## 启动
 
@@ -58,21 +58,20 @@ loot/
   index.html             可粘贴进 LOOT 的纯网页完整流程验证版
   prompt.md              LOOT 深度创作提示词
 docs/
-  GRADUATION_DESIGN.md   毕业设计研究、流程、技术和评价说明
-  LOOT_WORKFLOW.md       LOOT 导入、迭代与答辩记录方法
+  LOOT_WORKFLOW.md       LOOT 导入与迭代记录
   USER_TEST_PROTOCOL.md  用户测试与访谈方案
 .github/workflows/
   ci.yml                 GitHub 自动检查与生产构建
+  pages.yml              GitHub Pages 独立网页自动发布
 ```
 
-## 毕业设计交付
+## 项目文档
 
-- [毕业设计说明](docs/GRADUATION_DESIGN.md)
 - [LOOT 原型工作流](docs/LOOT_WORKFLOW.md)
 - [用户测试方案](docs/USER_TEST_PROTOCOL.md)
 - [LOOT 单文件验证版](loot/index.html)
 
-部署后可通过站点的 `/loot.html` 路径直接打开 LOOT 美术优化版。
+GitHub Pages 根地址直接进入游戏，也可以通过 `/loot.html` 路径打开同一版本。
 
 LOOT 当前版本已完成 Experience V4：加入三张原创竖屏场景、中文档案字体层级、胶片扫描线、雨幕、漂尘、视差和章节转场；玩法包含锚点共振锁定、真假回声扫描、三轨动态速度、减速聚焦、循环教室时间对齐、九宫格碎片拼合和结局证据层。走廊速度会随进度自然提升，↑ 触发短时 MEMORY SURGE，↓ 触发 FOCUS 慢行；原创“寻忆者 07”角色具有旧校服领、档案吊牌、破损纸张边缘与记忆残影。每个阶段首次进入自动显示 6–8 秒操作教学，H 可再次查看；L 切换中英文，F 全屏。程序化声音包括雨声、低频教室底噪、时钟、脚步、记忆音程、扫描与提示音，按 M 或右上角音符可静音。loot/index.html 不使用压力百分比或空格长按判定。正式游戏仍保留为模块化工程，方便后续用户测试和硬件输入。结局导出的 JSON 只包含本次游戏行为，不记录姓名、账号、联系方式、位置或设备身份。
 
