@@ -1,8 +1,12 @@
-# memory-drift-game
+# 忘了自己是什么 / What Was I Again?
 
-《记忆漂移：最后一个下午 / Memory Drift: The Last Afternoon》是一款约 5–6 分钟的竖屏 2.5D 互动叙事游戏。设计基准为 1080×1920；Canvas 场景、照片、纹理和 Web Audio 声音均为原创程序生成，生产构建不依赖外部素材。
+一款为竖屏设计的 HTML5 互动游戏。玩家追捕一只会忘记自身形态的生物；移动、观察、失误、重听与身体部件选择都会被它模仿，最终共同生成一个此前不存在的新形态。
 
-在线版本：https://630388703-sudo.github.io/memory-drift-game/
+- 游戏地址：<https://630388703-sudo.github.io/memory-drift-game/>
+- 备用托管：<https://memory-drift-game.dsydsy0920900940.chatgpt.site>
+- 设计基准：1080 × 1920，响应式适配其他竖屏与桌面浏览器
+- 体验时长：约 5–6 分钟
+- 视觉与声音：Canvas / SVG / Web Audio 原创程序生成，不依赖外部版权素材
 
 ## 启动
 
@@ -15,71 +19,74 @@ npm run dev
 
 ```bash
 npm run lint
-npm run build
+npm test
+npm run build:static
 ```
+
+`npm run build:static` 会在 `gh-pages/` 生成完全静态的 GitHub Pages 版本。推送到 `main` 后，GitHub Actions 会自动检查并重新发布，因此发布后仍可继续修改。
 
 ## 键位
 
-- `← → ↑ ↓` 或 `WASD`：移动扫描框、切换三轨、浏览坐标、选择门和碎片
-- `Space` 短按：发出约 1.2 秒扫描波，切换碎片解释
-- `Space` 稳定按住约 `0.65–2.3s`：进入 FOCUS、减慢走廊并确认读取
-- `Space` 按住超过约 `2.3s`：OVERLOAD，强制读取并留下错误记忆或重影
-- `R`：重新开始
-- `F`：进入或退出全屏
-- `E`：结局阶段导出本次匿名测试记录
-- 右上角：静音 / 开启声音
+- `方向键` / `WASD`：移动、选择目标或身体部件
+- `Space`：碰、扑、跳、确认或安装
+- `↑`：声音关重听
+- `L`：中英文切换
+- `M`：静音
+- `V`：视觉辅助
+- `H`：快速指南
+- `F`：全屏
+- `R`：重开本局，保留上一观察者痕迹
+- `Shift + R`：管理清除，连同本地展览痕迹一起重置
 
-输入反馈分为 `UNSTABLE 0–30%`、`FOCUS 30–70%`、`OVERLOAD 70–100%`。按压时长被映射成这三段压力；未来硬件可以直接传入同样的开始、结束和持续时间事件。
+页面也提供触控方向键和动作按钮。输入逻辑集中在 `game/input.ts`，以后接入 USB HID、Arduino 或其他控制器时，只需把硬件信号映射为语义动作，不必重写关卡。
 
 ## 游戏流程
 
-待机吸引 → 分阶段动态教学 → Stable Archive 三个扫描锚点 → Memory Drift 三轨走廊与两个碎片 → 三扇门 → Corrupted Classroom 三个坐标 → 五碎片重组 → Version A/B → 结局数据 → 10 秒自动重置。首次体验按正常观察与操作节奏约 5–6 分钟。
+1. **准备间**：靠近并碰触可疑物件，找到伪装的生物。
+2. **中央庭院**：根据形状、动作与声音破绽完成三轮追捕；扑错会生成假生物，最多保留三个。
+3. **记忆竖井**：左右移动和跳跃。每次起跳后的 0.35 秒，跳跃弧线顶点附近会形成残影平台；跌落不会死亡，而会留下可被生物学会的动作。
+4. **声音模仿**：听原声和模仿声，用左右键指出变化的音；提供可选视觉辅助。
+5. **身体拼装**：为头、身体、双臂与腿安装云、弹簧、喇叭、叶子、灯泡或绳子。没有标准答案。
+6. **身体试用**：生物直接表演由玩家选择与行为共同形成的动作状态。
+7. **观察报告**：比较初次观测与当前学习形态，显示 MOTION、ATTENTION、ECHO、TRACE 的主要倾向。
 
-游戏没有死亡或 Game Over。空白数据区只会降低可信度；漏掉走廊碎片时空间自动回环。移动方向、压力状态、人物处理、门、坐标和碎片解释都持续改变 `memoryBias`，但 Version A 与 B 永远保持为两个同样合理的可保存版本。
+游戏没有死亡、Game Over 或“正确物种”。核心结论固定为 `ORIGINAL FORM: UNVERIFIABLE / 原始形态：无法验证`。
+
+## 玩家间记忆链
+
+每局结束时，系统从结果中抽取一个微弱特征写入 `localStorage`。下一位玩家会在准备间角落看到模糊残影，并在报告中看到“上一观察者留下”。普通 `R` 重置不会删除它。
+
+只保存一个抽象特征 ID 和最近 20 次匿名本地结果，不收集姓名、账号、联系方式、位置或设备身份，也不会上传到服务器。
 
 ## 目录
 
 ```text
 app/
-  MemoryDriftGame.tsx   状态机、关卡流程、记忆偏向、UI 和触控操作
-  globals.css           1080×1920 响应式竖屏布局与柔和过渡
-  layout.tsx            页面元数据与社交预览
-  page.tsx              游戏入口
+  WhatWasIAgainGame.tsx  完整关卡状态机、UI 与触控层
+  globals.css            竖屏响应式视觉与按钮系统
 game/
-  audio.ts              程序化雨声、时钟、脚步、扫描提示和短语音
-  config.ts             文本、锚点、碎片、矛盾池、版本与资源入口
-  input.ts              键盘 / 触控 / 未来硬件的独立输入适配层
-  renderer.ts           Canvas 旧照片、走廊、教室、工作台和结局渲染
-public/
-  og.png                 原创社交预览图
-  loot.html              可直接访问的 LOOT 美术优化版
-  assets/generated/      三张原创梦核场景背景（WebP）
+  config.ts              关卡、物件、声音与部件配置
+  input.ts               键盘 / 触控 / 未来硬件输入边界
+  renderer.ts            Canvas 场景、角色、生物与最终形态
+  audio.ts               Web Audio 程序化背景与反馈音
+  session.ts             行为统计、本地痕迹与观察报告
+standalone/
+  main.tsx               GitHub Pages 静态入口
 loot/
-  index.html             可粘贴进 LOOT 的纯网页完整流程验证版
-  prompt.md              LOOT 深度创作提示词
+  index.html             LOOT 发布壳，自动载入 GitHub 最新版
+  prompt.md              LOOT 继续迭代时使用的约束说明
 docs/
-  LOOT_WORKFLOW.md       LOOT 导入与迭代记录
-  USER_TEST_PROTOCOL.md  用户测试与访谈方案
-.github/workflows/
-  ci.yml                 GitHub 自动检查与生产构建
+  LOOT_WORKFLOW.md       LOOT / GitHub 双发布流程
+  USER_TEST_PROTOCOL.md  全流程测试清单
 ```
 
-## 项目文档
+## 修改内容
 
-- [LOOT 原型工作流](docs/LOOT_WORKFLOW.md)
-- [用户测试方案](docs/USER_TEST_PROTOCOL.md)
-- [LOOT 单文件验证版](loot/index.html)
+- 关卡文案、物件、声音序列、身体部件：`game/config.ts`
+- 生物、玩家、场景与报告画面：`game/renderer.ts`
+- 界面、提示、按钮、关卡衔接：`app/WhatWasIAgainGame.tsx`
+- 颜色、字体、响应式布局：`app/globals.css`
+- 输入或未来硬件：`game/input.ts`
+- 本地痕迹和最终报告规则：`game/session.ts`
 
-GitHub Pages 根地址直接进入游戏，也可以通过 `/loot.html` 路径打开同一版本。
-
-LOOT 当前版本使用多种短交互组合：档案关是扫描定位与节奏锁定；走廊是约 30 秒的三轨门阵、线索吸附、跃迁和聚焦；三扇门改为“先扫描门内回声、再次确认进入”；循环教室是移动回声的时机校准；碎片重组是九宫格空间寻位；Version A/B 支持比较、翻看照片背面、展开证据与保存。每一阶段都显示当前交互类型和即时操作提示。版本同时保留原创竖屏场景、胶片扫描线、雨幕、漂尘、视差、双版本档案卡和无死亡叙事。H 可再次查看教学；L 切换中英文，F 全屏，M 静音。结局导出的 JSON 只包含本次游戏行为，不记录姓名、账号、联系方式、位置或设备身份。
-
-碎片重组界面使用五枚原创线性图标区分照片残角、时钟指针、姓名牌、声音波形和照片缺口；图标由内嵌 SVG 与 Canvas 绘制，不依赖外部图标库或版权素材。
-
-## 替换素材
-
-集中修改 `game/config.ts` 中的锚点、碎片、文案、结局和 `assets` 路径。程序视觉位于 `game/renderer.ts`，声音位于 `game/audio.ts`。未来可把照片、纹理和音频放入 `public/assets/`，再从配置读取；状态机不需要随素材一起重写。
-
-## Arduino / USB HID 接入
-
-`game/input.ts` 是唯一输入边界。Arduino、USB HID 摇杆和压力传感器适配器只需把硬件数据转换为 `left/right/up/down/pressure-start/pressure-end`，并调用 `GameInput.emitHardware(action, heldMilliseconds)`。如果控制器直接映射为键盘按键，无需额外修改。
+LOOT 发布壳指向 GitHub Pages，所以以后只要继续提交并通过 Actions，已发布的 LOOT 页面也会自动显示新版本，不需要重复粘贴整份游戏代码。

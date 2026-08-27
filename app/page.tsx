@@ -1,5 +1,5 @@
-import MemoryDriftGame from "./MemoryDriftGame";
+import WhatWasIAgainGame from "./WhatWasIAgainGame";
 
 export default function Home() {
-  return <MemoryDriftGame />;
+  return <WhatWasIAgainGame />;
 }

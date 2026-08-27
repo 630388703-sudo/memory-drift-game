@@ -1,100 +1,76 @@
-export type InputAction =
-  | "left"
-  | "right"
-  | "up"
-  | "down"
-  | "pressure-start"
-  | "pressure-end"
-  | "export-report"
-  | "reset"
-  | "fullscreen"
-  | "any-direction";
-
-export type InputEvent = {
-  action: InputAction;
-  source: "keyboard" | "touch" | "hardware";
-  heldMs?: number;
-};
-
+export type DirectionAction = "left" | "right" | "up" | "down";
+export type InputAction = DirectionAction | "action-start" | "action-end" | "reset" | "hard-reset" | "fullscreen" | "mute" | "language" | "help" | "visual-assist" | "any-direction";
+export type InputEvent = { action: InputAction; source: "keyboard" | "touch" | "hardware"; heldMs?: number };
 type Listener = (event: InputEvent) => void;
 
 const KEY_MAP: Record<string, InputAction> = {
-  ArrowLeft: "left",
-  KeyA: "left",
-  ArrowRight: "right",
-  KeyD: "right",
-  ArrowUp: "up",
-  KeyW: "up",
-  ArrowDown: "down",
-  KeyS: "down",
-  KeyR: "reset",
-  KeyF: "fullscreen",
-  KeyE: "export-report",
+  ArrowLeft: "left", KeyA: "left", ArrowRight: "right", KeyD: "right",
+  ArrowUp: "up", KeyW: "up", ArrowDown: "down", KeyS: "down",
+  KeyF: "fullscreen", KeyM: "mute", KeyL: "language", KeyH: "help", KeyV: "visual-assist",
 };
 
-/**
- * One input boundary for keyboard, touch and future Arduino/USB HID adapters.
- * Hardware code only needs to call `emitHardware` with the same actions.
- */
+/** One semantic input boundary for keyboard, touch, USB HID and future Arduino adapters. */
 export class GameInput {
   private listeners = new Set<Listener>();
-  private pressureStartedAt = 0;
   private keysDown = new Set<string>();
+  private directions = new Set<DirectionAction>();
+  private touchDirections = new Set<DirectionAction>();
+  private actionStartedAt = 0;
 
   private onKeyDown = (event: KeyboardEvent) => {
     if (event.code === "Space") {
       event.preventDefault();
       if (event.repeat || this.keysDown.has(event.code)) return;
       this.keysDown.add(event.code);
-      this.pressureStartedAt = performance.now();
-      this.emit({ action: "pressure-start", source: "keyboard" });
+      this.actionStartedAt = performance.now();
+      this.emit({ action: "action-start", source: "keyboard" });
       return;
     }
-
+    if (event.code === "KeyR") {
+      event.preventDefault();
+      if (!event.repeat) this.emit({ action: event.shiftKey ? "hard-reset" : "reset", source: "keyboard" });
+      return;
+    }
     const action = KEY_MAP[event.code];
     if (!action) return;
     event.preventDefault();
-    if (event.repeat && action !== "up" && action !== "down") return;
+    if (event.repeat && !["left", "right", "up", "down"].includes(action)) return;
     this.keysDown.add(event.code);
-    this.emit({ action, source: "keyboard" });
     if (["left", "right", "up", "down"].includes(action)) {
-      this.emit({ action: "any-direction", source: "keyboard" });
+      this.directions.add(action as DirectionAction);
+      if (!event.repeat) this.emit({ action: "any-direction", source: "keyboard" });
     }
+    if (!event.repeat) this.emit({ action, source: "keyboard" });
   };
 
   private onKeyUp = (event: KeyboardEvent) => {
     this.keysDown.delete(event.code);
+    const action = KEY_MAP[event.code];
+    if (action && ["left", "right", "up", "down"].includes(action)) this.directions.delete(action as DirectionAction);
     if (event.code !== "Space") return;
     event.preventDefault();
-    const heldMs = Math.max(0, performance.now() - this.pressureStartedAt);
-    this.emit({ action: "pressure-end", source: "keyboard", heldMs });
+    this.emit({ action: "action-end", source: "keyboard", heldMs: Math.max(0, performance.now() - this.actionStartedAt) });
   };
 
   attach() {
     window.addEventListener("keydown", this.onKeyDown, { passive: false });
     window.addEventListener("keyup", this.onKeyUp, { passive: false });
   }
-
   detach() {
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("keyup", this.onKeyUp);
-    this.keysDown.clear();
+    this.keysDown.clear(); this.directions.clear(); this.touchDirections.clear();
   }
-
-  subscribe(listener: Listener) {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+  subscribe(listener: Listener) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
+  axis() {
+    const all = new Set([...this.directions, ...this.touchDirections]);
+    return { x: (all.has("right") ? 1 : 0) - (all.has("left") ? 1 : 0), y: (all.has("down") ? 1 : 0) - (all.has("up") ? 1 : 0) };
   }
-
-  emitTouch(action: InputAction, heldMs?: number) {
-    this.emit({ action, source: "touch", heldMs });
+  setTouchDirection(direction: DirectionAction, active: boolean) {
+    if (active) { this.touchDirections.add(direction); this.emit({ action: direction, source: "touch" }); this.emit({ action: "any-direction", source: "touch" }); }
+    else this.touchDirections.delete(direction);
   }
-
-  emitHardware(action: InputAction, heldMs?: number) {
-    this.emit({ action, source: "hardware", heldMs });
-  }
-
-  private emit(event: InputEvent) {
-    this.listeners.forEach((listener) => listener(event));
-  }
+  emitTouch(action: InputAction, heldMs?: number) { this.emit({ action, source: "touch", heldMs }); }
+  emitHardware(action: InputAction, heldMs?: number) { this.emit({ action, source: "hardware", heldMs }); }
+  private emit(event: InputEvent) { this.listeners.forEach((listener) => listener(event)); }
 }

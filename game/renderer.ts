@@ -1,137 +1,267 @@
-import type { ArchiveAnchorId, GameStage } from "./config";
+import { GAME_CONFIG, type BodySlot, type GameStage, type Language, type PartId } from "./config";
+import type { BehaviorStats, BodyBuild } from "./session";
 
-export type RenderState = {
-  stage: GameStage;
-  now: number;
-  pressure: number;
-  scanner: { x: number; y: number };
-  scanned: Set<ArchiveAnchorId>;
-  read: Set<ArchiveAnchorId>;
-  scanPulseUntil: number;
-  progress: number;
-  lane: number;
-  collected: Set<number>;
-  doorIndex: number;
-  calibrationIndex: number;
-  calibrationChoices: ("A" | "B")[];
-  puzzleIndex: number;
-  puzzleSides: ("A" | "B")[];
-  puzzleLocked: boolean[];
-  activeVersion: "A" | "B";
-  overloads: number;
-  selectedVersion: "A" | "B" | null;
+export type ScenePoint = { x: number; y: number };
+export type ChaseEntity = ScenePoint & { id: string; kind: string; correct?: boolean; fake?: boolean; phase?: number };
+export type MemoryPlatform = { id: string; x: number; y: number; w: number; kind: "base" | "trace" | "rescue" | "creature"; bornAt?: number; expiresAt?: number; stolen?: boolean };
+
+export type RenderModel = {
+  stage: GameStage; lang: Language; now: number; stageTime: number; reducedMotion: boolean;
+  player: ScenePoint & { vy?: number; grounded?: boolean; facing?: number };
+  creature: ScenePoint & { mood?: "curious" | "panic" | "proud" | "confused" };
+  inheritedVisible: boolean; nearestObject: string | null; inspected: string[]; findTarget: string;
+  chaseRound: number; chaseEntities: ChaseEntity[]; chaseHint: boolean;
+  cameraY: number; platforms: MemoryPlatform[];
+  soundRound: number; soundSelected: number; soundPhase: "listen" | "choose" | "feedback"; soundFlash: number;
+  body: BodyBuild; assembleSlot: BodySlot; assemblePart: PartId;
+  stats: BehaviorStats; dominant: string[];
 };
 
-const C = { paper: "#e9e5da", pale: "#f6f3eb", fog: "#c4c8c6", blue: "#748a94", violet: "#aaa1b0", yellow: "#c6ab63", ink: "#283439" };
-const clamp = (n: number, a = 0, b = 1) => Math.min(b, Math.max(a, n));
+const W = 1080;
+const H = 1920;
+const COLORS = {
+  ink: "#263c3b", paper: "#f4f1df", mist: "#dce9e3", blue: "#67bdd0", blueDark: "#32859b",
+  moss: "#789b72", yellow: "#e7bd55", coral: "#e48b72", purple: "#a88ac4", wood: "#9d7c58", white: "#fffdf2",
+};
 
-function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  ctx.beginPath(); ctx.roundRect(x, y, w, h, Math.min(r, w / 2, h / 2));
+function rounded(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r = 24) {
+  const radius = Math.min(r, w / 2, h / 2);
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, radius);
 }
 
-function person(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, alpha = 0.45, blur = 0) {
-  ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = C.ink; ctx.filter = blur ? `blur(${blur}px)` : "none";
-  ctx.beginPath(); ctx.ellipse(x, y - s * .35, s * .1, s * .125, 0, 0, Math.PI * 2); ctx.fill();
-  rr(ctx, x - s * .15, y - s * .22, s * .3, s * .48, s * .13); ctx.fill(); ctx.restore();
+function line(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, color = COLORS.ink, width = 5) {
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = "round"; ctx.stroke();
 }
 
-function chair(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, alpha = .7) {
-  ctx.save(); ctx.globalAlpha = alpha; ctx.strokeStyle = C.ink; ctx.fillStyle = "rgba(235,231,220,.58)"; ctx.lineWidth = Math.max(1, s * .025);
-  rr(ctx, x - s * .22, y - s * .35, s * .44, s * .35, s * .025); ctx.fill(); ctx.stroke();
-  rr(ctx, x - s * .25, y, s * .5, s * .11, s * .02); ctx.fill(); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(x - s * .18, y + s * .1); ctx.lineTo(x - s * .22, y + s * .44); ctx.moveTo(x + s * .18, y + s * .1); ctx.lineTo(x + s * .22, y + s * .44); ctx.stroke(); ctx.restore();
-}
-
-function clock(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, late = false) {
-  ctx.save(); ctx.strokeStyle = C.ink; ctx.globalAlpha = .72; ctx.lineWidth = Math.max(1.5, r * .08); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
-  const a = late ? .4 * Math.PI : 1.38 * Math.PI; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * r * .7, y + Math.sin(a) * r * .7); ctx.moveTo(x, y); ctx.lineTo(x - r * .2, y - r * .46); ctx.stroke(); ctx.restore();
-}
-
-function archivePhoto(ctx: CanvasRenderingContext2D, w: number, h: number, s: RenderState) {
-  const t = s.now * .001; const x = w * .075; const y = h * .16; const pw = w * .85; const ph = h * .58;
-  const parallaxX = (s.scanner.x - .5) * w * .018; const parallaxY = (s.scanner.y - .5) * h * .014;
-  ctx.fillStyle = C.paper; ctx.shadowColor = "rgba(34,43,46,.2)"; ctx.shadowBlur = w * .05; rr(ctx, x, y, pw, ph, w * .015); ctx.fill(); ctx.shadowBlur = 0;
-  ctx.save(); ctx.beginPath(); ctx.rect(x + w * .025, y + w * .025, pw - w * .05, ph - w * .075); ctx.clip();
-  const ix = x + w * .025; const iy = y + w * .025; const iw = pw - w * .05; const ih = ph - w * .075;
-  const g = ctx.createLinearGradient(0, iy, 0, iy + ih); g.addColorStop(0, "#8ea0a4"); g.addColorStop(.55, "#c8c3b7"); g.addColorStop(1, "#8d8b83"); ctx.fillStyle = g; ctx.fillRect(ix, iy, iw, ih);
-  ctx.fillStyle = "rgba(78,106,116,.63)"; ctx.fillRect(ix + iw * .07 + parallaxX, iy + ih * .1, iw * .5, ih * .48);
-  ctx.strokeStyle = "rgba(239,237,228,.68)"; ctx.lineWidth = w * .006; ctx.strokeRect(ix + iw * .07 + parallaxX, iy + ih * .1, iw * .5, ih * .48);
-  ctx.beginPath(); ctx.moveTo(ix + iw * .32 + parallaxX, iy + ih * .1); ctx.lineTo(ix + iw * .32 + parallaxX, iy + ih * .58); ctx.stroke();
-  ctx.fillStyle = "rgba(230,223,211,.52)"; ctx.beginPath(); ctx.moveTo(ix + iw * .48, iy + ih * .1); ctx.quadraticCurveTo(ix + iw * (.55 + Math.sin(t) * .025), iy + ih * .38, ix + iw * .5, iy + ih * .66); ctx.lineTo(ix + iw * .62, iy + ih * .66); ctx.lineTo(ix + iw * .62, iy + ih * .1); ctx.fill();
-  ctx.strokeStyle = "rgba(40,52,56,.65)"; ctx.lineWidth = w * .007; ctx.strokeRect(ix + iw * .72 - parallaxX, iy + ih * .16, iw * .2, ih * .58);
-  clock(ctx, ix + iw * .72 - parallaxX, iy + ih * .11, w * .045, s.overloads > 0 && Math.floor(t * 2) % 2 === 0);
-  chair(ctx, ix + iw * .34 - parallaxX, iy + ih * .72, w * .2, .88); chair(ctx, ix + iw * .66 + parallaxX, iy + ih * .72, w * .2, .58);
-  person(ctx, ix + iw * .5 + parallaxX, iy + ih * .63 + parallaxY, w * .36, .48, w * .006);
-  const secondAlpha = .1 + (Math.sin(t * .72) + 1) * .08; person(ctx, ix + iw * .63 - parallaxX, iy + ih * .62, w * .34, secondAlpha, w * .012);
-  ctx.fillStyle = "rgba(247,244,236,.9)"; ctx.beginPath(); ctx.moveTo(ix + iw * .42, iy + ih * .38); ctx.lineTo(ix + iw * .58, iy + ih * .3); ctx.lineTo(ix + iw * .61, iy + ih * .64); ctx.lineTo(ix + iw * .46, iy + ih * .72); ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = "rgba(79,86,87,.25)"; ctx.lineWidth = 1; ctx.stroke();
-  if (s.overloads) { ctx.save(); ctx.globalAlpha = clamp(s.overloads * .08, 0, .25); ctx.translate(w * .012, 0); person(ctx, ix + iw * .63, iy + ih * .62, w * .34, .7, w * .008); ctx.restore(); }
+function blob(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, now: number, color = COLORS.blue, alpha = 0.92) {
+  ctx.save(); ctx.translate(x, y); ctx.globalAlpha = alpha;
+  ctx.beginPath();
+  for (let i = 0; i <= 20; i += 1) {
+    const a = (i / 20) * Math.PI * 2;
+    const ripple = 1 + Math.sin(a * 3 + now * 0.002) * 0.055 + Math.sin(a * 5 - now * 0.0014) * 0.035;
+    const px = Math.cos(a) * size * ripple;
+    const py = Math.sin(a) * size * 0.78 * ripple;
+    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  }
+  ctx.closePath(); ctx.fillStyle = color; ctx.fill();
+  ctx.fillStyle = COLORS.white; ctx.shadowColor = COLORS.white; ctx.shadowBlur = 15;
+  ctx.beginPath(); ctx.arc(-size * 0.24, -size * 0.08, Math.max(5, size * 0.075), 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(size * 0.13, -size * 0.1, Math.max(5, size * 0.075), 0, Math.PI * 2); ctx.fill();
+  ctx.shadowBlur = 0;
+  line(ctx, size * 0.55, -size * 0.45, size * 0.86, -size * 0.76, COLORS.blueDark, Math.max(3, size * 0.045));
   ctx.restore();
-  ctx.fillStyle = "rgba(45,56,59,.65)"; ctx.font = `${Math.max(11, w * .022)}px ui-monospace, monospace`; ctx.fillText(`${s.overloads && Math.floor(t) % 2 ? "18:12 · A-307" : "17:42 · B-307"} · 07`, x + w * .05, y + ph - w * .018);
+}
 
-  if (["tutorial", "archive"].includes(s.stage)) {
-    const sx = s.scanner.x * w; const sy = s.scanner.y * h; const pulsing = s.scanPulseUntil > s.now;
-    ctx.save(); ctx.strokeStyle = pulsing ? C.yellow : "rgba(247,244,236,.92)"; ctx.lineWidth = w * .005; ctx.setLineDash([w * .022, w * .014]); ctx.beginPath(); ctx.arc(sx, sy, w * .105, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = "rgba(247,244,236,.06)"; ctx.beginPath(); ctx.arc(sx, sy, w * .1, 0, Math.PI * 2); ctx.fill();
-    if (pulsing) { const r = w * (.12 + ((s.scanPulseUntil - s.now) / 1200) * .58); ctx.globalAlpha = clamp((s.scanPulseUntil - s.now) / 800); ctx.strokeStyle = C.pale; ctx.lineWidth = w * .004; ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.stroke(); }
-    ctx.restore();
-    const anchors: [ArchiveAnchorId, number, number][] = [["clock", .72, .31], ["name", .43, .66], ["figure", .63, .48]];
-    for (const [id, ax, ay] of anchors) if (s.scanned.has(id) || pulsing) { ctx.save(); ctx.globalAlpha = s.read.has(id) ? .9 : .48; ctx.strokeStyle = s.read.has(id) ? C.yellow : C.pale; ctx.lineWidth = w * .004; ctx.beginPath(); ctx.arc(ax * w, ay * h, w * .035, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
+function drawPlayer(ctx: CanvasRenderingContext2D, x: number, y: number, scale = 1, facing = 1, bounce = 0) {
+  ctx.save(); ctx.translate(x, y + bounce); ctx.scale(facing, 1); ctx.lineCap = "round"; ctx.lineJoin = "round";
+  ctx.fillStyle = "#f1c868"; ctx.strokeStyle = COLORS.ink; ctx.lineWidth = 6 * scale;
+  ctx.beginPath(); ctx.ellipse(0, -76 * scale, 52 * scale, 32 * scale, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = COLORS.moss; rounded(ctx, -35 * scale, -52 * scale, 70 * scale, 104 * scale, 28 * scale); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "#d59259"; rounded(ctx, 28 * scale, -36 * scale, 47 * scale, 76 * scale, 15 * scale); ctx.fill(); ctx.stroke();
+  line(ctx, -18 * scale, 48 * scale, -28 * scale, 94 * scale, COLORS.ink, 10 * scale);
+  line(ctx, 18 * scale, 48 * scale, 34 * scale, 93 * scale, COLORS.ink, 10 * scale);
+  line(ctx, -36 * scale, -20 * scale, -65 * scale, 22 * scale, COLORS.ink, 9 * scale);
+  line(ctx, 33 * scale, -20 * scale, 63 * scale, 13 * scale, COLORS.ink, 9 * scale);
+  ctx.fillStyle = COLORS.ink; ctx.beginPath(); ctx.arc(-15 * scale, -74 * scale, 4 * scale, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(6 * scale, -75 * scale, 4 * scale, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawProp(ctx: CanvasRenderingContext2D, kind: string, x: number, y: number, scale: number, now: number, creature = false, fake = false) {
+  ctx.save(); ctx.translate(x, y); ctx.strokeStyle = COLORS.ink; ctx.lineWidth = 5 * scale; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  if (kind.includes("chair")) {
+    ctx.fillStyle = creature ? COLORS.blue : "#d7b582"; rounded(ctx, -34 * scale, -22 * scale, 68 * scale, 52 * scale, 9); ctx.fill(); ctx.stroke();
+    line(ctx, -27 * scale, 28 * scale, -34 * scale, 72 * scale, COLORS.ink, 5 * scale); line(ctx, 27 * scale, 28 * scale, 34 * scale, 72 * scale, COLORS.ink, 5 * scale);
+    line(ctx, -31 * scale, -22 * scale, -31 * scale, -70 * scale, COLORS.ink, 6 * scale); line(ctx, 31 * scale, -22 * scale, 31 * scale, -70 * scale, COLORS.ink, 6 * scale);
+  } else if (kind.includes("box")) {
+    ctx.fillStyle = creature ? COLORS.blue : "#d9b27b"; rounded(ctx, -48 * scale, -45 * scale, 96 * scale, 90 * scale, 8); ctx.fill(); ctx.stroke(); line(ctx, -48 * scale, -8 * scale, 48 * scale, -8 * scale, COLORS.ink, 4 * scale);
+  } else if (kind.includes("ball")) {
+    ctx.fillStyle = creature ? COLORS.blue : COLORS.coral; ctx.beginPath(); ctx.arc(0, 0, 43 * scale, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.arc(0, 0, 22 * scale, -1.1, 1.1); ctx.stroke();
+  } else if (kind.includes("umbrella")) {
+    ctx.fillStyle = creature ? COLORS.blue : COLORS.yellow; ctx.beginPath(); ctx.arc(0, 0, 66 * scale, Math.PI, 0); ctx.closePath(); ctx.fill(); ctx.stroke(); line(ctx, 0, 0, 0, 75 * scale, COLORS.ink, 5 * scale); ctx.beginPath(); ctx.arc(-14 * scale, 74 * scale, 15 * scale, 0, Math.PI); ctx.stroke();
+  } else if (kind.includes("bucket")) {
+    ctx.fillStyle = creature ? COLORS.blue : "#a7c8b7"; ctx.beginPath(); ctx.moveTo(-45 * scale, -38 * scale); ctx.lineTo(36 * scale, -38 * scale); ctx.lineTo(28 * scale, 44 * scale); ctx.lineTo(-34 * scale, 44 * scale); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.arc(0, -35 * scale, 55 * scale, Math.PI, 0); ctx.stroke();
+  } else if (kind.includes("scarf")) {
+    ctx.fillStyle = COLORS.coral; ctx.beginPath(); ctx.moveTo(-46 * scale, -60 * scale); ctx.bezierCurveTo(42 * scale, -42 * scale, -22 * scale, 10 * scale, 42 * scale, 72 * scale); ctx.lineTo(5 * scale, 81 * scale); ctx.bezierCurveTo(-45 * scale, 18 * scale, 22 * scale, -25 * scale, -58 * scale, -32 * scale); ctx.closePath(); ctx.fill(); ctx.stroke();
+  } else if (kind.includes("lamp")) {
+    ctx.fillStyle = Math.sin(now * 0.01) > 0 ? COLORS.yellow : "#d8d2a4"; ctx.beginPath(); ctx.arc(0, -18 * scale, 42 * scale, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); line(ctx, 0, 24 * scale, 0, 74 * scale, COLORS.ink, 8 * scale); line(ctx, -32 * scale, 76 * scale, 32 * scale, 76 * scale, COLORS.ink, 8 * scale);
+  } else if (kind.includes("broom")) {
+    line(ctx, 20 * scale, -90 * scale, -10 * scale, 42 * scale, COLORS.wood, 12 * scale); ctx.fillStyle = "#d4af6f"; ctx.beginPath(); ctx.moveTo(-45 * scale, 35 * scale); ctx.lineTo(20 * scale, 29 * scale); ctx.lineTo(42 * scale, 92 * scale); ctx.lineTo(-65 * scale, 92 * scale); ctx.closePath(); ctx.fill(); ctx.stroke();
+  }
+  if (creature || fake) {
+    ctx.fillStyle = COLORS.white; ctx.beginPath(); ctx.arc(-14 * scale, -5 * scale, 6 * scale, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(12 * scale, -5 * scale, 6 * scale, 0, Math.PI * 2); ctx.fill();
+    line(ctx, 38 * scale, -53 * scale, 62 * scale, -76 * scale, fake ? COLORS.purple : COLORS.blueDark, 5 * scale);
+  }
+  ctx.restore();
+}
+
+function drawBodyPart(ctx: CanvasRenderingContext2D, part: PartId | undefined, slot: BodySlot, x: number, y: number, scale: number, now: number) {
+  ctx.save(); ctx.translate(x, y); ctx.strokeStyle = COLORS.ink; ctx.lineWidth = 6 * scale; ctx.lineCap = "round";
+  const p = part ?? "cloud";
+  if (p === "cloud") {
+    ctx.fillStyle = "#dbe8e3"; [-24, 0, 24].forEach((dx, i) => { ctx.beginPath(); ctx.arc(dx * scale, (i % 2) * -8 * scale, (28 - i * 2) * scale, 0, Math.PI * 2); ctx.fill(); });
+  } else if (p === "spring") {
+    ctx.strokeStyle = COLORS.coral; ctx.beginPath(); for (let i = 0; i < 7; i += 1) { const px = (i % 2 ? 22 : -22) * scale; const py = (i - 3) * 14 * scale; if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); } ctx.stroke();
+  } else if (p === "horn") {
+    ctx.fillStyle = COLORS.yellow; ctx.beginPath(); ctx.moveTo(-42 * scale, -25 * scale); ctx.lineTo(37 * scale, -55 * scale); ctx.lineTo(37 * scale, 55 * scale); ctx.lineTo(-42 * scale, 25 * scale); ctx.closePath(); ctx.fill(); ctx.stroke();
+  } else if (p === "leaf") {
+    ctx.fillStyle = COLORS.moss; ctx.beginPath(); ctx.moveTo(0, -60 * scale); ctx.bezierCurveTo(55 * scale, -27 * scale, 50 * scale, 42 * scale, 0, 65 * scale); ctx.bezierCurveTo(-46 * scale, 30 * scale, -50 * scale, -28 * scale, 0, -60 * scale); ctx.fill(); ctx.stroke(); line(ctx, 0, -48 * scale, 0, 52 * scale, "#557750", 4 * scale);
+  } else if (p === "bulb") {
+    ctx.save(); ctx.shadowColor = COLORS.yellow; ctx.shadowBlur = 25 + Math.sin(now * 0.01) * 8; ctx.fillStyle = COLORS.yellow; ctx.beginPath(); ctx.arc(0, -8 * scale, 42 * scale, 0, Math.PI * 2); ctx.fill(); ctx.restore(); rounded(ctx, -22 * scale, 28 * scale, 44 * scale, 28 * scale, 5); ctx.stroke();
+  } else {
+    ctx.strokeStyle = COLORS.purple; ctx.beginPath(); ctx.moveTo(0, -58 * scale); ctx.bezierCurveTo(-35 * scale, -22 * scale, 34 * scale, 10 * scale, 0, 63 * scale); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawBuiltCreature(ctx: CanvasRenderingContext2D, x: number, y: number, body: BodyBuild, now: number, scale = 1, active = false) {
+  const bounce = active ? Math.abs(Math.sin(now * 0.004)) * -24 : 0;
+  ctx.save(); ctx.translate(x, y + bounce);
+  drawBodyPart(ctx, body.legs, "legs", 0, 100 * scale, scale * 0.95, now);
+  drawBodyPart(ctx, body.body, "body", 0, 0, scale * 1.35, now);
+  drawBodyPart(ctx, body.leftArm, "leftArm", -92 * scale, 5 * scale, scale * 0.75, now);
+  drawBodyPart(ctx, body.rightArm, "rightArm", 92 * scale, 5 * scale, scale * 0.75, now);
+  drawBodyPart(ctx, body.head, "head", 0, -112 * scale, scale, now);
+  ctx.fillStyle = COLORS.white; ctx.shadowColor = COLORS.white; ctx.shadowBlur = 12;
+  ctx.beginPath(); ctx.arc(-17 * scale, -116 * scale, 7 * scale, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(14 * scale, -118 * scale, 7 * scale, 0, Math.PI * 2); ctx.fill();
+  line(ctx, 45 * scale, -153 * scale, 75 * scale, -181 * scale, COLORS.blueDark, 6 * scale);
+  ctx.restore();
+}
+
+function baseBackground(ctx: CanvasRenderingContext2D, now: number, stage: GameStage, reducedMotion: boolean) {
+  const gradient = ctx.createLinearGradient(0, 0, 0, H);
+  gradient.addColorStop(0, "#dbe9df"); gradient.addColorStop(0.55, "#eef0df"); gradient.addColorStop(1, "#e6d8ba");
+  ctx.fillStyle = gradient; ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 0.2; ctx.fillStyle = COLORS.blue;
+  for (let i = 0; i < 14; i += 1) {
+    const drift = reducedMotion ? 0 : Math.sin(now * 0.00018 + i) * 38;
+    ctx.beginPath(); ctx.arc((i * 173 + 90) % W + drift, 160 + ((i * 311) % 1480), 90 + (i % 4) * 38, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 0.08; ctx.strokeStyle = COLORS.ink; ctx.lineWidth = 2;
+  for (let y = 18; y < H; y += 24) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y + Math.sin(y) * 2); ctx.stroke(); }
+  ctx.globalAlpha = 1;
+  if (stage !== "platform") {
+    ctx.fillStyle = "rgba(255,253,242,.58)"; rounded(ctx, 46, 210, 988, 1480, 54); ctx.fill();
   }
 }
 
-function laneX(w: number, y: number, lane: number, horizon: number, floor: number) { const q = clamp((y - horizon) / (floor - horizon)); return w / 2 + (lane - 1) * w * .27 * q; }
-
-function corridor(ctx: CanvasRenderingContext2D, w: number, h: number, s: RenderState) {
-  const horizon = h * .28; const floor = h * .89; const scan = s.scanPulseUntil > s.now; const t = s.now * .001;
-  const bg = ctx.createLinearGradient(0, 0, 0, h); bg.addColorStop(0, "#aebbbe"); bg.addColorStop(.48, "#d4d1c8"); bg.addColorStop(1, "#8f9492"); ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
-  ctx.fillStyle = "rgba(232,228,218,.72)"; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(w,0); ctx.lineTo(w*.65,horizon); ctx.lineTo(w*.35,horizon); ctx.fill();
-  ctx.fillStyle = "rgba(111,124,127,.25)"; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(w*.35,horizon); ctx.lineTo(w*.2,floor); ctx.lineTo(0,h); ctx.fill(); ctx.beginPath(); ctx.moveTo(w,0); ctx.lineTo(w*.65,horizon); ctx.lineTo(w*.8,floor); ctx.lineTo(w,h); ctx.fill();
-  const fg = ctx.createLinearGradient(0,horizon,0,floor); fg.addColorStop(0,"rgba(175,175,168,.72)"); fg.addColorStop(1,"rgba(121,126,124,.9)"); ctx.fillStyle=fg; ctx.beginPath(); ctx.moveTo(w*.35,horizon); ctx.lineTo(w*.65,horizon); ctx.lineTo(w*.8,floor); ctx.lineTo(w*.2,floor); ctx.fill();
-  ctx.strokeStyle="rgba(43,55,58,.17)"; ctx.lineWidth=1;
-  for(let i=0;i<11;i++){const z=((i/10+s.progress*.45)%1)**2; const y=horizon+z*(floor-horizon); ctx.beginPath();ctx.moveTo(w/2-w*(.15+z*.32),y);ctx.lineTo(w/2+w*(.15+z*.32),y);ctx.stroke();}
-  for(let l=0;l<3;l++){ctx.setLineDash([w*.012,w*.024]);ctx.beginPath();ctx.moveTo(w/2,horizon);ctx.lineTo(laneX(w,floor,l,horizon,floor),floor);ctx.stroke();}ctx.setLineDash([]);
-  for(let i=0;i<8;i++){const side=i%2?-1:1;const z=((i/8+s.progress*.7)%1)**1.65;const y=horizon+z*(floor-horizon)*.88;const x=w/2+side*w*(.21+z*.3);const dw=w*(.035+z*.1),dh=h*(.055+z*.17);ctx.save();ctx.globalAlpha=.28+z*.55;ctx.strokeStyle=C.ink;ctx.lineWidth=w*.004;ctx.strokeRect(x-dw/2,y-dh,dw,dh);ctx.font=`${Math.max(8,w*(.012+z*.015))}px ui-monospace`;ctx.fillStyle=C.paper;ctx.fillText((i+Math.floor(s.progress*12))%4===0?"A-307":"B-307",x-dw*.45,y-dh*.83);ctx.restore();}
-  const blankLane=Math.floor((s.progress*8)%3); if(s.progress>.12&&s.progress<.27){ctx.fillStyle="rgba(247,245,239,.9)";const bx=laneX(w,h*.64,blankLane,horizon,floor);rr(ctx,bx-w*.1,h*.48,w*.2,h*.27,w*.015);ctx.fill();}
-  for(let i=0;i<3;i++) chair(ctx,laneX(w,h*(.53+i*.08),(i+1)%3,horizon,floor),h*(.53+i*.08),w*(.08+i*.035),.18+i*.13);
-  if(s.progress>.45&&s.progress<.62) person(ctx,laneX(w,h*.58,1,horizon,floor),h*.58,w*.2,scan?.58:.18,w*.012);
-  const fs=[{id:4,lane:0,at:.32},{id:5,lane:2,at:.72}];
-  for(const f of fs){if(s.collected.has(f.id))continue;let d=f.at-s.progress;if(d<-.08)d+=1;if(d>.55||d<-.08)continue;const c=1-clamp((d+.08)/.63);const y=horizon+c**1.45*(floor-horizon)*.82;const x=laneX(w,y,f.lane,horizon,floor);const size=w*(.025+c*.08);ctx.save();ctx.shadowBlur=size*1.6;ctx.shadowColor=scan?C.pale:C.violet;ctx.fillStyle=scan?"rgba(247,241,213,.95)":"rgba(170,159,177,.72)";ctx.translate(x,y);ctx.rotate(t+f.id);ctx.fillRect(-size/2,-size/2,size,size);ctx.restore();}
-  if(scan){ctx.strokeStyle="rgba(247,244,236,.58)";ctx.lineWidth=w*.006;ctx.beginPath();ctx.arc(w/2,h*.72,w*(.2+Math.sin(t*4)*.035),0,Math.PI*2);ctx.stroke();}
-  const px=laneX(w,h*.82,s.lane,horizon,floor);ctx.save();ctx.shadowColor=C.pale;ctx.shadowBlur=w*.04;person(ctx,px,h*.8,w*.3,.9);ctx.globalCompositeOperation="source-atop";ctx.fillStyle=C.pale;ctx.fillRect(px-w*.09,h*.65,w*.18,h*.23);ctx.restore();
+function room(ctx: CanvasRenderingContext2D, m: RenderModel) {
+  ctx.save(); ctx.translate(0, 165);
+  ctx.fillStyle = "#e6dcc3"; ctx.fillRect(70, 180, 940, 1110);
+  ctx.fillStyle = "#b9d4cc"; for (let i = 0; i < 3; i += 1) { rounded(ctx, 135 + i * 265, 220, 210, 330, 10); ctx.fill(); }
+  ctx.fillStyle = "#8ca485"; ctx.fillRect(70, 1040, 940, 250);
+  line(ctx, 70, 1025, 1010, 1025, COLORS.ink, 6);
+  GAME_CONFIG.roomObjects.forEach((object, index) => {
+    const isTarget = object.id === m.findTarget;
+    const selected = object.id === m.nearestObject;
+    const wobble = m.stage === "dormant" ? Math.sin(m.now * 0.002 + index) * 3 : Math.sin(m.now * 0.003 + index) * 6;
+    if (selected) { ctx.fillStyle = "rgba(231,189,85,.24)"; ctx.beginPath(); ctx.arc(object.x * W, 230 + object.y * 1000, 92, 0, Math.PI * 2); ctx.fill(); }
+    drawProp(ctx, object.kind, object.x * W, 230 + object.y * 1000 + wobble, 1.1, m.now, m.stage === "find" && isTarget && m.inspected.includes(object.id));
+  });
+  if (m.inheritedVisible) { ctx.globalAlpha = 0.22; blob(ctx, 870, 1160, 58, m.now, COLORS.blue); ctx.globalAlpha = 1; }
+  if (m.stage === "find") drawPlayer(ctx, m.player.x * W, 235 + m.player.y * 1000, 1, m.player.facing);
+  ctx.restore();
 }
 
-function doors(ctx: CanvasRenderingContext2D,w:number,h:number,s:RenderState){
-  const g=ctx.createLinearGradient(0,0,0,h);g.addColorStop(0,"#9dacaf");g.addColorStop(1,"#d8d3c8");ctx.fillStyle=g;ctx.fillRect(0,0,w,h);ctx.fillStyle="rgba(235,231,221,.6)";ctx.fillRect(0,h*.28,w,h*.58);
-  const labels=["A-307","B-307","—-307"];for(let i=0;i<3;i++){const x=w*(.09+i*.29),y=h*.36,dw=w*.24,dh=h*.4;ctx.save();ctx.globalAlpha=i===s.doorIndex?1:.42;ctx.strokeStyle=i===s.doorIndex?C.yellow:C.ink;ctx.lineWidth=i===s.doorIndex?w*.01:w*.004;ctx.strokeRect(x,y,dw,dh);ctx.fillStyle="rgba(238,233,222,.76)";ctx.fillRect(x+w*.02,y+h*.03,dw-w*.04,h*.055);ctx.fillStyle=C.ink;ctx.font=`${w*.038}px ui-monospace`;ctx.textAlign="center";ctx.fillText(labels[i],x+dw/2,y+h*.067);ctx.restore();}
+function courtyard(ctx: CanvasRenderingContext2D, m: RenderModel) {
+  ctx.save(); ctx.translate(0, 160);
+  ctx.fillStyle = "#cfddc8"; rounded(ctx, 78, 150, 924, 1190, 48); ctx.fill();
+  ctx.strokeStyle = "rgba(38,60,59,.17)"; ctx.lineWidth = 4;
+  for (let i = 0; i < 9; i += 1) { ctx.beginPath(); ctx.arc(540, 750, 130 + i * 75, 0, Math.PI * 2); ctx.stroke(); }
+  m.chaseEntities.forEach((entity, index) => {
+    const bob = Math.sin(m.now * 0.002 + (entity.phase ?? index)) * (entity.correct && m.chaseRound === 1 ? 12 : 5);
+    if (entity.correct && m.chaseHint) { ctx.strokeStyle = COLORS.yellow; ctx.lineWidth = 9; ctx.beginPath(); ctx.arc(entity.x * W, 170 + entity.y * 1120, 84 + Math.sin(m.now * 0.008) * 12, 0, Math.PI * 2); ctx.stroke(); }
+    drawProp(ctx, entity.kind, entity.x * W, 170 + entity.y * 1120 + bob, 0.86, m.now, !!entity.correct, !!entity.fake);
+  });
+  drawPlayer(ctx, m.player.x * W, 170 + m.player.y * 1120, 0.88, m.player.facing);
+  ctx.restore();
 }
 
-function classroom(ctx:CanvasRenderingContext2D,w:number,h:number,s:RenderState){
-  const late=s.calibrationChoices[s.calibrationIndex]==="B";const g=ctx.createLinearGradient(0,0,0,h);g.addColorStop(0,late?"#aaa4b1":"#9caeb0");g.addColorStop(1,"#d8d3c8");ctx.fillStyle=g;ctx.fillRect(0,0,w,h);
-  ctx.strokeStyle="rgba(41,52,55,.48)";ctx.lineWidth=w*.008;for(let i=0;i<3;i++){const ox=(i-1)*w*.045*Math.sin(s.now*.001+i);ctx.strokeRect(w*.12+ox,h*(.22+i*.16),w*.76,h*.34);}
-  clock(ctx,w*.72,h*.26,w*.06,late);chair(ctx,w*.33,h*.63,w*.24,.65);chair(ctx,w*.68,h*.63,w*.24,late?.18:.55);person(ctx,w*.56,h*.56,w*.36,late?.16:.35,w*.012);
-  ctx.fillStyle="rgba(247,244,237,.72)";ctx.fillRect(0,h*.77,w,h*.23);
+function platformScene(ctx: CanvasRenderingContext2D, m: RenderModel) {
+  ctx.fillStyle = "#b9d4cb"; ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 0.25;
+  for (let i = 0; i < 6; i += 1) { ctx.fillStyle = i % 2 ? COLORS.paper : COLORS.moss; ctx.fillRect(i * 205 - 90, 0, 150, H); }
+  ctx.globalAlpha = 1;
+  const worldToY = (y: number) => H - 300 - (y - m.cameraY) * 250;
+  m.platforms.forEach((p) => {
+    const y = worldToY(p.y); if (y < -120 || y > H + 120) return;
+    const alpha = p.kind === "trace" ? 0.65 : p.kind === "rescue" ? 0.9 : 1;
+    ctx.save(); ctx.globalAlpha = p.stolen ? 0.25 : alpha; ctx.fillStyle = p.kind === "base" ? COLORS.paper : p.kind === "rescue" ? COLORS.yellow : COLORS.blue;
+    ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = p.kind === "trace" ? 28 : 8;
+    rounded(ctx, (p.x - p.w / 2) * W, y, p.w * W, 34, 14); ctx.fill();
+    ctx.strokeStyle = COLORS.ink; ctx.lineWidth = 4; ctx.stroke(); ctx.restore();
+  });
+  const py = worldToY(m.player.y); drawPlayer(ctx, m.player.x * W, py - 95, 0.78, m.player.facing, m.player.grounded ? Math.sin(m.now * 0.008) * 2 : 0);
+  const cy = worldToY(m.creature.y); blob(ctx, m.creature.x * W, cy - 48, 48, m.now);
+  ctx.strokeStyle = "rgba(255,253,242,.28)"; ctx.lineWidth = 5; ctx.setLineDash([16, 20]); ctx.beginPath(); ctx.moveTo(540, H); ctx.lineTo(540, 0); ctx.stroke(); ctx.setLineDash([]);
 }
 
-function workbench(ctx:CanvasRenderingContext2D,w:number,h:number,s:RenderState){
-  ctx.fillStyle="#b9b8b1";ctx.fillRect(0,0,w,h);const g=ctx.createRadialGradient(w/2,h*.48,0,w/2,h*.48,w*.65);g.addColorStop(0,"rgba(241,237,226,.9)");g.addColorStop(1,"rgba(98,108,109,.38)");ctx.fillStyle=g;ctx.fillRect(0,0,w,h);
-  ctx.save();ctx.translate(w*.5,h*.48);ctx.rotate(-.025);ctx.fillStyle=C.paper;ctx.shadowColor="rgba(30,40,43,.24)";ctx.shadowBlur=w*.05;ctx.fillRect(-w*.32,-h*.25,w*.64,h*.5);ctx.restore();
-  const pts=[[.18,.31],[.76,.27],[.16,.62],[.78,.62],[.5,.77]];for(let i=0;i<5;i++){const active=i===s.puzzleIndex;const locked=s.puzzleLocked[i];const [px,py]=pts[i];ctx.save();ctx.translate(w*px,h*py);ctx.rotate((s.puzzleSides[i]==="A"?-.08:.08)+(active?Math.sin(s.now*.004)*.025:0));ctx.fillStyle=locked?"rgba(240,231,195,.92)":"rgba(236,231,220,.82)";ctx.strokeStyle=active?C.yellow:"rgba(45,55,57,.42)";ctx.lineWidth=active?w*.009:w*.003;ctx.fillRect(-w*.075,-w*.06,w*.15,w*.12);ctx.strokeRect(-w*.075,-w*.06,w*.15,w*.12);ctx.fillStyle=C.ink;ctx.font=`${w*.028}px ui-monospace`;ctx.textAlign="center";ctx.fillText(`${i+1}${s.puzzleSides[i]}`,0,w*.01);if(locked){ctx.globalAlpha=.28;ctx.fillRect(w*.012,-w*.05,w*.15,w*.12);}ctx.restore();}
+function soundScene(ctx: CanvasRenderingContext2D, m: RenderModel) {
+  ctx.save(); ctx.translate(0, 190);
+  ctx.fillStyle = "#bfd7d0"; rounded(ctx, 95, 130, 890, 1160, 54); ctx.fill();
+  for (let i = 0; i < 5; i += 1) { ctx.strokeStyle = `rgba(38,60,59,${0.1 + i * 0.025})`; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(540, 600, 120 + i * 75 + Math.sin(m.now * 0.003 + i) * 12, 0, Math.PI * 2); ctx.stroke(); }
+  blob(ctx, 540, 460, 92, m.now, COLORS.blue, 0.94);
+  const round = GAME_CONFIG.soundRounds[Math.min(m.soundRound, 2)];
+  const gap = 150; const start = 540 - ((round.notes.length - 1) * gap) / 2;
+  round.notes.forEach((_, index) => {
+    const active = m.soundFlash === index; const selected = m.soundSelected === index;
+    ctx.fillStyle = active ? (m.soundPhase === "listen" ? COLORS.moss : COLORS.yellow) : selected ? "#fff8d6" : "rgba(255,253,242,.55)";
+    ctx.strokeStyle = selected ? COLORS.ink : "rgba(38,60,59,.35)"; ctx.lineWidth = selected ? 8 : 4;
+    ctx.beginPath(); ctx.arc(start + index * gap, 930, active ? 58 : 46, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = COLORS.ink; ctx.font = "600 28px ui-monospace, monospace"; ctx.textAlign = "center"; ctx.fillText(String(index + 1).padStart(2, "0"), start + index * gap, 940);
+  });
+  ctx.restore();
 }
 
-function versionPhoto(ctx:CanvasRenderingContext2D,w:number,h:number,s:RenderState){
-  const a=(s.stage==="finale"?s.selectedVersion:s.activeVersion)!=="B";const g=ctx.createLinearGradient(0,0,0,h);g.addColorStop(0,a?"#aab9bb":"#aaa5b0");g.addColorStop(1,"#dfd9ce");ctx.fillStyle=g;ctx.fillRect(0,0,w,h);const x=w*.08,y=h*.19,pw=w*.84,ph=h*.5;ctx.fillStyle=C.paper;rr(ctx,x,y,pw,ph,w*.015);ctx.fill();ctx.fillStyle="rgba(102,123,129,.35)";ctx.fillRect(x+w*.03,y+w*.03,pw-w*.06,ph-w*.08);ctx.strokeStyle="rgba(40,52,55,.55)";ctx.lineWidth=w*.006;ctx.strokeRect(x+pw*.68,y+ph*.16,pw*.2,ph*.58);clock(ctx,x+pw*.73,y+ph*.12,w*.045,!a);chair(ctx,x+pw*.35,y+ph*.72,w*.2,.72);if(a)chair(ctx,x+pw*.66,y+ph*.72,w*.2,.56);person(ctx,x+pw*.48,y+ph*.64,w*.36,.42,w*.01);if(a)person(ctx,x+pw*.62,y+ph*.64,w*.34,.21,w*.014);else{ctx.fillStyle="rgba(246,243,235,.66)";ctx.fillRect(x+pw*.56,y+ph*.24,pw*.16,ph*.5);}if(s.overloads){ctx.save();ctx.globalAlpha=clamp(s.overloads*.05,0,.2);ctx.translate(w*.018,0);person(ctx,x+pw*.62,y+ph*.64,w*.34,.5,w*.01);ctx.restore();}
+function assemblyScene(ctx: CanvasRenderingContext2D, m: RenderModel) {
+  ctx.save(); ctx.translate(0, 160);
+  ctx.fillStyle = "#e6dcc3"; rounded(ctx, 70, 130, 940, 1240, 48); ctx.fill();
+  ctx.strokeStyle = "rgba(38,60,59,.2)"; ctx.lineWidth = 3; for (let i = 0; i < 6; i += 1) line(ctx, 110, 260 + i * 170, 970, 260 + i * 170, "rgba(38,60,59,.15)", 3);
+  drawBuiltCreature(ctx, 540, 680, m.body, m.now, 1.35, false);
+  const slotPositions: Record<BodySlot, [number, number]> = { head: [540, 458], body: [540, 670], leftArm: [365, 680], rightArm: [715, 680], legs: [540, 868] };
+  Object.entries(slotPositions).forEach(([slot, [x, y]]) => {
+    const active = slot === m.assembleSlot; ctx.strokeStyle = active ? COLORS.yellow : "rgba(38,60,59,.28)"; ctx.lineWidth = active ? 9 : 4; ctx.setLineDash(active ? [] : [14, 12]); ctx.beginPath(); ctx.arc(x, y, active ? 86 : 72, 0, Math.PI * 2); ctx.stroke();
+  });
+  ctx.setLineDash([]); ctx.fillStyle = "rgba(255,253,242,.72)"; rounded(ctx, 150, 1040, 780, 180, 28); ctx.fill(); ctx.strokeStyle = COLORS.ink; ctx.lineWidth = 5; ctx.stroke();
+  const part = GAME_CONFIG.parts.find((p) => p.id === m.assemblePart)!; ctx.fillStyle = COLORS.ink; ctx.textAlign = "center"; ctx.font = "72px serif"; ctx.fillText(part.symbol, 540, 1124); ctx.font = "600 30px ui-sans-serif, sans-serif"; ctx.fillText(m.lang === "zh" ? part.zh : part.en, 540, 1176);
+  ctx.restore();
 }
 
-function grain(ctx:CanvasRenderingContext2D,w:number,h:number,now:number){ctx.save();ctx.globalAlpha=.035;ctx.fillStyle=C.ink;const step=Math.max(8,Math.floor(w/110));for(let y=(now*.012)%step;y<h;y+=step)for(let x=0;x<w;x+=step){const n=Math.sin(x*12.2+y*3.7+Math.floor(now/90))*43758.5;if(n-Math.floor(n)>.75)ctx.fillRect(x,y,1.2,1.2);}ctx.restore();}
+function trialScene(ctx: CanvasRenderingContext2D, m: RenderModel) {
+  ctx.save(); ctx.translate(0, 160);
+  ctx.fillStyle = "#c9dec5"; rounded(ctx, 70, 150, 940, 1150, 54); ctx.fill();
+  ctx.fillStyle = "rgba(255,253,242,.6)"; ctx.beginPath(); ctx.ellipse(540, 1060, 350, 110, 0, 0, Math.PI * 2); ctx.fill();
+  const walkX = 350 + ((m.stageTime / 1000) % 8) / 8 * 380;
+  drawBuiltCreature(ctx, walkX, 835, m.body, m.now, 1.5, true);
+  drawProp(ctx, "ball", 785, 945, 0.78, m.now);
+  ctx.restore();
+}
 
-export function renderFrame(ctx:CanvasRenderingContext2D,w:number,h:number,s:RenderState){
-  ctx.clearRect(0,0,w,h);
-  if(["dormant","tutorial","archive"].includes(s.stage)){const g=ctx.createLinearGradient(0,0,0,h);g.addColorStop(0,"#bbc6c6");g.addColorStop(.5,"#ded9ce");g.addColorStop(1,"#aaa9aa");ctx.fillStyle=g;ctx.fillRect(0,0,w,h);archivePhoto(ctx,w,h,s);}
-  else if(s.stage==="corridor")corridor(ctx,w,h,s);
-  else if(s.stage==="doors")doors(ctx,w,h,s);
-  else if(s.stage==="classroom")classroom(ctx,w,h,s);
-  else if(s.stage==="reconstruct")workbench(ctx,w,h,s);
-  else versionPhoto(ctx,w,h,s);
-  grain(ctx,w,h,s.now);
+function reportScene(ctx: CanvasRenderingContext2D, m: RenderModel) {
+  ctx.save(); ctx.translate(0, 180);
+  ctx.fillStyle = "#efe7d0"; rounded(ctx, 70, 80, 940, 1330, 36); ctx.fill(); ctx.strokeStyle = COLORS.ink; ctx.lineWidth = 5; ctx.stroke();
+  ctx.fillStyle = COLORS.ink; ctx.font = "700 26px ui-monospace, monospace"; ctx.textAlign = "left"; ctx.fillText("FIRST OBSERVED FORM", 130, 190); ctx.fillText("CURRENT LEARNED FORM", 570, 190);
+  ctx.strokeStyle = "rgba(38,60,59,.3)"; ctx.setLineDash([10, 12]); line(ctx, 530, 155, 530, 800, "rgba(38,60,59,.25)", 4); ctx.setLineDash([]);
+  blob(ctx, 300, 490, 105, m.now, COLORS.blue, 0.7); drawBuiltCreature(ctx, 765, 520, m.body, m.now, 1.2, true);
+  ctx.fillStyle = "#fffaf0"; rounded(ctx, 115, 860, 850, 390, 28); ctx.fill();
+  ctx.fillStyle = COLORS.ink; ctx.font = "700 30px ui-monospace, monospace"; ctx.fillText("ORIGINAL FORM: UNVERIFIABLE", 155, 940);
+  const labels = m.lang === "zh" ? ["动作", "观察", "回声", "痕迹"] : ["MOTION", "ATTENTION", "ECHO", "TRACE"];
+  const values = [m.stats.motion, m.stats.attention, m.stats.echo, m.stats.trace];
+  labels.forEach((label, i) => {
+    ctx.font = "600 24px ui-sans-serif, sans-serif"; ctx.fillText(label, 155, 1020 + i * 55);
+    ctx.fillStyle = "#d8ddca"; rounded(ctx, 330, 996 + i * 55, 500, 22, 11); ctx.fill();
+    ctx.fillStyle = i % 2 ? COLORS.moss : COLORS.blue; rounded(ctx, 330, 996 + i * 55, Math.min(500, 40 + values[i] * 24), 22, 11); ctx.fill(); ctx.fillStyle = COLORS.ink;
+  });
+  ctx.restore();
+}
+
+export function renderGame(ctx: CanvasRenderingContext2D, model: RenderModel) {
+  ctx.clearRect(0, 0, W, H); baseBackground(ctx, model.now, model.stage, model.reducedMotion);
+  if (model.stage === "dormant" || model.stage === "find") room(ctx, model);
+  else if (model.stage === "chase") courtyard(ctx, model);
+  else if (model.stage === "platform") platformScene(ctx, model);
+  else if (model.stage === "sound") soundScene(ctx, model);
+  else if (model.stage === "assemble") assemblyScene(ctx, model);
+  else if (model.stage === "trial") trialScene(ctx, model);
+  else reportScene(ctx, model);
 }

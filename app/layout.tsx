@@ -3,19 +3,18 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://memory-drift-game.dsydsy0920900940.chatgpt.site"),
-  title: "记忆漂移：最后一个下午",
-  description: "一款关于数据保存、回忆重构与不确定真相的竖屏互动叙事游戏。",
+  other: { "codex-preview": "development" },
+  title: "忘了自己是什么｜What Was I Again?",
+  description: "追上一只不断忘记形态的生物，并用你的操作教会它一种新的自己。",
   openGraph: {
-    title: "记忆漂移：最后一个下午",
-    description: "照片可以保存，但原始记忆仍然无法确认。",
+    title: "忘了自己是什么｜What Was I Again?",
+    description: "一款关于记忆、模仿与共同生成的竖屏互动游戏。",
     type: "website",
-    images: [{ url: "/og.png", width: 1200, height: 630, alt: "记忆漂移：最后一个下午" }],
   },
   twitter: {
-    card: "summary_large_image",
-    title: "记忆漂移：最后一个下午",
-    description: "照片可以保存，但原始记忆仍然无法确认。",
-    images: ["/og.png"],
+    card: "summary",
+    title: "忘了自己是什么｜What Was I Again?",
+    description: "一款关于记忆、模仿与共同生成的竖屏互动游戏。",
   },
   icons: {
     icon: "/favicon.svg",
