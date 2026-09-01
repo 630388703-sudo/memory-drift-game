@@ -4,14 +4,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import { CreatureAudio } from "../game/audio";
-import { GAME_CONFIG, text, type BodyBuild, type BodySlot, type GameStage, type Language, type PartId, type TraitKey } from "../game/config";
+import { GAME_CONFIG, text, type BodySlot, type GameStage, type Language, type PartId, type TraitKey } from "../game/config";
 import { GameInput, type DirectionAction, type InputEvent } from "../game/input";
 import { renderGame, type ChaseEntity, type MemoryPlatform, type RenderModel } from "../game/renderer";
-import { buildCreatureReport, clearPersistentTrace, createRunId, dominantTraits, freshStats, loadInheritedTrait, persistReport, saveNextTrace, type CreatureReport, type InheritedTrait } from "../game/session";
+import { buildCreatureReport, clearPersistentTrace, createRunId, dominantTraits, freshStats, loadInheritedTrait, persistReport, saveNextTrace, type BodyBuild, type CreatureReport, type InheritedTrait } from "../game/session";
 
 type Runtime = {
   stage: GameStage; stageStartedAt: number; startedAt: number; runId: string;
   lang: Language; muted: boolean; visualAssist: boolean; reducedMotion: boolean; help: boolean;
+  helpOpenedAt: number;
   player: { x: number; y: number; vx: number; vy: number; grounded: boolean; facing: number };
   creature: { x: number; y: number; mood: "curious" | "panic" | "proud" | "confused" };
   findTarget: string; inspected: Set<string>; nearestObject: string | null; inherited: InheritedTrait; inheritedVisible: boolean; noticedInherited: boolean;
@@ -44,7 +45,7 @@ function createRuntime(): Runtime {
   const now = performance.now();
   return {
     stage: "dormant", stageStartedAt: now, startedAt: Date.now(), runId: createRunId(), lang: "zh", muted: false, visualAssist: false,
-    reducedMotion: typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches, help: false,
+    reducedMotion: typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches, help: false, helpOpenedAt: 0,
     player: { x: .5, y: .84, vx: 0, vy: 0, grounded: true, facing: 1 }, creature: { x: .52, y: .45, mood: "curious" },
     findTarget: "broom", inspected: new Set(), nearestObject: null,
     inherited: GAME_CONFIG.inheritedTraits[0], inheritedVisible: true, noticedInherited: false,
@@ -197,7 +198,20 @@ export default function WhatWasIAgainGame() {
     if (event.action === "mute") { r.muted = !r.muted; audioRef.current?.setMuted(r.muted); repaint(); return; }
     if (event.action === "language") { r.lang = r.lang === "zh" ? "en" : "zh"; repaint(); return; }
     if (event.action === "visual-assist") { r.visualAssist = !r.visualAssist; repaint(); return; }
-    if (event.action === "help") { r.help = !r.help; repaint(); return; }
+    if (event.action === "help") {
+      const now = performance.now();
+      if (!r.help) { r.help = true; r.helpOpenedAt = now; }
+      else {
+        const pausedFor = Math.max(0, now - r.helpOpenedAt);
+        r.help = false; r.helpOpenedAt = 0; r.stageStartedAt += pausedFor; r.roundStartedAt += pausedFor;
+        if (r.pendingStage) r.pendingStage.at += pausedFor;
+        if (r.pendingTrace) r.pendingTrace.at += pausedFor;
+        if (r.soundAdvanceAt) r.soundAdvanceAt += pausedFor;
+        if (r.message) r.message.until += pausedFor;
+      }
+      repaint(); return;
+    }
+    if (r.help) return;
     if (r.stage === "dormant" && (event.action === "any-direction" || event.action === "action-start")) { void audioRef.current?.start(); transition("find"); return; }
     if (["left", "right", "up", "down"].includes(event.action)) {
       if (r.stage === "sound") {
@@ -218,6 +232,10 @@ export default function WhatWasIAgainGame() {
     else if (r.stage === "platform") jump(r);
     else if (r.stage === "sound") selectSound(r);
     else if (r.stage === "assemble") installPart(r);
+    else if (r.stage === "trial") {
+      if (performance.now() - r.stageStartedAt >= 3500) transition("report");
+      else say("再看它走几步。", "Watch it take a few more steps.");
+    }
     else if (r.stage === "report") resetRun(false);
   };
 
@@ -237,7 +255,7 @@ export default function WhatWasIAgainGame() {
     const loop = (now: number) => {
       const r = runtimeRef.current; if (!r) return;
       const dt = Math.min(.034, Math.max(.001, (now - (lastFrameRef.current || now)) / 1000)); lastFrameRef.current = now;
-      if (r.pendingStage && now >= r.pendingStage.at) transition(r.pendingStage.stage);
+      if (!r.help && r.pendingStage && now >= r.pendingStage.at) transition(r.pendingStage.stage);
       updateRuntime(r, dt, now, inputRef.current, say, transition, audioRef.current);
       const model = toRenderModel(r, now); renderGame(ctx, model);
       uiAccumulator += dt; if (uiAccumulator > .12) { uiAccumulator = 0; setViewTick((value) => value + 1); }
@@ -248,18 +266,20 @@ export default function WhatWasIAgainGame() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const r = runtimeRef.current ?? runtime;
+  const r = (runtimeRef.current ?? runtime)!;
   const stageInfo = GAME_CONFIG.stages[r.stage];
   const hint = getHint(r.stage, r.lang);
   const activeMessage = r.message && r.message.until > performance.now() ? text(r.lang, r.message.zh, r.message.en) : "";
   const currentSlot = GAME_CONFIG.bodySlots[r.assembleSlotIndex];
   const currentPart = GAME_CONFIG.parts.find((part) => part.id === r.assemblePart)!;
   const topTraits = dominantTraits(r.stats);
+  const stageElapsed = performance.now() - r.stageStartedAt;
+  const nearestLabel = GAME_CONFIG.roomObjects.find((object) => object.id === r.nearestObject);
 
   const directionButton = (direction: DirectionAction, glyph: string) => (
     <button className={`pad-key pad-${direction}`} aria-label={direction}
       onPointerDown={(event) => { event.preventDefault(); inputRef.current?.setTouchDirection(direction, true); }}
-      onPointerUp={() => inputRef.current?.setTouchDirection(direction, false)} onPointerCancel={() => inputRef.current?.setTouchDirection(direction, false)}>{glyph}</button>
+      onPointerUp={() => inputRef.current?.setTouchDirection(direction, false)} onPointerCancel={() => inputRef.current?.setTouchDirection(direction, false)} onPointerLeave={() => inputRef.current?.setTouchDirection(direction, false)}>{glyph}</button>
   );
 
   return (
@@ -277,10 +297,12 @@ export default function WhatWasIAgainGame() {
             <button onClick={() => inputRef.current?.emitTouch("help")} aria-label="帮助">?</button>
             <button onClick={() => inputRef.current?.emitTouch("fullscreen")} aria-label="全屏">⛶</button>
           </div>
-          <div className="stage-rail" aria-label="game progress">{GAME_CONFIG.stageOrder.map((stage, index) => <i key={stage} className={index + 1 <= stageInfo.progress ? "done" : ""} />)}</div>
+          <div className="stage-rail" aria-label={text(r.lang, "游戏进度", "Game progress")}>{GAME_CONFIG.stageOrder.map((stage, index) => <span key={stage} className={index + 1 <= stageInfo.progress ? "done" : ""} aria-current={stage === r.stage ? "step" : undefined} aria-label={text(r.lang, GAME_CONFIG.stages[stage].zh, GAME_CONFIG.stages[stage].en)} />)}</div>
         </header>
 
-        {r.stage === "dormant" && <div className="title-card"><span>FIELD NOTE 07</span><h1>{text(r.lang, "忘了自己是什么", "What Was I Again?")}</h1><p>{text(r.lang, "它还在房间里。哪一个？", "It is still in the room. Which one?")}</p><b>{text(r.lang, "移动方向键，开始观察", "Move to begin observing")}</b></div>}
+        {r.stage === "dormant" && <div className="title-card"><span>FIELD NOTE 07</span><h1>{text(r.lang, "忘了自己是什么", "What Was I Again?")}</h1><p>{text(r.lang, "它还在房间里。哪一个？", "It is still in the room. Which one?")}</p><button className="start-action" onClick={() => inputRef.current?.emitTouch("action-start")}>{text(r.lang, "开始观察", "BEGIN OBSERVATION")}<small>{text(r.lang, "方向键 / WASD / 触控均可操作", "Keyboard, WASD and touch supported")}</small></button></div>}
+
+        {r.stage === "find" && <div className="mission-card"><span>{String(r.inspected.size).padStart(2, "0")} / 06</span><strong>{nearestLabel ? text(r.lang, `靠近：${nearestLabel.zh}`, `NEAR: ${nearestLabel.en}`) : text(r.lang, "找出伪装成物件的它", "Find what is pretending")}</strong><small>{text(r.lang, "靠近可疑物件，再按空格触碰", "MOVE CLOSE, THEN PRESS SPACE TO TOUCH")}</small></div>}
 
         {r.stage === "chase" && <div className="mission-card"><span>{String(r.chaseRound + 1).padStart(2, "0")} / 03</span><strong>{text(r.lang, GAME_CONFIG.chaseRounds[Math.min(r.chaseRound, 2)].zh, GAME_CONFIG.chaseRounds[Math.min(r.chaseRound, 2)].en)}</strong><small>{text(r.lang, `假生物 ${r.fakes.length} / ${GAME_CONFIG.maxFakeCreatures}`, `DECOYS ${r.fakes.length} / ${GAME_CONFIG.maxFakeCreatures}`)}</small></div>}
 
@@ -290,7 +312,7 @@ export default function WhatWasIAgainGame() {
 
         {r.stage === "assemble" && <div className="assembly-panel"><span>{text(r.lang, `正在安装：${slotLabels[currentSlot][0]}`, `INSTALLING: ${slotLabels[currentSlot][1]}`)}</span><strong><i>{currentPart.symbol}</i>{text(r.lang, currentPart.zh, currentPart.en)}</strong><small>{text(r.lang, "上下换位置 · 左右换部件 · 空格安装", "UP/DOWN SLOT · LEFT/RIGHT PART · SPACE FIT")}</small><div>{GAME_CONFIG.bodySlots.map((slot) => <b key={slot} className={r.body[slot] ? "filled" : slot === currentSlot ? "current" : ""}>{r.body[slot] ? "●" : "○"}</b>)}</div></div>}
 
-        {r.stage === "trial" && <div className="trial-caption"><span>{text(r.lang, "身体试用中", "BODY TEST IN PROGRESS")}</span><strong>{r.stats.misses > 2 ? text(r.lang, "它看起来有点过于灵活。", "It seems a little too nimble.") : r.stats.falls > 2 ? text(r.lang, "它认为摔也是一种走法。", "It thinks falling is a kind of walking.") : text(r.lang, "它看起来很开心。", "It looks pleased.")}</strong></div>}
+        {r.stage === "trial" && <div className="trial-caption"><span>{text(r.lang, "身体试用中", "BODY TEST IN PROGRESS")}</span><strong>{r.stats.misses > 2 ? text(r.lang, "它看起来有点过于灵活。", "It seems a little too nimble.") : r.stats.falls > 2 ? text(r.lang, "它认为摔也是一种走法。", "It thinks falling is a kind of walking.") : text(r.lang, "它看起来很开心。", "It looks pleased.")}</strong>{stageElapsed >= 3500 && <button onClick={() => inputRef.current?.emitTouch("action-start")}>{text(r.lang, "完成观察 →", "FINISH OBSERVATION →")}</button>}</div>}
 
         {r.stage === "report" && <div className="report-copy"><span>{text(r.lang, "原始形态：无法验证", "ORIGINAL FORM: UNVERIFIABLE")}</span><h2>{text(r.lang, "它现在很确定自己是谁。", "It is quite sure what it is now.")}</h2><p>{text(r.lang, "你教的。", "You taught it.")}</p><div className="trait-tags">{topTraits.map((trait) => <b key={trait}>{text(r.lang, traitLabels[trait][0], traitLabels[trait][1])}</b>)}</div><small>{text(r.lang, `上一观察者留下：${r.inherited.zh}`, `PREVIOUS OBSERVER LEFT: ${r.inherited.en}`)}</small><button onClick={() => resetRun(false)}>{text(r.lang, "再观察一次", "OBSERVE AGAIN")}</button></div>}
 
@@ -300,15 +322,16 @@ export default function WhatWasIAgainGame() {
           <div className="behavior-strip"><span>MOTION <i style={{ "--score": Math.min(100, r.stats.motion * 6) } as React.CSSProperties} /></span><span>ATTENTION <i style={{ "--score": Math.min(100, r.stats.attention * 6) } as React.CSSProperties} /></span><span>ECHO <i style={{ "--score": Math.min(100, r.stats.echo * 8) } as React.CSSProperties} /></span><span>TRACE <i style={{ "--score": Math.min(100, r.stats.trace * 8) } as React.CSSProperties} /></span></div>
         </footer>
 
-        <div className="touch-controls" aria-label="触控操作"><div className="dpad">{directionButton("up", "↑")}{directionButton("left", "←")}{directionButton("right", "→")}{directionButton("down", "↓")}</div><button className="action-key" onPointerDown={(event) => { event.preventDefault(); inputRef.current?.emitTouch("action-start"); }} onPointerUp={() => inputRef.current?.emitTouch("action-end")}>SPACE<small>{text(r.lang, "碰 / 扑 / 跳 / 装", "TOUCH / POUNCE / JUMP / FIT")}</small></button></div>
+        <div className="touch-controls" aria-label="触控操作"><div className="dpad">{directionButton("up", "↑")}{directionButton("left", "←")}{directionButton("right", "→")}{directionButton("down", "↓")}</div><button className="action-key" onPointerDown={(event) => { event.preventDefault(); inputRef.current?.emitTouch("action-start"); }} onPointerUp={() => inputRef.current?.emitTouch("action-end")} onPointerCancel={() => inputRef.current?.emitTouch("action-end")} onPointerLeave={() => inputRef.current?.emitTouch("action-end")}>SPACE<small>{text(r.lang, "碰 / 扑 / 跳 / 装", "TOUCH / POUNCE / JUMP / FIT")}</small></button></div>
 
-        {r.help && <div className="help-sheet"><button onClick={() => inputRef.current?.emitTouch("help")}>×</button><span>FIELD GUIDE / 快速指南</span><h2>{text(r.lang, "别追太快。它学得很快。", "Do not rush. It learns fast.")}</h2><ul><li>{text(r.lang, "方向键 / WASD：移动与选择", "ARROWS / WASD: move and choose")}</li><li>{text(r.lang, "空格：碰、扑、跳、确认", "SPACE: touch, pounce, jump, confirm")}</li><li>{text(r.lang, "L 中英文 · M 静音 · V 视觉辅助", "L language · M mute · V visual aid")}</li><li>{text(r.lang, "R 重开 · Shift+R 清除上一位痕迹", "R restart · Shift+R clear inherited trace")}</li></ul></div>}
+        {r.help && <div className="help-sheet" role="dialog" aria-modal="true" aria-label={text(r.lang, "快速指南", "Field guide")}><button autoFocus aria-label={text(r.lang, "关闭指南", "Close guide")} onClick={() => inputRef.current?.emitTouch("help")}>×</button><span>FIELD GUIDE / 快速指南</span><h2>{text(r.lang, "别追太快。它学得很快。", "Do not rush. It learns fast.")}</h2><ul><li>{text(r.lang, "方向键 / WASD：移动与选择", "ARROWS / WASD: move and choose")}</li><li>{text(r.lang, "空格：碰、扑、跳、确认", "SPACE: touch, pounce, jump, confirm")}</li><li>{text(r.lang, "L 中英文 · M 静音 · V 视觉辅助", "L language · M mute · V visual aid")}</li><li>{text(r.lang, "R 重开 · Shift+R 清除上一位痕迹", "R restart · Shift+R clear inherited trace")}</li><li>{text(r.lang, "H / Esc：关闭本指南并继续", "H / Esc: close this guide and resume")}</li></ul></div>}
       </section>
     </main>
   );
 }
 
 function updateRuntime(r: Runtime, dt: number, now: number, input: GameInput | null, say: (zh: string, en: string, duration?: number) => void, transition: (stage: GameStage) => void, audio: CreatureAudio | null) {
+  if (r.help) return;
   if (r.message && r.message.until <= now) r.message = null;
   const axis = input?.axis() ?? { x: 0, y: 0 };
   if (r.stage === "find" || r.stage === "chase") {
@@ -398,7 +421,8 @@ function getHint(stage: GameStage, lang: Language) {
     platform: ["↥", "左右移动 · 空格跳", "LEFT/RIGHT · SPACE JUMP", "每次跳跃会留下新平台", "Each jump leaves a new platform"],
     sound: ["♪", "先听两遍，再找不同", "LISTEN TWICE, THEN SPOT THE CHANGE", "上键重听", "Up replays"],
     assemble: ["✦", "换位置、换部件、装上", "CHOOSE SLOT, PART, THEN FIT", "没有错误答案", "There is no wrong body"],
-    trial: ["◌", "它正在试用你教的身体", "IT IS TRYING ON WHAT YOU TAUGHT", "", ""], report: ["↺", "空格再观察一次", "SPACE TO OBSERVE AGAIN", "40秒后自动重置", "Auto reset in 40 seconds"],
+    trial: ["◌", "观察动作 · 空格完成", "WATCH IT MOVE · SPACE TO FINISH", "准备好后生成观察报告", "Generate the field report when ready"], report: ["↺", "空格再观察一次", "SPACE TO OBSERVE AGAIN", "40秒后自动重置", "Auto reset in 40 seconds"],
   };
   const h = hints[stage]; return { icon: h[0], main: lang === "zh" ? h[1] : h[2], sub: lang === "zh" ? h[3] : h[4] };
 }
+
