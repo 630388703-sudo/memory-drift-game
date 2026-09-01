@@ -7,6 +7,7 @@ const KEY_MAP: Record<string, InputAction> = {
   ArrowLeft: "left", KeyA: "left", ArrowRight: "right", KeyD: "right",
   ArrowUp: "up", KeyW: "up", ArrowDown: "down", KeyS: "down",
   KeyF: "fullscreen", KeyM: "mute", KeyL: "language", KeyH: "help", KeyV: "visual-assist",
+  Escape: "help",
 };
 
 /** One semantic input boundary for keyboard, touch, USB HID and future Arduino adapters. */
@@ -74,3 +75,4 @@ export class GameInput {
   emitHardware(action: InputAction, heldMs?: number) { this.emit({ action, source: "hardware", heldMs }); }
   private emit(event: InputEvent) { this.listeners.forEach((listener) => listener(event)); }
 }
+
