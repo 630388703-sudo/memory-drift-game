@@ -1,14 +1,14 @@
 @import "tailwindcss";
 
-:root { color-scheme: light; --ink:#263c3b; --paper:#f4f1df; --mist:#dce9e3; --blue:#67bdd0; --blue-dark:#32859b; --moss:#789b72; --yellow:#e7bd55; --coral:#e48b72; }
+:root { color-scheme: light; --ink:#183454; --paper:#fff8df; --mist:#dff4ff; --blue:#27a9ff; --blue-dark:#1166d9; --moss:#57c77d; --yellow:#ffd43b; --coral:#ff6f61; }
 * { box-sizing:border-box; }
-html, body { width:100%; min-height:100%; margin:0; background:#172524; overscroll-behavior:none; }
+html, body { width:100%; min-height:100%; margin:0; background:#182d66; overscroll-behavior:none; }
 body { color:var(--ink); font-family:"Avenir Next","PingFang SC","Noto Sans CJK SC",system-ui,sans-serif; }
 button { color:inherit; font:inherit; }
-.game-page { min-height:100dvh; display:grid; place-items:center; overflow:hidden; background:radial-gradient(circle at 50% 20%,#526b66 0,#223432 48%,#132220 100%); }
+.game-page { min-height:100dvh; display:grid; place-items:center; overflow:hidden; background:radial-gradient(circle at 50% 15%,#47d7e5 0,#3b6ee8 46%,#20215f 100%); }
 .game-shell { position:relative; width:min(100vw,calc(100dvh * .5625)); height:min(100dvh,calc(100vw * 1.77778)); overflow:hidden; isolation:isolate; container-type:size; background:var(--paper); box-shadow:0 0 0 1px rgba(255,255,255,.15),0 28px 90px rgba(0,0,0,.42); }
 .game-shell canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
-.paper-grain { position:absolute; inset:0; pointer-events:none; opacity:.22; mix-blend-mode:multiply; background-image:repeating-linear-gradient(2deg,transparent 0 3px,rgba(38,60,59,.09) 4px,transparent 5px),radial-gradient(circle at 30% 20%,rgba(255,255,255,.7),transparent 35%); }
+.paper-grain { position:absolute; inset:0; pointer-events:none; opacity:.12; mix-blend-mode:multiply; background-image:repeating-linear-gradient(2deg,transparent 0 3px,rgba(24,52,84,.08) 4px,transparent 5px),radial-gradient(circle at 30% 20%,rgba(255,255,255,.85),transparent 35%); }
 .game-shell::after { content:""; position:absolute; inset:1.8%; border:1px solid rgba(38,60,59,.3); border-radius:1.7cqw; pointer-events:none; z-index:9; }
 
 .game-header { position:absolute; z-index:10; top:3.1%; left:5.2%; right:5.2%; display:grid; grid-template-columns:1fr auto; gap:1.7cqw; color:var(--ink); }
@@ -25,16 +25,16 @@ button { color:inherit; font:inherit; }
 .stage-rail span.done { background:var(--yellow); width:8.1cqw; }
 
 .title-card,.mission-card,.assembly-panel,.trial-caption,.report-copy,.help-sheet { position:absolute; z-index:12; }
-.title-card { left:8%; right:8%; top:18%; padding:5cqw 6cqw 5.5cqw; background:rgba(255,253,242,.84); border:1px solid rgba(38,60,59,.38); border-radius:3.2cqw; box-shadow:1.2cqw 1.2cqw 0 rgba(103,189,208,.25); transform:rotate(-1.2deg); }
+.title-card { left:8%; right:8%; top:18%; padding:5cqw 6cqw 5.5cqw; background:rgba(255,255,248,.91); border:2px solid rgba(24,52,84,.55); border-radius:3.2cqw; box-shadow:1.2cqw 1.2cqw 0 rgba(255,111,97,.42); transform:rotate(-1.2deg); }
 .title-card::before { content:""; position:absolute; width:15cqw; height:3.2cqh; top:-1.5cqh; left:35%; background:rgba(231,189,85,.63); transform:rotate(2deg); }
 .title-card span,.mission-card span,.assembly-panel>span,.trial-caption span,.report-copy>span { font:700 1.55cqw/1.2 ui-monospace,monospace; letter-spacing:.12em; text-transform:uppercase; }
 .title-card h1 { margin:1.5cqh 0 .8cqh; font:800 7.5cqw/.98 "STKaiti","KaiTi","Songti SC",Georgia,serif; letter-spacing:-.04em; }
 .title-card p { margin:0 0 2.8cqh; font:600 2.4cqw/1.5 "STKaiti","KaiTi",serif; }
-.start-action { display:inline-grid; gap:.45cqh; padding:1.2cqh 2.8cqw; border:0; border-radius:99px; background:var(--ink); color:#fffdf2; font-size:1.65cqw; font-weight:800; text-align:left; cursor:pointer; animation:nudge 1.5s ease-in-out infinite; }
+.start-action { display:inline-grid; gap:.45cqh; padding:1.2cqh 2.8cqw; border:0; border-radius:99px; background:var(--blue-dark); color:#fffdf2; font-size:1.65cqw; font-weight:800; text-align:left; cursor:pointer; animation:nudge 1.5s ease-in-out infinite; box-shadow:.45cqw .45cqw 0 var(--coral); }
 .start-action small { font:600 1cqw/1.2 ui-monospace,monospace; letter-spacing:.04em; opacity:.7; }
 .start-action:hover,.start-action:focus-visible { background:var(--blue-dark); outline:3px solid rgba(103,189,208,.55); animation-play-state:paused; }
 
-.mission-card { left:5.2%; right:5.2%; top:12.7%; min-height:9.2cqh; padding:1.7cqh 3cqw; display:grid; grid-template-columns:auto 1fr; gap:.55cqh 3cqw; align-items:center; background:rgba(255,253,242,.86); border-left:.8cqw solid var(--yellow); border-radius:0 2.2cqw 2.2cqw 0; box-shadow:0 1.2cqh 4cqh rgba(38,60,59,.11); }
+.mission-card { left:5.2%; right:5.2%; top:12.7%; min-height:9.2cqh; padding:1.7cqh 3cqw; display:grid; grid-template-columns:auto 1fr; gap:.55cqh 3cqw; align-items:center; background:rgba(255,255,248,.9); border-left:.8cqw solid var(--coral); border-radius:0 2.2cqw 2.2cqw 0; box-shadow:0 1.2cqh 4cqh rgba(24,52,84,.14); }
 .mission-card strong { font:700 2.55cqw/1.2 "STKaiti","KaiTi","Songti SC",Georgia,serif; }
 .mission-card small { grid-column:2; font:650 1.25cqw/1.2 ui-monospace,monospace; letter-spacing:.08em; opacity:.7; }
 .mission-card.compact { right:auto; grid-template-columns:auto auto; min-width:45%; }
