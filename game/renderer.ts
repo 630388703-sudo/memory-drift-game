@@ -20,8 +20,8 @@ export type RenderModel = {
 const W = 1080;
 const H = 1920;
 const COLORS = {
-  ink: "#263c3b", paper: "#f4f1df", mist: "#dce9e3", blue: "#67bdd0", blueDark: "#32859b",
-  moss: "#789b72", yellow: "#e7bd55", coral: "#e48b72", purple: "#a88ac4", wood: "#9d7c58", white: "#fffdf2",
+  ink: "#183454", paper: "#fff8df", mist: "#dff4ff", blue: "#27a9ff", blueDark: "#1166d9",
+  moss: "#57c77d", yellow: "#ffd43b", coral: "#ff6f61", purple: "#9b6dff", wood: "#c7792f", white: "#fffef8",
 };
 
 function rounded(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r = 24) {
@@ -35,35 +35,22 @@ function line(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number,
 
 function blob(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, now: number, color = COLORS.blue, alpha = 0.92) {
   ctx.save(); ctx.translate(x, y); ctx.globalAlpha = alpha;
-  ctx.beginPath();
-  for (let i = 0; i <= 20; i += 1) {
-    const a = (i / 20) * Math.PI * 2;
-    const ripple = 1 + Math.sin(a * 3 + now * 0.002) * 0.055 + Math.sin(a * 5 - now * 0.0014) * 0.035;
-    const px = Math.cos(a) * size * ripple;
-    const py = Math.sin(a) * size * 0.78 * ripple;
-    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-  }
-  ctx.closePath(); ctx.fillStyle = color; ctx.fill();
-  ctx.fillStyle = COLORS.white; ctx.shadowColor = COLORS.white; ctx.shadowBlur = 15;
-  ctx.beginPath(); ctx.arc(-size * 0.24, -size * 0.08, Math.max(5, size * 0.075), 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(size * 0.13, -size * 0.1, Math.max(5, size * 0.075), 0, Math.PI * 2); ctx.fill();
-  ctx.shadowBlur = 0;
-  line(ctx, size * 0.55, -size * 0.45, size * 0.86, -size * 0.76, COLORS.blueDark, Math.max(3, size * 0.045));
+  ctx.rotate(Math.sin(now * .004) * .08);
+  ctx.fillStyle = color; ctx.strokeStyle = COLORS.ink; ctx.lineWidth = Math.max(3, size * .065);
+  rounded(ctx, -size, -size * .82, size * 2, size * 1.64, size * .3); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = COLORS.white; ctx.beginPath(); ctx.moveTo(-size * .35, -size * .08); ctx.lineTo(0, -size * .44); ctx.lineTo(size * .35, -size * .08); ctx.lineTo(0, size * .3); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = COLORS.coral; ctx.fillRect(size * .5, -size * .88, size * .5, size * .28);
   ctx.restore();
 }
 
 function drawPlayer(ctx: CanvasRenderingContext2D, x: number, y: number, scale = 1, facing = 1, bounce = 0) {
   ctx.save(); ctx.translate(x, y + bounce); ctx.scale(facing, 1); ctx.lineCap = "round"; ctx.lineJoin = "round";
-  ctx.fillStyle = "#f1c868"; ctx.strokeStyle = COLORS.ink; ctx.lineWidth = 6 * scale;
-  ctx.beginPath(); ctx.ellipse(0, -76 * scale, 52 * scale, 32 * scale, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = COLORS.moss; rounded(ctx, -35 * scale, -52 * scale, 70 * scale, 104 * scale, 28 * scale); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = "#d59259"; rounded(ctx, 28 * scale, -36 * scale, 47 * scale, 76 * scale, 15 * scale); ctx.fill(); ctx.stroke();
-  line(ctx, -18 * scale, 48 * scale, -28 * scale, 94 * scale, COLORS.ink, 10 * scale);
-  line(ctx, 18 * scale, 48 * scale, 34 * scale, 93 * scale, COLORS.ink, 10 * scale);
-  line(ctx, -36 * scale, -20 * scale, -65 * scale, 22 * scale, COLORS.ink, 9 * scale);
-  line(ctx, 33 * scale, -20 * scale, 63 * scale, 13 * scale, COLORS.ink, 9 * scale);
-  ctx.fillStyle = COLORS.ink; ctx.beginPath(); ctx.arc(-15 * scale, -74 * scale, 4 * scale, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(6 * scale, -75 * scale, 4 * scale, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "rgba(255,111,97,.45)"; ctx.beginPath(); ctx.moveTo(-92 * scale, 6 * scale); ctx.lineTo(-28 * scale, -24 * scale); ctx.lineTo(-28 * scale, 36 * scale); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = COLORS.yellow; ctx.strokeStyle = COLORS.ink; ctx.lineWidth = 7 * scale;
+  rounded(ctx, -52 * scale, -62 * scale, 104 * scale, 124 * scale, 24 * scale); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = COLORS.coral; ctx.fillRect(14 * scale, -68 * scale, 38 * scale, 24 * scale);
+  ctx.fillStyle = COLORS.blueDark; ctx.beginPath(); ctx.arc(-18 * scale, -4 * scale, 10 * scale, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(18 * scale, -4 * scale, 10 * scale, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = COLORS.blueDark; ctx.lineWidth = 6 * scale; ctx.beginPath(); ctx.moveTo(-20 * scale, 27 * scale); ctx.lineTo(20 * scale, 27 * scale); ctx.stroke();
   ctx.restore();
 }
 
@@ -89,8 +76,7 @@ function drawProp(ctx: CanvasRenderingContext2D, kind: string, x: number, y: num
     line(ctx, 20 * scale, -90 * scale, -10 * scale, 42 * scale, COLORS.wood, 12 * scale); ctx.fillStyle = "#d4af6f"; ctx.beginPath(); ctx.moveTo(-45 * scale, 35 * scale); ctx.lineTo(20 * scale, 29 * scale); ctx.lineTo(42 * scale, 92 * scale); ctx.lineTo(-65 * scale, 92 * scale); ctx.closePath(); ctx.fill(); ctx.stroke();
   }
   if (creature || fake) {
-    ctx.fillStyle = COLORS.white; ctx.beginPath(); ctx.arc(-14 * scale, -5 * scale, 6 * scale, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(12 * scale, -5 * scale, 6 * scale, 0, Math.PI * 2); ctx.fill();
-    line(ctx, 38 * scale, -53 * scale, 62 * scale, -76 * scale, fake ? COLORS.purple : COLORS.blueDark, 5 * scale);
+    ctx.strokeStyle = fake ? COLORS.purple : COLORS.blueDark; ctx.lineWidth = 9 * scale; ctx.setLineDash([8 * scale, 7 * scale]); ctx.beginPath(); ctx.arc(0, 0, 66 * scale, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
   }
   ctx.restore();
 }
@@ -122,15 +108,14 @@ function drawBuiltCreature(ctx: CanvasRenderingContext2D, x: number, y: number, 
   drawBodyPart(ctx, body.leftArm, "leftArm", -92 * scale, 5 * scale, scale * 0.75, now);
   drawBodyPart(ctx, body.rightArm, "rightArm", 92 * scale, 5 * scale, scale * 0.75, now);
   drawBodyPart(ctx, body.head, "head", 0, -112 * scale, scale, now);
-  ctx.fillStyle = COLORS.white; ctx.shadowColor = COLORS.white; ctx.shadowBlur = 12;
-  ctx.beginPath(); ctx.arc(-17 * scale, -116 * scale, 7 * scale, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(14 * scale, -118 * scale, 7 * scale, 0, Math.PI * 2); ctx.fill();
-  line(ctx, 45 * scale, -153 * scale, 75 * scale, -181 * scale, COLORS.blueDark, 6 * scale);
+  ctx.fillStyle = COLORS.coral; rounded(ctx, -34 * scale, -142 * scale, 68 * scale, 42 * scale, 10 * scale); ctx.fill();
+  ctx.fillStyle = COLORS.white; ctx.font = `${34 * scale}px ui-sans-serif`; ctx.textAlign = "center"; ctx.fillText("★", 0, -112 * scale);
   ctx.restore();
 }
 
 function baseBackground(ctx: CanvasRenderingContext2D, now: number, stage: GameStage, reducedMotion: boolean) {
   const gradient = ctx.createLinearGradient(0, 0, 0, H);
-  gradient.addColorStop(0, "#dbe9df"); gradient.addColorStop(0.55, "#eef0df"); gradient.addColorStop(1, "#e6d8ba");
+  gradient.addColorStop(0, "#8be7ff"); gradient.addColorStop(0.52, "#fff3a1"); gradient.addColorStop(1, "#ffb27c");
   ctx.fillStyle = gradient; ctx.fillRect(0, 0, W, H);
   ctx.globalAlpha = 0.2; ctx.fillStyle = COLORS.blue;
   for (let i = 0; i < 14; i += 1) {
@@ -141,15 +126,15 @@ function baseBackground(ctx: CanvasRenderingContext2D, now: number, stage: GameS
   for (let y = 18; y < H; y += 24) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y + Math.sin(y) * 2); ctx.stroke(); }
   ctx.globalAlpha = 1;
   if (stage !== "platform") {
-    ctx.fillStyle = "rgba(255,253,242,.58)"; rounded(ctx, 46, 210, 988, 1480, 54); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,248,.6)"; rounded(ctx, 46, 210, 988, 1480, 54); ctx.fill();
   }
 }
 
 function room(ctx: CanvasRenderingContext2D, m: RenderModel) {
   ctx.save(); ctx.translate(0, 165);
-  ctx.fillStyle = "#e6dcc3"; ctx.fillRect(70, 180, 940, 1110);
-  ctx.fillStyle = "#b9d4cc"; for (let i = 0; i < 3; i += 1) { rounded(ctx, 135 + i * 265, 220, 210, 330, 10); ctx.fill(); }
-  ctx.fillStyle = "#8ca485"; ctx.fillRect(70, 1040, 940, 250);
+  ctx.fillStyle = "#ffd276"; ctx.fillRect(70, 180, 940, 1110);
+  ctx.fillStyle = "#74dcff"; for (let i = 0; i < 3; i += 1) { rounded(ctx, 135 + i * 265, 220, 210, 330, 10); ctx.fill(); }
+  ctx.fillStyle = "#57c77d"; ctx.fillRect(70, 1040, 940, 250);
   line(ctx, 70, 1025, 1010, 1025, COLORS.ink, 6);
   GAME_CONFIG.roomObjects.forEach((object, index) => {
     const isTarget = object.id === m.findTarget;
@@ -165,7 +150,7 @@ function room(ctx: CanvasRenderingContext2D, m: RenderModel) {
 
 function courtyard(ctx: CanvasRenderingContext2D, m: RenderModel) {
   ctx.save(); ctx.translate(0, 160);
-  ctx.fillStyle = "#cfddc8"; rounded(ctx, 78, 150, 924, 1190, 48); ctx.fill();
+  ctx.fillStyle = "#a6ed63"; rounded(ctx, 78, 150, 924, 1190, 48); ctx.fill();
   ctx.strokeStyle = "rgba(38,60,59,.17)"; ctx.lineWidth = 4;
   for (let i = 0; i < 9; i += 1) { ctx.beginPath(); ctx.arc(540, 750, 130 + i * 75, 0, Math.PI * 2); ctx.stroke(); }
   m.chaseEntities.forEach((entity, index) => {
@@ -178,9 +163,9 @@ function courtyard(ctx: CanvasRenderingContext2D, m: RenderModel) {
 }
 
 function platformScene(ctx: CanvasRenderingContext2D, m: RenderModel) {
-  ctx.fillStyle = "#b9d4cb"; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "#5f7ef5"; ctx.fillRect(0, 0, W, H);
   ctx.globalAlpha = 0.25;
-  for (let i = 0; i < 6; i += 1) { ctx.fillStyle = i % 2 ? COLORS.paper : COLORS.moss; ctx.fillRect(i * 205 - 90, 0, 150, H); }
+  for (let i = 0; i < 6; i += 1) { ctx.fillStyle = i % 2 ? "#ffc95c" : "#a7f0ef"; ctx.fillRect(i * 205 - 90, 0, 150, H); }
   ctx.globalAlpha = 1;
   const worldToY = (y: number) => H - 300 - (y - m.cameraY) * 250;
   m.platforms.forEach((p) => {
@@ -198,7 +183,7 @@ function platformScene(ctx: CanvasRenderingContext2D, m: RenderModel) {
 
 function soundScene(ctx: CanvasRenderingContext2D, m: RenderModel) {
   ctx.save(); ctx.translate(0, 190);
-  ctx.fillStyle = "#bfd7d0"; rounded(ctx, 95, 130, 890, 1160, 54); ctx.fill();
+  ctx.fillStyle = "#ff9bc7"; rounded(ctx, 95, 130, 890, 1160, 54); ctx.fill();
   for (let i = 0; i < 5; i += 1) { ctx.strokeStyle = `rgba(38,60,59,${0.1 + i * 0.025})`; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(540, 600, 120 + i * 75 + Math.sin(m.now * 0.003 + i) * 12, 0, Math.PI * 2); ctx.stroke(); }
   blob(ctx, 540, 460, 92, m.now, COLORS.blue, 0.94);
   const round = GAME_CONFIG.soundRounds[Math.min(m.soundRound, 2)];
@@ -215,7 +200,7 @@ function soundScene(ctx: CanvasRenderingContext2D, m: RenderModel) {
 
 function assemblyScene(ctx: CanvasRenderingContext2D, m: RenderModel) {
   ctx.save(); ctx.translate(0, 160);
-  ctx.fillStyle = "#e6dcc3"; rounded(ctx, 70, 130, 940, 1240, 48); ctx.fill();
+  ctx.fillStyle = "#fff0a3"; rounded(ctx, 70, 130, 940, 1240, 48); ctx.fill();
   ctx.strokeStyle = "rgba(38,60,59,.2)"; ctx.lineWidth = 3; for (let i = 0; i < 6; i += 1) line(ctx, 110, 260 + i * 170, 970, 260 + i * 170, "rgba(38,60,59,.15)", 3);
   drawBuiltCreature(ctx, 540, 680, m.body, m.now, 1.35, false);
   const slotPositions: Record<BodySlot, [number, number]> = { head: [540, 458], body: [540, 670], leftArm: [365, 680], rightArm: [715, 680], legs: [540, 868] };
@@ -229,7 +214,7 @@ function assemblyScene(ctx: CanvasRenderingContext2D, m: RenderModel) {
 
 function trialScene(ctx: CanvasRenderingContext2D, m: RenderModel) {
   ctx.save(); ctx.translate(0, 160);
-  ctx.fillStyle = "#c9dec5"; rounded(ctx, 70, 150, 940, 1150, 54); ctx.fill();
+  ctx.fillStyle = "#80e4d8"; rounded(ctx, 70, 150, 940, 1150, 54); ctx.fill();
   ctx.fillStyle = "rgba(255,253,242,.6)"; ctx.beginPath(); ctx.ellipse(540, 1060, 350, 110, 0, 0, Math.PI * 2); ctx.fill();
   const walkX = 350 + ((m.stageTime / 1000) % 8) / 8 * 380;
   drawBuiltCreature(ctx, walkX, 835, m.body, m.now, 1.5, true);
@@ -239,12 +224,12 @@ function trialScene(ctx: CanvasRenderingContext2D, m: RenderModel) {
 
 function reportScene(ctx: CanvasRenderingContext2D, m: RenderModel) {
   ctx.save(); ctx.translate(0, 180);
-  ctx.fillStyle = "#efe7d0"; rounded(ctx, 70, 80, 940, 1330, 36); ctx.fill(); ctx.strokeStyle = COLORS.ink; ctx.lineWidth = 5; ctx.stroke();
-  ctx.fillStyle = COLORS.ink; ctx.font = "700 26px ui-monospace, monospace"; ctx.textAlign = "left"; ctx.fillText("FIRST OBSERVED FORM", 130, 190); ctx.fillText("CURRENT LEARNED FORM", 570, 190);
+  ctx.fillStyle = "#fff2a6"; rounded(ctx, 70, 80, 940, 1330, 36); ctx.fill(); ctx.strokeStyle = COLORS.ink; ctx.lineWidth = 5; ctx.stroke();
+  ctx.fillStyle = COLORS.ink; ctx.font = "700 26px ui-monospace, monospace"; ctx.textAlign = "left"; ctx.fillText("START STICKER", 130, 190); ctx.fillText("YOUR RUN STICKER", 570, 190);
   ctx.strokeStyle = "rgba(38,60,59,.3)"; ctx.setLineDash([10, 12]); line(ctx, 530, 155, 530, 800, "rgba(38,60,59,.25)", 4); ctx.setLineDash([]);
   blob(ctx, 300, 490, 105, m.now, COLORS.blue, 0.7); drawBuiltCreature(ctx, 765, 520, m.body, m.now, 1.2, true);
-  ctx.fillStyle = "#fffaf0"; rounded(ctx, 115, 860, 850, 390, 28); ctx.fill();
-  ctx.fillStyle = COLORS.ink; ctx.font = "700 30px ui-monospace, monospace"; ctx.fillText("ORIGINAL FORM: UNVERIFIABLE", 155, 940);
+  ctx.fillStyle = "#fffef8"; rounded(ctx, 115, 860, 850, 390, 28); ctx.fill();
+  ctx.fillStyle = COLORS.ink; ctx.font = "700 30px ui-monospace, monospace"; ctx.fillText("RUN VERSION: READY TO RUSH", 155, 940);
   const labels = m.lang === "zh" ? ["动作", "观察", "回声", "痕迹"] : ["MOTION", "ATTENTION", "ECHO", "TRACE"];
   const values = [m.stats.motion, m.stats.attention, m.stats.echo, m.stats.trace];
   labels.forEach((label, i) => {
@@ -265,3 +250,4 @@ export function renderGame(ctx: CanvasRenderingContext2D, model: RenderModel) {
   else if (model.stage === "trial") trialScene(ctx, model);
   else reportScene(ctx, model);
 }
+
