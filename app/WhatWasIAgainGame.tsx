@@ -134,7 +134,7 @@ export default function WhatWasIAgainGame() {
     r.inspected.add(nearest.id); r.stats.inspected += 1; r.stats.attention += 1;
     audioRef.current?.pop(470 + r.inspected.size * 42);
     if (nearest.id === r.findTarget) {
-      r.inheritedVisible = false; say("找到了。", "Found it.", 900); audioRef.current?.transform(); r.pendingStage = { stage: "chase", at: performance.now() + 950 };
+      r.inheritedVisible = false; say("贴纸冲出去了！", "The sticker bolted!", 900); audioRef.current?.transform(); r.pendingStage = { stage: "chase", at: performance.now() + 950 };
     } else {
       const object = GAME_CONFIG.roomObjects.find((item) => item.id === nearest.id)!;
       say(object.zh, object.en); if (nearest.id === "broom") r.stats.echo += 1;
@@ -143,14 +143,14 @@ export default function WhatWasIAgainGame() {
 
   const pounce = (r: Runtime) => {
     const nearest = nearestChaseEntity(r);
-    if (!nearest.entity || nearest.distance > .18) { say("扑近一点。", "Pounce closer."); return; }
+    if (!nearest.entity || nearest.distance > .18) { say("再贴近一点！", "Get closer!"); return; }
     if (nearest.entity.correct) {
-      audioRef.current?.correct(); say("是它。", "That one.", 850); r.stats.attention += 2;
+      audioRef.current?.correct(); say("追到啦！", "Got it!", 850); r.stats.attention += 2;
       r.chaseRound += 1;
       if (r.chaseRound >= 3) r.pendingStage = { stage: "platform", at: performance.now() + 900 };
       else { r.chaseEntities = makeChaseEntities(r.chaseRound); r.roundStartedAt = performance.now(); r.chaseHint = false; }
     } else {
-      audioRef.current?.wrong(); r.stats.misses += 1; r.stats.motion += 1; say("多了个假的。", "Now there is a fake.");
+      audioRef.current?.wrong(); r.stats.misses += 1; r.stats.motion += 1; say("糟，假贴纸也跑了！", "Oops, a decoy escaped too!");
       const fake: ChaseEntity = { ...nearest.entity, id: `fake-${Date.now()}`, fake: true, correct: false, x: Math.min(.88, Math.max(.12, nearest.entity.x + .06)), y: Math.min(.84, Math.max(.15, nearest.entity.y + .07)) };
       r.fakes = [...r.fakes.slice(-(GAME_CONFIG.maxFakeCreatures - 1)), fake];
     }
@@ -167,11 +167,11 @@ export default function WhatWasIAgainGame() {
   }
 
   const selectSound = (r: Runtime) => {
-    if (r.soundPhase !== "choose") { r.stats.replays += 1; r.stats.echo += .75; restartSoundRound(r); say("它以为你在教它。", "It thinks you are teaching it."); return; }
+    if (r.soundPhase !== "choose") { r.stats.replays += 1; r.stats.echo += .75; restartSoundRound(r); say("再听一次，别急！", "One more time, no rush!"); return; }
     const round = GAME_CONFIG.soundRounds[r.soundRound]; const correct = r.soundSelected === round.wrongIndex;
     r.soundPhase = "feedback"; r.soundAdvanceAt = performance.now() + 950;
-    if (correct) { r.stats.attention += 1.5; audioRef.current?.correct(); say("就是这个音。", "That was the note."); }
-    else { r.stats.soundMistakes += 1; r.stats.echo += 2; audioRef.current?.wrong(); say("它把你的答案也学会了。", "It learned your answer too."); }
+    if (correct) { r.stats.attention += 1.5; audioRef.current?.correct(); say("节拍抓住了！", "Beat caught!"); }
+    else { r.stats.soundMistakes += 1; r.stats.echo += 2; audioRef.current?.wrong(); say("错拍也变成新节奏。", "The wrong beat became a new rhythm."); }
   };
 
   const validPartsForSlot = (slot: BodySlot) => GAME_CONFIG.parts.filter((part) => part.slots.includes(slot));
@@ -184,7 +184,7 @@ export default function WhatWasIAgainGame() {
     const slot = GAME_CONFIG.bodySlots[r.assembleSlotIndex]; const valid = validPartsForSlot(slot);
     if (!valid.some((part) => part.id === r.assemblePart)) r.assemblePart = valid[0].id;
     r.body[slot] = r.assemblePart; audioRef.current?.transform();
-    const part = GAME_CONFIG.parts.find((item) => item.id === r.assemblePart)!; say(`${part.zh}${slot === "legs" ? "腿" : ""}。已学会。`, `${part.en}. Learned.`);
+    const part = GAME_CONFIG.parts.find((item) => item.id === r.assemblePart)!; say(`${part.zh}贴上了！`, `${part.en} sticker placed!`);
     const nextEmpty = GAME_CONFIG.bodySlots.findIndex((candidate) => !r.body[candidate]);
     if (nextEmpty === -1) r.pendingStage = { stage: "trial", at: performance.now() + 900 };
     else { r.assembleSlotIndex = nextEmpty; r.assemblePart = validPartsForSlot(GAME_CONFIG.bodySlots[nextEmpty])[0].id; }
@@ -193,7 +193,7 @@ export default function WhatWasIAgainGame() {
   const handleInput = (event: InputEvent) => {
     const r = runtimeRef.current; if (!r) return; r.lastInteractionAt = performance.now();
     if (event.action === "reset") { resetRun(false); return; }
-    if (event.action === "hard-reset") { resetRun(true); say("展览痕迹已清除。", "Exhibition trace cleared."); return; }
+    if (event.action === "hard-reset") { resetRun(true); say("旧路线已清除。", "Previous route cleared."); return; }
     if (event.action === "fullscreen") { if (!document.fullscreenElement) void document.documentElement.requestFullscreen(); else void document.exitFullscreen(); return; }
     if (event.action === "mute") { r.muted = !r.muted; audioRef.current?.setMuted(r.muted); repaint(); return; }
     if (event.action === "language") { r.lang = r.lang === "zh" ? "en" : "zh"; repaint(); return; }
@@ -215,7 +215,7 @@ export default function WhatWasIAgainGame() {
     if (r.stage === "dormant" && (event.action === "any-direction" || event.action === "action-start")) { void audioRef.current?.start(); transition("find"); return; }
     if (["left", "right", "up", "down"].includes(event.action)) {
       if (r.stage === "sound") {
-        if (event.action === "up") { r.stats.replays += 1; r.stats.echo += .75; restartSoundRound(r); say("它以为你在教它。", "It thinks you are teaching it."); }
+        if (event.action === "up") { r.stats.replays += 1; r.stats.echo += .75; restartSoundRound(r); say("再听一次，别急！", "One more time, no rush!"); }
         else if (event.action === "left" || event.action === "right") { const count = GAME_CONFIG.soundRounds[r.soundRound].notes.length; r.soundSelected = (r.soundSelected + (event.action === "right" ? 1 : -1) + count) % count; audioRef.current?.click(); }
       } else if (r.stage === "assemble") {
         if (event.action === "up" || event.action === "down") {
@@ -234,7 +234,7 @@ export default function WhatWasIAgainGame() {
     else if (r.stage === "assemble") installPart(r);
     else if (r.stage === "trial") {
       if (performance.now() - r.stageStartedAt >= 3500) transition("report");
-      else say("再看它走几步。", "Watch it take a few more steps.");
+      else say("让它先冲两步。", "Let it sprint a little first.");
     }
     else if (r.stage === "report") resetRun(false);
   };
@@ -300,21 +300,21 @@ export default function WhatWasIAgainGame() {
           <div className="stage-rail" aria-label={text(r.lang, "游戏进度", "Game progress")}>{GAME_CONFIG.stageOrder.map((stage, index) => <span key={stage} className={index + 1 <= stageInfo.progress ? "done" : ""} aria-current={stage === r.stage ? "step" : undefined} aria-label={text(r.lang, GAME_CONFIG.stages[stage].zh, GAME_CONFIG.stages[stage].en)} />)}</div>
         </header>
 
-        {r.stage === "dormant" && <div className="title-card"><span>FIELD NOTE 07</span><h1>{text(r.lang, "忘了自己是什么", "What Was I Again?")}</h1><p>{text(r.lang, "它还在房间里。哪一个？", "It is still in the room. Which one?")}</p><button className="start-action" onClick={() => inputRef.current?.emitTouch("action-start")}>{text(r.lang, "开始观察", "BEGIN OBSERVATION")}<small>{text(r.lang, "方向键 / WASD / 触控均可操作", "Keyboard, WASD and touch supported")}</small></button></div>}
+        {r.stage === "dormant" && <div className="title-card"><span>RUN 07 · COLOR RUSH</span><h1>{text(r.lang, "忘了自己是什么", "What Was I Again?")}</h1><p>{text(r.lang, "一张黄色贴纸跑进了会变形的城市。追上它。", "A yellow sticker ran into a shifting city. Catch it.")}</p><button className="start-action" onClick={() => inputRef.current?.emitTouch("action-start")}>{text(r.lang, "冲进去！", "START THE RUSH")}<small>{text(r.lang, "方向键 / WASD / 触控均可操作", "Keyboard, WASD and touch supported")}</small></button></div>}
 
-        {r.stage === "find" && <div className="mission-card"><span>{String(r.inspected.size).padStart(2, "0")} / 06</span><strong>{nearestLabel ? text(r.lang, `靠近：${nearestLabel.zh}`, `NEAR: ${nearestLabel.en}`) : text(r.lang, "找出伪装成物件的它", "Find what is pretending")}</strong><small>{text(r.lang, "靠近可疑物件，再按空格触碰", "MOVE CLOSE, THEN PRESS SPACE TO TOUCH")}</small></div>}
+        {r.stage === "find" && <div className="mission-card"><span>{String(r.inspected.size).padStart(2, "0")} / 06</span><strong>{nearestLabel ? text(r.lang, `靠近：${nearestLabel.zh}`, `NEAR: ${nearestLabel.en}`) : text(r.lang, "找到藏起来的黄色贴纸", "Find the hidden yellow sticker")}</strong><small>{text(r.lang, "靠近可疑物件，再按空格触碰", "MOVE CLOSE, THEN PRESS SPACE TO TOUCH")}</small></div>}
 
-        {r.stage === "chase" && <div className="mission-card"><span>{String(r.chaseRound + 1).padStart(2, "0")} / 03</span><strong>{text(r.lang, GAME_CONFIG.chaseRounds[Math.min(r.chaseRound, 2)].zh, GAME_CONFIG.chaseRounds[Math.min(r.chaseRound, 2)].en)}</strong><small>{text(r.lang, `假生物 ${r.fakes.length} / ${GAME_CONFIG.maxFakeCreatures}`, `DECOYS ${r.fakes.length} / ${GAME_CONFIG.maxFakeCreatures}`)}</small></div>}
+        {r.stage === "chase" && <div className="mission-card"><span>{String(r.chaseRound + 1).padStart(2, "0")} / 03</span><strong>{text(r.lang, GAME_CONFIG.chaseRounds[Math.min(r.chaseRound, 2)].zh, GAME_CONFIG.chaseRounds[Math.min(r.chaseRound, 2)].en)}</strong><small>{text(r.lang, `假贴纸 ${r.fakes.length} / ${GAME_CONFIG.maxFakeCreatures}`, `DECOYS ${r.fakes.length} / ${GAME_CONFIG.maxFakeCreatures}`)}</small></div>}
 
-        {r.stage === "platform" && <div className="mission-card compact"><span>{text(r.lang, "追逐高度", "CHASE HEIGHT")}</span><strong>{Math.min(100, Math.round(r.maxY / 6.2 * 100))}%</strong><small>{text(r.lang, `残影 ${r.platforms.filter((p) => p.kind === "trace").length}`, `TRACES ${r.platforms.filter((p) => p.kind === "trace").length}`)}</small></div>}
+        {r.stage === "platform" && <div className="mission-card compact"><span>{text(r.lang, "冲刺高度", "RUSH HEIGHT")}</span><strong>{Math.min(100, Math.round(r.maxY / 6.2 * 100))}%</strong><small>{text(r.lang, `临时跳板 ${r.platforms.filter((p) => p.kind === "trace").length}`, `BONUS PLATFORMS ${r.platforms.filter((p) => p.kind === "trace").length}`)}</small></div>}
 
-        {r.stage === "sound" && <div className="mission-card"><span>{String(r.soundRound + 1).padStart(2, "0")} / 03 · ECHO</span><strong>{r.soundPhase === "choose" ? text(r.lang, "哪一个音不一样？", "Which note changed?") : text(r.lang, "听它学你。", "Listen to its copy.")}</strong><small>{text(r.lang, "↑ 重听 · ← → 选择 · 空格确认", "↑ REPLAY · ← → CHOOSE · SPACE CONFIRM")}</small></div>}
+        {r.stage === "sound" && <div className="mission-card"><span>{String(r.soundRound + 1).padStart(2, "0")} / 03 · BEAT</span><strong>{r.soundPhase === "choose" ? text(r.lang, "哪一拍不一样？", "Which beat changed?") : text(r.lang, "听两次，抓住错拍。", "Listen twice. Catch the off-beat.")}</strong><small>{text(r.lang, "↑ 重听 · ← → 选择 · 空格确认", "↑ REPLAY · ← → CHOOSE · SPACE CONFIRM")}</small></div>}
 
-        {r.stage === "assemble" && <div className="assembly-panel"><span>{text(r.lang, `正在安装：${slotLabels[currentSlot][0]}`, `INSTALLING: ${slotLabels[currentSlot][1]}`)}</span><strong><i>{currentPart.symbol}</i>{text(r.lang, currentPart.zh, currentPart.en)}</strong><small>{text(r.lang, "上下换位置 · 左右换部件 · 空格安装", "UP/DOWN SLOT · LEFT/RIGHT PART · SPACE FIT")}</small><div>{GAME_CONFIG.bodySlots.map((slot) => <b key={slot} className={r.body[slot] ? "filled" : slot === currentSlot ? "current" : ""}>{r.body[slot] ? "●" : "○"}</b>)}</div></div>}
+        {r.stage === "assemble" && <div className="assembly-panel"><span>{text(r.lang, `正在贴：${slotLabels[currentSlot][0]}区`, `PLACING: ${slotLabels[currentSlot][1]}`)}</span><strong><i>{currentPart.symbol}</i>{text(r.lang, currentPart.zh, currentPart.en)}</strong><small>{text(r.lang, "上下换位置 · 左右换贴纸 · 空格贴上", "UP/DOWN SLOT · LEFT/RIGHT STICKER · SPACE PLACE")}</small><div>{GAME_CONFIG.bodySlots.map((slot) => <b key={slot} className={r.body[slot] ? "filled" : slot === currentSlot ? "current" : ""}>{r.body[slot] ? "●" : "○"}</b>)}</div></div>}
 
-        {r.stage === "trial" && <div className="trial-caption"><span>{text(r.lang, "身体试用中", "BODY TEST IN PROGRESS")}</span><strong>{r.stats.misses > 2 ? text(r.lang, "它看起来有点过于灵活。", "It seems a little too nimble.") : r.stats.falls > 2 ? text(r.lang, "它认为摔也是一种走法。", "It thinks falling is a kind of walking.") : text(r.lang, "它看起来很开心。", "It looks pleased.")}</strong>{stageElapsed >= 3500 && <button onClick={() => inputRef.current?.emitTouch("action-start")}>{text(r.lang, "完成观察 →", "FINISH OBSERVATION →")}</button>}</div>}
+        {r.stage === "trial" && <div className="trial-caption"><span>{text(r.lang, "贴纸试跑中", "STICKER TEST RUN")}</span><strong>{r.stats.misses > 2 ? text(r.lang, "它跑出了好几个假影子。", "It left a whole pack of decoys.") : r.stats.falls > 2 ? text(r.lang, "它把跌落变成了弹跳。", "It turned every fall into a bounce.") : text(r.lang, "它正沿着你的路线加速。", "It is speeding along your route.")}</strong>{stageElapsed >= 3500 && <button onClick={() => inputRef.current?.emitTouch("action-start")}>{text(r.lang, "保存本局路线 →", "SAVE THIS RUN →")}</button>}</div>}
 
-        {r.stage === "report" && <div className="report-copy"><span>{text(r.lang, "原始形态：无法验证", "ORIGINAL FORM: UNVERIFIABLE")}</span><h2>{text(r.lang, "它现在很确定自己是谁。", "It is quite sure what it is now.")}</h2><p>{text(r.lang, "你教的。", "You taught it.")}</p><div className="trait-tags">{topTraits.map((trait) => <b key={trait}>{text(r.lang, traitLabels[trait][0], traitLabels[trait][1])}</b>)}</div><small>{text(r.lang, `上一观察者留下：${r.inherited.zh}`, `PREVIOUS OBSERVER LEFT: ${r.inherited.en}`)}</small><button onClick={() => resetRun(false)}>{text(r.lang, "再观察一次", "OBSERVE AGAIN")}</button></div>}
+        {r.stage === "report" && <div className="report-copy"><span>{text(r.lang, "本局贴纸已生成", "RUN STICKER GENERATED")}</span><h2>{text(r.lang, "你跑出了一个新版本。", "You ran a brand-new version.")}</h2><p>{text(r.lang, "再来一局，路线会不一样。", "Run again. The route will feel different.")}</p><div className="trait-tags">{topTraits.map((trait) => <b key={trait}>{text(r.lang, traitLabels[trait][0], traitLabels[trait][1])}</b>)}</div><small>{text(r.lang, `上一局留下：${r.inherited.zh}`, `PREVIOUS RUN LEFT: ${r.inherited.en}`)}</small><button onClick={() => resetRun(false)}>{text(r.lang, "再冲一次", "RUSH AGAIN")}</button></div>}
 
         {activeMessage && <div className="message-toast" role="status">{activeMessage}</div>}
         <footer className="game-footer">
@@ -381,7 +381,7 @@ function updatePlatform(r: Runtime, dt: number, now: number, axis: { x: number; 
   if (elapsed > 50_000) r.platforms.forEach((p) => { if (p.kind === "trace" && !p.stolen && Math.abs(p.y - r.creature.y) < .22 && Math.abs(p.x - r.creature.x) < .25) { p.stolen = true; r.stats.trace += .5; } });
   r.platforms = r.platforms.filter((p) => !p.expiresAt || p.expiresAt > now);
   if (r.player.y < r.cameraY - 1.2 || r.player.y < -.8) {
-    r.stats.falls += 1; r.stats.trace += 2; say("动作已被它学会。", "It learned that move."); audio?.wrong();
+    r.stats.falls += 1; r.stats.trace += 2; say("掉下去？变成弹跳近路！", "Fell down? Bonus bounce route!"); audio?.wrong();
     r.platforms.push({ id: `rescue-${now}`, x: r.checkpoint.x, y: Math.max(0, r.checkpoint.y), w: .28, kind: "rescue", bornAt: now, expiresAt: now + 2200 });
     r.player.x = r.checkpoint.x; r.player.y = r.checkpoint.y + .08; r.player.vy = 0; r.player.grounded = true;
   }
@@ -416,12 +416,12 @@ function toRenderModel(r: Runtime, now: number): RenderModel {
 
 function getHint(stage: GameStage, lang: Language) {
   const hints: Record<GameStage, [string, string, string, string, string]> = {
-    dormant: ["↔", "移动，开始", "MOVE TO BEGIN", "", ""], find: ["◎", "方向键靠近 · 空格碰一下", "MOVE CLOSE · SPACE TOUCH", "找出那只会装东西的生物", "Find the creature pretending to be an object"],
-    chase: ["⌁", "靠近破绽 · 空格扑", "APPROACH THE CLUE · SPACE POUNCE", "扑错会多一个假的", "A wrong pounce makes a decoy"],
-    platform: ["↥", "左右移动 · 空格跳", "LEFT/RIGHT · SPACE JUMP", "每次跳跃会留下新平台", "Each jump leaves a new platform"],
+    dormant: ["↔", "移动，开始冲刺", "MOVE TO START", "", ""], find: ["◎", "方向键靠近 · 空格触碰", "MOVE CLOSE · SPACE TOUCH", "找出藏起来的黄色贴纸", "Find the hidden yellow sticker"],
+    chase: ["⌁", "靠近色块 · 空格抓住", "APPROACH · SPACE CATCH", "撞错会跑出假贴纸", "A miss spawns a decoy"],
+    platform: ["↥", "左右移动 · 空格跳", "LEFT/RIGHT · SPACE JUMP", "每次跳跃会生成临时跳板", "Each jump makes a bonus platform"],
     sound: ["♪", "先听两遍，再找不同", "LISTEN TWICE, THEN SPOT THE CHANGE", "上键重听", "Up replays"],
-    assemble: ["✦", "换位置、换部件、装上", "CHOOSE SLOT, PART, THEN FIT", "没有错误答案", "There is no wrong body"],
-    trial: ["◌", "观察动作 · 空格完成", "WATCH IT MOVE · SPACE TO FINISH", "准备好后生成观察报告", "Generate the field report when ready"], report: ["↺", "空格再观察一次", "SPACE TO OBSERVE AGAIN", "40秒后自动重置", "Auto reset in 40 seconds"],
+    assemble: ["✦", "换位置、换贴纸、贴上", "CHOOSE SLOT, STICKER, PLACE", "所有组合都能冲刺", "Every combo can run"],
+    trial: ["◌", "看它试跑 · 空格保存", "WATCH THE RUN · SPACE TO SAVE", "准备好后保存本局路线", "Save this run when ready"], report: ["↺", "空格再冲一次", "SPACE TO RUSH AGAIN", "40秒后自动开始新局", "New run starts in 40 seconds"],
   };
   const h = hints[stage]; return { icon: h[0], main: lang === "zh" ? h[1] : h[2], sub: lang === "zh" ? h[3] : h[4] };
 }
