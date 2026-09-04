@@ -57,23 +57,24 @@ function drawPlayer(ctx: CanvasRenderingContext2D, x: number, y: number, scale =
 function drawProp(ctx: CanvasRenderingContext2D, kind: string, x: number, y: number, scale: number, now: number, creature = false, fake = false) {
   ctx.save(); ctx.translate(x, y); ctx.strokeStyle = COLORS.ink; ctx.lineWidth = 5 * scale; ctx.lineCap = "round"; ctx.lineJoin = "round";
   if (kind.includes("chair")) {
-    ctx.fillStyle = creature ? COLORS.blue : "#d7b582"; rounded(ctx, -34 * scale, -22 * scale, 68 * scale, 52 * scale, 9); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = creature ? COLORS.blue : "#8d66ff"; rounded(ctx, -34 * scale, -22 * scale, 68 * scale, 52 * scale, 9); ctx.fill(); ctx.stroke();
     line(ctx, -27 * scale, 28 * scale, -34 * scale, 72 * scale, COLORS.ink, 5 * scale); line(ctx, 27 * scale, 28 * scale, 34 * scale, 72 * scale, COLORS.ink, 5 * scale);
     line(ctx, -31 * scale, -22 * scale, -31 * scale, -70 * scale, COLORS.ink, 6 * scale); line(ctx, 31 * scale, -22 * scale, 31 * scale, -70 * scale, COLORS.ink, 6 * scale);
   } else if (kind.includes("box")) {
-    ctx.fillStyle = creature ? COLORS.blue : "#d9b27b"; rounded(ctx, -48 * scale, -45 * scale, 96 * scale, 90 * scale, 8); ctx.fill(); ctx.stroke(); line(ctx, -48 * scale, -8 * scale, 48 * scale, -8 * scale, COLORS.ink, 4 * scale);
+    ctx.fillStyle = creature ? COLORS.blue : "#ff8d5c"; rounded(ctx, -48 * scale, -45 * scale, 96 * scale, 90 * scale, 8); ctx.fill(); ctx.stroke(); line(ctx, -48 * scale, -8 * scale, 48 * scale, -8 * scale, COLORS.ink, 4 * scale);
+    ctx.fillStyle = COLORS.yellow; ctx.fillRect(-8 * scale, -45 * scale, 16 * scale, 90 * scale);
   } else if (kind.includes("ball")) {
     ctx.fillStyle = creature ? COLORS.blue : COLORS.coral; ctx.beginPath(); ctx.arc(0, 0, 43 * scale, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.arc(0, 0, 22 * scale, -1.1, 1.1); ctx.stroke();
   } else if (kind.includes("umbrella")) {
     ctx.fillStyle = creature ? COLORS.blue : COLORS.yellow; ctx.beginPath(); ctx.arc(0, 0, 66 * scale, Math.PI, 0); ctx.closePath(); ctx.fill(); ctx.stroke(); line(ctx, 0, 0, 0, 75 * scale, COLORS.ink, 5 * scale); ctx.beginPath(); ctx.arc(-14 * scale, 74 * scale, 15 * scale, 0, Math.PI); ctx.stroke();
   } else if (kind.includes("bucket")) {
-    ctx.fillStyle = creature ? COLORS.blue : "#a7c8b7"; ctx.beginPath(); ctx.moveTo(-45 * scale, -38 * scale); ctx.lineTo(36 * scale, -38 * scale); ctx.lineTo(28 * scale, 44 * scale); ctx.lineTo(-34 * scale, 44 * scale); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.arc(0, -35 * scale, 55 * scale, Math.PI, 0); ctx.stroke();
+    ctx.fillStyle = creature ? COLORS.blue : "#62d9ff"; ctx.beginPath(); ctx.moveTo(-45 * scale, -38 * scale); ctx.lineTo(36 * scale, -38 * scale); ctx.lineTo(28 * scale, 44 * scale); ctx.lineTo(-34 * scale, 44 * scale); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.arc(0, -35 * scale, 55 * scale, Math.PI, 0); ctx.stroke();
   } else if (kind.includes("scarf")) {
     ctx.fillStyle = COLORS.coral; ctx.beginPath(); ctx.moveTo(-46 * scale, -60 * scale); ctx.bezierCurveTo(42 * scale, -42 * scale, -22 * scale, 10 * scale, 42 * scale, 72 * scale); ctx.lineTo(5 * scale, 81 * scale); ctx.bezierCurveTo(-45 * scale, 18 * scale, 22 * scale, -25 * scale, -58 * scale, -32 * scale); ctx.closePath(); ctx.fill(); ctx.stroke();
   } else if (kind.includes("lamp")) {
     ctx.fillStyle = Math.sin(now * 0.01) > 0 ? COLORS.yellow : "#d8d2a4"; ctx.beginPath(); ctx.arc(0, -18 * scale, 42 * scale, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); line(ctx, 0, 24 * scale, 0, 74 * scale, COLORS.ink, 8 * scale); line(ctx, -32 * scale, 76 * scale, 32 * scale, 76 * scale, COLORS.ink, 8 * scale);
   } else if (kind.includes("broom")) {
-    line(ctx, 20 * scale, -90 * scale, -10 * scale, 42 * scale, COLORS.wood, 12 * scale); ctx.fillStyle = "#d4af6f"; ctx.beginPath(); ctx.moveTo(-45 * scale, 35 * scale); ctx.lineTo(20 * scale, 29 * scale); ctx.lineTo(42 * scale, 92 * scale); ctx.lineTo(-65 * scale, 92 * scale); ctx.closePath(); ctx.fill(); ctx.stroke();
+    line(ctx, 20 * scale, -90 * scale, -10 * scale, 42 * scale, "#ff6f61", 12 * scale); ctx.fillStyle = COLORS.yellow; ctx.beginPath(); ctx.moveTo(-45 * scale, 35 * scale); ctx.lineTo(20 * scale, 29 * scale); ctx.lineTo(42 * scale, 92 * scale); ctx.lineTo(-65 * scale, 92 * scale); ctx.closePath(); ctx.fill(); ctx.stroke();
   }
   if (creature || fake) {
     ctx.strokeStyle = fake ? COLORS.purple : COLORS.blueDark; ctx.lineWidth = 9 * scale; ctx.setLineDash([8 * scale, 7 * scale]); ctx.beginPath(); ctx.arc(0, 0, 66 * scale, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
@@ -125,6 +126,15 @@ function baseBackground(ctx: CanvasRenderingContext2D, now: number, stage: GameS
   ctx.globalAlpha = 0.08; ctx.strokeStyle = COLORS.ink; ctx.lineWidth = 2;
   for (let y = 18; y < H; y += 24) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y + Math.sin(y) * 2); ctx.stroke(); }
   ctx.globalAlpha = 1;
+  const confetti = [COLORS.coral, COLORS.yellow, COLORS.blue, COLORS.purple, COLORS.moss];
+  for (let i = 0; i < 18; i += 1) {
+    const drift = reducedMotion ? 0 : Math.sin(now * .0007 + i) * 10;
+    ctx.save(); ctx.translate((i * 137 + 32) % W + drift, 110 + ((i * 271) % 1640)); ctx.rotate(i * .7);
+    ctx.fillStyle = confetti[i % confetti.length];
+    if (i % 3 === 0) { ctx.beginPath(); ctx.arc(0, 0, 9 + (i % 4) * 2, 0, Math.PI * 2); ctx.fill(); }
+    else ctx.fillRect(-12, -5, 24, 10);
+    ctx.restore();
+  }
   if (stage !== "platform") {
     ctx.fillStyle = "rgba(255,255,248,.6)"; rounded(ctx, 46, 210, 988, 1480, 54); ctx.fill();
   }
@@ -132,9 +142,22 @@ function baseBackground(ctx: CanvasRenderingContext2D, now: number, stage: GameS
 
 function room(ctx: CanvasRenderingContext2D, m: RenderModel) {
   ctx.save(); ctx.translate(0, 165);
-  ctx.fillStyle = "#ffd276"; ctx.fillRect(70, 180, 940, 1110);
-  ctx.fillStyle = "#74dcff"; for (let i = 0; i < 3; i += 1) { rounded(ctx, 135 + i * 265, 220, 210, 330, 10); ctx.fill(); }
-  ctx.fillStyle = "#57c77d"; ctx.fillRect(70, 1040, 940, 250);
+  ctx.fillStyle = "#ffd276"; rounded(ctx, 70, 180, 940, 1110, 36); ctx.fill();
+  for (let i = 0; i < 3; i += 1) {
+    const wx = 135 + i * 265;
+    ctx.fillStyle = "#55cdf6"; rounded(ctx, wx, 220, 210, 330, 18); ctx.fill();
+    ctx.strokeStyle = COLORS.ink; ctx.lineWidth = 7; ctx.stroke();
+    ctx.fillStyle = "rgba(255,255,255,.9)";
+    ctx.beginPath(); ctx.arc(wx + 55, 315 + i * 20, 35, 0, Math.PI * 2); ctx.arc(wx + 92, 300 + i * 20, 48, 0, Math.PI * 2); ctx.arc(wx + 142, 318 + i * 20, 31, 0, Math.PI * 2); ctx.fill();
+    line(ctx, wx + 105, 220, wx + 105, 550, "rgba(16,42,86,.45)", 5);
+  }
+  ctx.fillStyle = "#58d68d"; ctx.fillRect(70, 1040, 940, 250);
+  for (let row = 0; row < 2; row += 1) for (let col = 0; col < 8; col += 1) {
+    if ((row + col) % 2 === 0) { ctx.fillStyle = "#a8f34a"; ctx.fillRect(70 + col * 118, 1040 + row * 125, 118, 125); }
+  }
+  ctx.fillStyle = COLORS.coral; rounded(ctx, 92, 610, 155, 70, 18); ctx.fill(); ctx.strokeStyle = COLORS.ink; ctx.lineWidth = 6; ctx.stroke();
+  ctx.fillStyle = COLORS.white; ctx.font = "900 28px ui-sans-serif"; ctx.textAlign = "center"; ctx.fillText("GO!", 170, 657);
+  ctx.fillStyle = COLORS.purple; ctx.beginPath(); ctx.moveTo(910, 650); ctx.lineTo(955, 690); ctx.lineTo(910, 730); ctx.closePath(); ctx.fill(); ctx.strokeStyle = COLORS.ink; ctx.stroke();
   line(ctx, 70, 1025, 1010, 1025, COLORS.ink, 6);
   GAME_CONFIG.roomObjects.forEach((object, index) => {
     const isTarget = object.id === m.findTarget;
