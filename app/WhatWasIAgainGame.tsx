@@ -1,8 +1,6 @@
 "use client";
 
-/* eslint-disable react-hooks/refs, react-hooks/purity */
-
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { CreatureAudio } from "../game/audio";
 import { GAME_CONFIG, text, type BodySlot, type GameStage, type Language, type PartId, type TraitKey } from "../game/config";
 import { GameInput, type DirectionAction, type InputEvent } from "../game/input";
@@ -65,6 +63,20 @@ const traitLabels: Record<TraitKey, [string, string]> = {
   motion: ["动作很多", "RESTLESS MOTION"], attention: ["看得很仔细", "CAREFUL ATTENTION"],
   echo: ["喜欢重复", "LOVES AN ECHO"], trace: ["留下很多痕迹", "LEAVES MANY TRACES"],
 };
+
+type UiIconName = "language" | "assist" | "sound" | "muted" | "help" | "fullscreen" | "spark";
+
+function UiIcon({ name }: { name: UiIconName }) {
+  return <svg className="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    {name === "language" && <><circle cx="12" cy="12" r="8.5" /><path d="M3.8 12h16.4M12 3.5c2.2 2.4 3.3 5.2 3.3 8.5S14.2 18.1 12 20.5M12 3.5C9.8 5.9 8.7 8.7 8.7 12s1.1 6.1 3.3 8.5" /></>}
+    {name === "assist" && <><path d="M2.8 12s3.2-5.5 9.2-5.5 9.2 5.5 9.2 5.5-3.2 5.5-9.2 5.5S2.8 12 2.8 12Z" /><circle cx="12" cy="12" r="2.8" /></>}
+    {name === "sound" && <><path d="M5 10h3l4-3.5v11L8 14H5Z" /><path d="M15.2 9.2c1.5 1.6 1.5 4 0 5.6M17.9 6.8c2.8 2.9 2.8 7.5 0 10.4" /></>}
+    {name === "muted" && <><path d="M5 10h3l4-3.5v11L8 14H5Z" /><path d="m16 9 5 5m0-5-5 5" /></>}
+    {name === "help" && <><path d="M8.7 9.2a3.5 3.5 0 0 1 6.7 1.4c0 2.4-2.9 2.7-3.4 4.4" /><path d="M12 18.2h.01" /><circle cx="12" cy="12" r="9" /></>}
+    {name === "fullscreen" && <><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5" /></>}
+    {name === "spark" && <path d="m12 2.8 2.2 6.1 6.4.8-4.7 4.2 1.2 6.3-5.1-3.3-5.1 3.3 1.2-6.3-4.7-4.2 6.4-.8Z" />}
+  </svg>;
+}
 
 export default function WhatWasIAgainGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -211,7 +223,7 @@ export default function WhatWasIAgainGame() {
       }
       repaint(); return;
     }
-    if (r.help) return;
+    if (r.help || r.pendingStage) return;
     if (r.stage === "dormant" && (event.action === "any-direction" || event.action === "action-start")) { void audioRef.current?.start(); transition("find"); return; }
     if (["left", "right", "up", "down"].includes(event.action)) {
       if (r.stage === "sound") {
@@ -275,42 +287,80 @@ export default function WhatWasIAgainGame() {
   const topTraits = dominantTraits(r.stats);
   const stageElapsed = performance.now() - r.stageStartedAt;
   const nearestLabel = GAME_CONFIG.roomObjects.find((object) => object.id === r.nearestObject);
-
-  const directionButton = (direction: DirectionAction, glyph: string) => (
-    <button className={`pad-key pad-${direction}`} aria-label={direction}
-      onPointerDown={(event) => { event.preventDefault(); inputRef.current?.setTouchDirection(direction, true); }}
-      onPointerUp={() => inputRef.current?.setTouchDirection(direction, false)} onPointerCancel={() => inputRef.current?.setTouchDirection(direction, false)} onPointerLeave={() => inputRef.current?.setTouchDirection(direction, false)}>{glyph}</button>
-  );
+  const handleCanvasPointer = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (r.help || r.pendingStage || !event.isPrimary) return;
+    event.preventDefault();
+    void audioRef.current?.start();
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+    const y = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height));
+    if (r.stage === "find") {
+      const target = GAME_CONFIG.roomObjects.reduce<{ object: typeof GAME_CONFIG.roomObjects[number]; distance: number }>((best, object) => {
+        const distance = Math.hypot((x - object.x) * 1080, y * 1920 - (395 + object.y * 1000));
+        return distance < best.distance ? { object, distance } : best;
+      }, { object: GAME_CONFIG.roomObjects[0], distance: Infinity });
+      r.stats.motion += .35;
+      if (target.distance < 110) { r.player.x = target.object.x; r.player.y = target.object.y; interactFind(r); }
+      else { audioRef.current?.click(); say("点一个会动的东西！", "Tap something that moves!", 900); repaint(); }
+      return;
+    }
+    if (r.stage === "chase") {
+      const target = [...r.chaseEntities, ...r.fakes].reduce<{ entity: ChaseEntity | null; distance: number }>((best, entity) => {
+        const distance = Math.hypot((x - entity.x) * 1080, y * 1920 - (330 + entity.y * 1120));
+        return distance < best.distance ? { entity, distance } : best;
+      }, { entity: null, distance: Infinity });
+      if (target.entity && target.distance < 100) {
+        r.player.x = target.entity.x; r.player.y = target.entity.y; pounce(r); repaint();
+      } else { audioRef.current?.click(); say("点中正在跑的色块！", "Tap a moving color block!", 900); }
+      return;
+    }
+    if (r.stage === "platform") {
+      const direction: DirectionAction = x < r.player.x ? "left" : "right";
+      inputRef.current?.setTouchDirection(direction, true);
+      inputRef.current?.setTouchDirection(direction, false, 680);
+      jump(r); repaint();
+    }
+  };
 
   return (
     <main className="game-page">
       <section className={`game-shell stage-${r.stage}`} aria-label={`${GAME_CONFIG.title} / ${GAME_CONFIG.englishTitle}`}>
-        <canvas ref={canvasRef} width={1080} height={1920} aria-label={text(r.lang, "游戏场景", "Game scene")} />
+        <canvas ref={canvasRef} className="interactive-canvas" width={1080} height={1920} aria-label={text(r.lang, "可点击游戏场景", "Interactive game scene")} onPointerDown={handleCanvasPointer} />
         <div className="paper-grain" aria-hidden="true" />
 
         <header className="game-header">
           <div className="brand-block"><span className="eyebrow">{GAME_CONFIG.reserve}</span><strong>{text(r.lang, GAME_CONFIG.title, GAME_CONFIG.englishTitle)}</strong><small>{text(r.lang, stageInfo.zh, stageInfo.en)}</small></div>
           <div className="header-tools">
-            <button onClick={() => inputRef.current?.emitTouch("language")} aria-label="切换中英文">{r.lang === "zh" ? "EN" : "中"}</button>
-            <button className={r.visualAssist ? "active" : ""} onClick={() => inputRef.current?.emitTouch("visual-assist")} aria-label="视觉辅助">◐</button>
-            <button onClick={() => inputRef.current?.emitTouch("mute")} aria-label="声音">{r.muted ? "×♪" : "♪"}</button>
-            <button onClick={() => inputRef.current?.emitTouch("help")} aria-label="帮助">?</button>
-            <button onClick={() => inputRef.current?.emitTouch("fullscreen")} aria-label="全屏">⛶</button>
+            <button onClick={() => inputRef.current?.emitTouch("language")} aria-label="切换中英文"><UiIcon name="language" /><span>{r.lang === "zh" ? "EN" : "中"}</span></button>
+            <button className={r.visualAssist ? "active" : ""} onClick={() => inputRef.current?.emitTouch("visual-assist")} aria-label="视觉辅助"><UiIcon name="assist" /></button>
+            <button onClick={() => inputRef.current?.emitTouch("mute")} aria-label="声音"><UiIcon name={r.muted ? "muted" : "sound"} /></button>
+            <button onClick={() => inputRef.current?.emitTouch("help")} aria-label="帮助"><UiIcon name="help" /></button>
+            <button onClick={() => inputRef.current?.emitTouch("fullscreen")} aria-label="全屏"><UiIcon name="fullscreen" /></button>
           </div>
           <div className="stage-rail" aria-label={text(r.lang, "游戏进度", "Game progress")}>{GAME_CONFIG.stageOrder.map((stage, index) => <span key={stage} className={index + 1 <= stageInfo.progress ? "done" : ""} aria-current={stage === r.stage ? "step" : undefined} aria-label={text(r.lang, GAME_CONFIG.stages[stage].zh, GAME_CONFIG.stages[stage].en)} />)}</div>
         </header>
 
-        {r.stage === "dormant" && <div className="title-card"><span>RUN 07 · COLOR RUSH</span><h1>{text(r.lang, "忘了自己是什么", "What Was I Again?")}</h1><p>{text(r.lang, "一张黄色贴纸跑进了会变形的城市。追上它。", "A yellow sticker ran into a shifting city. Catch it.")}</p><button className="start-action" onClick={() => inputRef.current?.emitTouch("action-start")}>{text(r.lang, "冲进去！", "START THE RUSH")}<small>{text(r.lang, "方向键 / WASD / 触控均可操作", "Keyboard, WASD and touch supported")}</small></button></div>}
+        {r.stage === "dormant" && <div className="title-card"><span className="title-mark"><UiIcon name="spark" /></span><span>RUN 07 · COLOR RUSH</span><h1>{text(r.lang, "忘了自己是什么", "What Was I Again?")}</h1><p>{text(r.lang, "一张黄色贴纸跑进了会变形的城市。追上它。", "A yellow sticker ran into a shifting city. Catch it.")}</p><button className="start-action" onClick={() => inputRef.current?.emitTouch("action-start")}>{text(r.lang, "冲进去！", "START THE RUSH")}<small>{text(r.lang, "手机单手可玩 · 键盘也可操作", "ONE-HAND MOBILE · KEYBOARD READY")}</small></button></div>}
 
-        {r.stage === "find" && <div className="mission-card"><span>{String(r.inspected.size).padStart(2, "0")} / 06</span><strong>{nearestLabel ? text(r.lang, `靠近：${nearestLabel.zh}`, `NEAR: ${nearestLabel.en}`) : text(r.lang, "找到藏起来的黄色贴纸", "Find the hidden yellow sticker")}</strong><small>{text(r.lang, "靠近可疑物件，再按空格触碰", "MOVE CLOSE, THEN PRESS SPACE TO TOUCH")}</small></div>}
+        {r.stage === "find" && <div className="mission-card"><span>{String(r.inspected.size).padStart(2, "0")} / 06</span><strong>{nearestLabel ? text(r.lang, `靠近：${nearestLabel.zh}`, `NEAR: ${nearestLabel.en}`) : text(r.lang, "找到藏起来的黄色贴纸", "Find the hidden yellow sticker")}</strong><small>{text(r.lang, "直接点击场景里会动的物件", "TAP THE PROP THAT LOOKS ALIVE")}</small></div>}
 
         {r.stage === "chase" && <div className="mission-card"><span>{String(r.chaseRound + 1).padStart(2, "0")} / 03</span><strong>{text(r.lang, GAME_CONFIG.chaseRounds[Math.min(r.chaseRound, 2)].zh, GAME_CONFIG.chaseRounds[Math.min(r.chaseRound, 2)].en)}</strong><small>{text(r.lang, `假贴纸 ${r.fakes.length} / ${GAME_CONFIG.maxFakeCreatures}`, `DECOYS ${r.fakes.length} / ${GAME_CONFIG.maxFakeCreatures}`)}</small></div>}
 
         {r.stage === "platform" && <div className="mission-card compact"><span>{text(r.lang, "冲刺高度", "RUSH HEIGHT")}</span><strong>{Math.min(100, Math.round(r.maxY / 6.2 * 100))}%</strong><small>{text(r.lang, `临时跳板 ${r.platforms.filter((p) => p.kind === "trace").length}`, `BONUS PLATFORMS ${r.platforms.filter((p) => p.kind === "trace").length}`)}</small></div>}
 
-        {r.stage === "sound" && <div className="mission-card"><span>{String(r.soundRound + 1).padStart(2, "0")} / 03 · BEAT</span><strong>{r.soundPhase === "choose" ? text(r.lang, "哪一拍不一样？", "Which beat changed?") : text(r.lang, "听两次，抓住错拍。", "Listen twice. Catch the off-beat.")}</strong><small>{text(r.lang, "↑ 重听 · ← → 选择 · 空格确认", "↑ REPLAY · ← → CHOOSE · SPACE CONFIRM")}</small></div>}
+        {r.stage === "sound" && <div className="mission-card"><span>{String(r.soundRound + 1).padStart(2, "0")} / 03 · BEAT</span><strong>{r.soundPhase === "choose" ? text(r.lang, "哪一拍不一样？", "Which beat changed?") : text(r.lang, "听两次，抓住错拍。", "Listen twice. Catch the off-beat.")}</strong><small>{text(r.lang, "直接点节拍，再锁定答案", "TAP A BEAT, THEN LOCK IT IN")}</small></div>}
 
-        {r.stage === "assemble" && <div className="assembly-panel"><span>{text(r.lang, `正在贴：${slotLabels[currentSlot][0]}区`, `PLACING: ${slotLabels[currentSlot][1]}`)}</span><strong><i>{currentPart.symbol}</i>{text(r.lang, currentPart.zh, currentPart.en)}</strong><small>{text(r.lang, "上下换位置 · 左右换贴纸 · 空格贴上", "UP/DOWN SLOT · LEFT/RIGHT STICKER · SPACE PLACE")}</small><div>{GAME_CONFIG.bodySlots.map((slot) => <b key={slot} className={r.body[slot] ? "filled" : slot === currentSlot ? "current" : ""}>{r.body[slot] ? "●" : "○"}</b>)}</div></div>}
+        {r.stage === "sound" && r.soundPhase === "choose" && <div className="beat-picker" aria-label={text(r.lang, "节拍选择", "Beat picker")}>
+          <span>{text(r.lang, "点出不一样的那一拍", "TAP THE ODD BEAT")}</span>
+          <div>{GAME_CONFIG.soundRounds[r.soundRound].notes.map((_, index) => <button key={index} className={index === r.soundSelected ? "selected" : ""} onClick={() => { r.soundSelected = index; audioRef.current?.click(); repaint(); }}><b>{index + 1}</b><i style={{ height: `${38 + (index % 3) * 18}%` }} /></button>)}</div>
+          <footer><button onClick={() => { r.stats.replays += 1; r.stats.echo += .75; restartSoundRound(r); say("再听一次！", "Playing it again!"); }}>{text(r.lang, "↻ 重听", "↻ REPLAY")}</button><button className="lock-beat" onClick={() => selectSound(r)}>{text(r.lang, "锁定这拍", "LOCK THIS BEAT")}</button></footer>
+        </div>}
+
+        {r.stage === "assemble" && <div className="assembly-panel"><span>{text(r.lang, `正在贴：${slotLabels[currentSlot][0]}区`, `PLACING: ${slotLabels[currentSlot][1]}`)}</span><strong><i>{currentPart.symbol}</i>{text(r.lang, currentPart.zh, currentPart.en)}</strong><small>{text(r.lang, "直接点部位、选贴纸、贴上", "TAP A SLOT, PICK A STICKER, PLACE IT")}</small>
+          <div className="slot-picker">{GAME_CONFIG.bodySlots.map((slot, index) => <button key={slot} className={`${slot === currentSlot ? "current" : ""} ${r.body[slot] ? "filled" : ""}`} onClick={() => { r.assembleSlotIndex = index; r.assemblePart = r.body[slot] ?? validPartsForSlot(slot)[0].id; audioRef.current?.click(); repaint(); }}>{slotLabels[slot][r.lang === "zh" ? 0 : 1]}</button>)}</div>
+          <div className="part-picker">{validPartsForSlot(currentSlot).map((part) => <button key={part.id} className={part.id === r.assemblePart ? "current" : ""} onClick={() => { r.assemblePart = part.id; audioRef.current?.click(); repaint(); }}><b>{part.symbol}</b><span>{text(r.lang, part.zh, part.en)}</span></button>)}</div>
+          <button className="place-part" onClick={() => installPart(r)}>{text(r.lang, "贴上这枚！", "PLACE THIS ONE!")}</button>
+        </div>}
 
         {r.stage === "trial" && <div className="trial-caption"><span>{text(r.lang, "贴纸试跑中", "STICKER TEST RUN")}</span><strong>{r.stats.misses > 2 ? text(r.lang, "它跑出了好几个假影子。", "It left a whole pack of decoys.") : r.stats.falls > 2 ? text(r.lang, "它把跌落变成了弹跳。", "It turned every fall into a bounce.") : text(r.lang, "它正沿着你的路线加速。", "It is speeding along your route.")}</strong>{stageElapsed >= 3500 && <button onClick={() => inputRef.current?.emitTouch("action-start")}>{text(r.lang, "保存本局路线 →", "SAVE THIS RUN →")}</button>}</div>}
 
@@ -322,9 +372,7 @@ export default function WhatWasIAgainGame() {
           <div className="behavior-strip"><span>MOTION <i style={{ "--score": Math.min(100, r.stats.motion * 6) } as React.CSSProperties} /></span><span>ATTENTION <i style={{ "--score": Math.min(100, r.stats.attention * 6) } as React.CSSProperties} /></span><span>ECHO <i style={{ "--score": Math.min(100, r.stats.echo * 8) } as React.CSSProperties} /></span><span>TRACE <i style={{ "--score": Math.min(100, r.stats.trace * 8) } as React.CSSProperties} /></span></div>
         </footer>
 
-        <div className="touch-controls" aria-label="触控操作"><div className="dpad">{directionButton("up", "↑")}{directionButton("left", "←")}{directionButton("right", "→")}{directionButton("down", "↓")}</div><button className="action-key" onPointerDown={(event) => { event.preventDefault(); inputRef.current?.emitTouch("action-start"); }} onPointerUp={() => inputRef.current?.emitTouch("action-end")} onPointerCancel={() => inputRef.current?.emitTouch("action-end")} onPointerLeave={() => inputRef.current?.emitTouch("action-end")}>SPACE<small>{text(r.lang, "碰 / 扑 / 跳 / 装", "TOUCH / POUNCE / JUMP / FIT")}</small></button></div>
-
-        {r.help && <div className="help-sheet" role="dialog" aria-modal="true" aria-label={text(r.lang, "快速指南", "Field guide")}><button autoFocus aria-label={text(r.lang, "关闭指南", "Close guide")} onClick={() => inputRef.current?.emitTouch("help")}>×</button><span>FIELD GUIDE / 快速指南</span><h2>{text(r.lang, "别追太快。它学得很快。", "Do not rush. It learns fast.")}</h2><ul><li>{text(r.lang, "方向键 / WASD：移动与选择", "ARROWS / WASD: move and choose")}</li><li>{text(r.lang, "空格：碰、扑、跳、确认", "SPACE: touch, pounce, jump, confirm")}</li><li>{text(r.lang, "L 中英文 · M 静音 · V 视觉辅助", "L language · M mute · V visual aid")}</li><li>{text(r.lang, "R 重开 · Shift+R 清除上一位痕迹", "R restart · Shift+R clear inherited trace")}</li><li>{text(r.lang, "H / Esc：关闭本指南并继续", "H / Esc: close this guide and resume")}</li></ul></div>}
+        {r.help && <div className="help-sheet" role="dialog" aria-modal="true" aria-label={text(r.lang, "快速指南", "Field guide")}><button autoFocus aria-label={text(r.lang, "关闭指南", "Close guide")} onClick={() => inputRef.current?.emitTouch("help")}>×</button><span>FIELD GUIDE / 快速指南</span><h2>{text(r.lang, "每一关，换一种玩法。", "Every stage plays differently.")}</h2><ul><li>{text(r.lang, "找贴纸：直接点场景里的可疑物件", "FIND: tap suspicious props in the scene")}</li><li>{text(r.lang, "追色块：直接点正在移动的目标", "CHASE: tap the moving target")}</li><li>{text(r.lang, "向上冲：点角色左边或右边，自动带方向跳", "CLIMB: tap left or right of the player to leap")}</li><li>{text(r.lang, "节拍与拼装：直接点答案和部件", "BEAT & BUILD: tap beats and parts directly")}</li><li>{text(r.lang, "键盘仍可用：WASD / 方向键 + 空格", "KEYBOARD OPTION: WASD / arrows + Space")}</li></ul></div>}
       </section>
     </main>
   );
@@ -416,13 +464,12 @@ function toRenderModel(r: Runtime, now: number): RenderModel {
 
 function getHint(stage: GameStage, lang: Language) {
   const hints: Record<GameStage, [string, string, string, string, string]> = {
-    dormant: ["↔", "移动，开始冲刺", "MOVE TO START", "", ""], find: ["◎", "方向键靠近 · 空格触碰", "MOVE CLOSE · SPACE TOUCH", "找出藏起来的黄色贴纸", "Find the hidden yellow sticker"],
-    chase: ["⌁", "靠近色块 · 空格抓住", "APPROACH · SPACE CATCH", "撞错会跑出假贴纸", "A miss spawns a decoy"],
-    platform: ["↥", "左右移动 · 空格跳", "LEFT/RIGHT · SPACE JUMP", "每次跳跃会生成临时跳板", "Each jump makes a bonus platform"],
-    sound: ["♪", "先听两遍，再找不同", "LISTEN TWICE, THEN SPOT THE CHANGE", "上键重听", "Up replays"],
-    assemble: ["✦", "换位置、换贴纸、贴上", "CHOOSE SLOT, STICKER, PLACE", "所有组合都能冲刺", "Every combo can run"],
-    trial: ["◌", "看它试跑 · 空格保存", "WATCH THE RUN · SPACE TO SAVE", "准备好后保存本局路线", "Save this run when ready"], report: ["↺", "空格再冲一次", "SPACE TO RUSH AGAIN", "40秒后自动开始新局", "New run starts in 40 seconds"],
+    dormant: ["↔", "点击开始冲刺", "TAP TO START", "", ""], find: ["◎", "直接点可疑物件", "TAP SUSPICIOUS PROPS", "找出藏起来的黄色贴纸", "Find the hidden yellow sticker"],
+    chase: ["⌁", "直接点正在跑的色块", "TAP THE MOVING COLOR BLOCK", "点错会跑出假贴纸", "A miss spawns a decoy"],
+    platform: ["↥", "点角色左边或右边", "TAP LEFT OR RIGHT OF THE PLAYER", "自动带方向起跳，连续向上冲", "Direction and jump happen together"],
+    sound: ["♪", "直接点节拍，找不同", "TAP THE ODD BEAT", "可以随时重听", "Replay whenever you need"],
+    assemble: ["✦", "点部位 · 选贴纸 · 贴上", "TAP SLOT · PICK · PLACE", "所有组合都能冲刺", "Every combo can run"],
+    trial: ["◌", "看它试跑 · 圆键保存", "WATCH THE RUN · CENTER BUTTON SAVE", "准备好后保存本局路线", "Save this run when ready"], report: ["↺", "再冲一次", "RUSH AGAIN", "40秒后自动开始新局", "New run starts in 40 seconds"],
   };
   const h = hints[stage]; return { icon: h[0], main: lang === "zh" ? h[1] : h[2], sub: lang === "zh" ? h[3] : h[4] };
 }
-
