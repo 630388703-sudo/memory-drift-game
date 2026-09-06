@@ -16,6 +16,7 @@ export class GameInput {
   private keysDown = new Set<string>();
   private directions = new Set<DirectionAction>();
   private touchDirections = new Set<DirectionAction>();
+  private touchReleaseTimers = new Map<DirectionAction, ReturnType<typeof setTimeout>>();
   private actionStartedAt = 0;
 
   private onKeyDown = (event: KeyboardEvent) => {
@@ -60,6 +61,8 @@ export class GameInput {
   detach() {
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("keyup", this.onKeyUp);
+    this.touchReleaseTimers.forEach((timer) => clearTimeout(timer));
+    this.touchReleaseTimers.clear();
     this.keysDown.clear(); this.directions.clear(); this.touchDirections.clear();
   }
   subscribe(listener: Listener) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
@@ -67,12 +70,33 @@ export class GameInput {
     const all = new Set([...this.directions, ...this.touchDirections]);
     return { x: (all.has("right") ? 1 : 0) - (all.has("left") ? 1 : 0), y: (all.has("down") ? 1 : 0) - (all.has("up") ? 1 : 0) };
   }
-  setTouchDirection(direction: DirectionAction, active: boolean) {
-    if (active) { this.touchDirections.add(direction); this.emit({ action: direction, source: "touch" }); this.emit({ action: "any-direction", source: "touch" }); }
-    else this.touchDirections.delete(direction);
+  setTouchDirection(direction: DirectionAction, active: boolean, lingerMs = 0) {
+    const pendingRelease = this.touchReleaseTimers.get(direction);
+    if (pendingRelease) clearTimeout(pendingRelease);
+    this.touchReleaseTimers.delete(direction);
+    if (active) {
+      const opposite: Record<DirectionAction, DirectionAction> = { left: "right", right: "left", up: "down", down: "up" };
+      const oppositeDirection = opposite[direction];
+      const oppositeRelease = this.touchReleaseTimers.get(oppositeDirection);
+      if (oppositeRelease) clearTimeout(oppositeRelease);
+      this.touchReleaseTimers.delete(oppositeDirection);
+      this.touchDirections.delete(oppositeDirection);
+      this.touchDirections.add(direction);
+      this.emit({ action: direction, source: "touch" });
+      this.emit({ action: "any-direction", source: "touch" });
+      return;
+    }
+    if (lingerMs > 0) {
+      const timer = setTimeout(() => {
+        this.touchDirections.delete(direction);
+        this.touchReleaseTimers.delete(direction);
+      }, lingerMs);
+      this.touchReleaseTimers.set(direction, timer);
+      return;
+    }
+    this.touchDirections.delete(direction);
   }
   emitTouch(action: InputAction, heldMs?: number) { this.emit({ action, source: "touch", heldMs }); }
   emitHardware(action: InputAction, heldMs?: number) { this.emit({ action, source: "hardware", heldMs }); }
   private emit(event: InputEvent) { this.listeners.forEach((listener) => listener(event)); }
 }
-
