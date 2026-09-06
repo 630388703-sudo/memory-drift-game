@@ -151,6 +151,27 @@ body { font-family:"Arial Rounded MT Bold","PingFang SC","Microsoft YaHei",syste
   font-size:6cqw; transform:rotate(12deg); box-shadow:.5cqw .5cqw 0 var(--ink);
   animation:starPop 1.8s cubic-bezier(.2,.8,.2,1) infinite alternate;
 }
+.title-card::after { display:none; }
+.ui-icon {
+  width:3.15cqw; height:3.15cqw; overflow:visible;
+  fill:none; stroke:currentColor; stroke-width:2.1; stroke-linecap:round; stroke-linejoin:round;
+}
+.header-tools button { position:relative; display:grid; place-items:center; }
+.header-tools button>span {
+  position:absolute; right:-.45cqw; bottom:-.45cqh;
+  min-width:2.5cqw; padding:.18cqh .35cqw;
+  border:1.5px solid var(--ink); border-radius:99px;
+  background:#fff; color:var(--ink);
+  font:1000 .78cqw/1 "Arial Rounded MT Bold",sans-serif;
+}
+.title-mark {
+  position:absolute; right:-3.3cqw; top:-3.6cqh;
+  display:grid!important; place-items:center; width:11cqw; height:11cqw;
+  color:#fff!important; background:var(--purple); border:4px solid var(--ink); border-radius:3.3cqw;
+  box-shadow:.5cqw .5cqw 0 var(--ink); transform:rotate(10deg);
+  animation:starPop 1.8s cubic-bezier(.2,.8,.2,1) infinite alternate;
+}
+.title-mark .ui-icon { width:6.2cqw; height:6.2cqw; fill:var(--yellow); stroke:var(--ink); stroke-width:1.7; }
 .title-card span { color:var(--blue-dark); font-size:1.4cqw; font-weight:950; }
 .title-card h1 { margin:1.2cqh 0 .8cqh; font:1000 9.4cqw/.86 "Arial Rounded MT Bold","PingFang SC",sans-serif; letter-spacing:-.085em; max-width:85%; }
 .title-card p { max-width:80%; margin:0 0 2.2cqh; font:850 2.45cqw/1.35 "PingFang SC","Microsoft YaHei",sans-serif; }
@@ -205,3 +226,136 @@ body { font-family:"Arial Rounded MT Bold","PingFang SC","Microsoft YaHei",syste
 @keyframes starPop { to { transform:rotate(-12deg) scale(1.08); } }
 @keyframes toastBob { to { transform:translate(-50%,-.45cqh) rotate(1deg); } }
 
+/* V4 one-thumb portrait controls */
+.touch-controls {
+  left:50%; right:auto; bottom:7.2%; width:42cqw;
+  transform:translateX(-50%);
+  flex-direction:column; justify-content:flex-end; align-items:center; gap:.7cqh;
+  pointer-events:none;
+}
+.thumb-kicker {
+  padding:.45cqh 1.6cqw;
+  border:2px solid var(--ink); border-radius:99px;
+  background:var(--yellow); box-shadow:.25cqw .25cqw 0 var(--ink);
+  font:950 1.12cqw/1 "Arial Rounded MT Bold","PingFang SC",sans-serif;
+  letter-spacing:.08em;
+}
+.thumb-grid {
+  width:36cqw; height:36cqw;
+  display:grid; grid-template:repeat(3,10.6cqw)/repeat(3,10.6cqw);
+  place-content:center; gap:1.15cqw;
+  padding:1.4cqw;
+  border:3px solid var(--ink); border-radius:10cqw;
+  background:rgba(255,253,242,.92); box-shadow:.75cqw .75cqw 0 var(--ink);
+  backdrop-filter:blur(9px); pointer-events:auto;
+}
+.thumb-key {
+  display:grid; place-items:center; min-width:0; min-height:0; padding:0;
+  border:3px solid var(--ink)!important; border-radius:3.1cqw!important;
+  background:#fff!important; box-shadow:.35cqw .35cqw 0 var(--ink)!important;
+  color:var(--ink); font:1000 4cqw/1 "Arial Rounded MT Bold",sans-serif;
+  cursor:pointer; touch-action:none; user-select:none;
+  transition:transform .08s ease,box-shadow .08s ease,background .08s ease;
+}
+.thumb-key:active,.thumb-key.is-active {
+  transform:translate(.28cqw,.28cqw) scale(.96);
+  box-shadow:.08cqw .08cqw 0 var(--ink)!important;
+  background:var(--yellow)!important;
+}
+.pad-up { grid-column:2; grid-row:1; }
+.pad-left { grid-column:1; grid-row:2; }
+.pad-right { grid-column:3; grid-row:2; }
+.pad-down { grid-column:2; grid-row:3; }
+.thumb-action {
+  grid-column:2; grid-row:2;
+  align-content:center; gap:.25cqh;
+  border-radius:50%!important;
+  background:var(--coral)!important; color:#fff;
+}
+.thumb-action b { font-size:3.1cqw; line-height:.8; }
+.thumb-action small { font-size:1.12cqw; font-weight:1000; letter-spacing:.03em; }
+.thumb-sound .pad-up { background:#bdf36a!important; }
+.thumb-assemble .pad-up,.thumb-assemble .pad-down { background:#9fe8ff!important; }
+.thumb-platform .pad-left,.thumb-platform .pad-right { background:#9fe8ff!important; }
+.thumb-note {
+  width:44cqw; padding:.55cqh 1.4cqw;
+  border:2px solid var(--ink); border-radius:99px;
+  background:#fff; box-shadow:.25cqw .25cqw 0 var(--ink);
+  font:850 1.02cqw/1.2 "PingFang SC","Microsoft YaHei",sans-serif;
+  text-align:center;
+}
+
+@media (pointer:coarse), (max-width:700px) {
+  .touch-controls { display:flex; }
+  .assembly-panel { bottom:30%; }
+  .stage-platform .game-footer,.stage-sound .game-footer,.stage-assemble .game-footer { bottom:1.3%; }
+}
+
+/* V5 stage-specific direct play */
+.interactive-canvas { cursor:crosshair; touch-action:none; }
+.stage-platform .interactive-canvas { cursor:n-resize; }
+
+.beat-picker {
+  position:absolute; z-index:24; left:7%; right:7%; bottom:10%;
+  padding:1.7cqh 3cqw 1.9cqh;
+  border:3px solid var(--ink); border-radius:2.5cqw;
+  background:#fff; box-shadow:.75cqw .75cqw 0 var(--purple);
+}
+.beat-picker>span { display:block; margin-bottom:1.2cqh; color:var(--blue-dark); font-size:1.3cqw; font-weight:1000; letter-spacing:.08em; }
+.beat-picker>div { display:grid; grid-auto-flow:column; grid-auto-columns:1fr; gap:1.1cqw; min-height:7cqh; }
+.beat-picker>div button {
+  position:relative; min-height:7cqh; padding:0; overflow:hidden;
+  border:3px solid var(--ink); border-radius:1.6cqw; background:#dff7ff;
+  box-shadow:.28cqw .28cqw 0 var(--ink); cursor:pointer;
+}
+.beat-picker>div button:nth-child(2n) { background:#ffef8b; }
+.beat-picker>div button.selected { transform:translateY(-.45cqh); background:var(--coral); color:#fff; box-shadow:.5cqw .65cqw 0 var(--ink); }
+.beat-picker>div b { position:absolute; left:.7cqw; top:.6cqh; z-index:2; font-size:1.5cqw; }
+.beat-picker>div i { position:absolute; left:28%; right:28%; bottom:0; display:block; border-radius:99px 99px 0 0; background:var(--blue-dark); }
+.beat-picker>footer { display:grid; grid-template-columns:.72fr 1.28fr; gap:1cqw; margin-top:1.4cqh; }
+.beat-picker>footer button {
+  min-height:4.8cqh; border:3px solid var(--ink); border-radius:1.4cqw;
+  background:#fff; box-shadow:.28cqw .28cqw 0 var(--ink); font-size:1.35cqw; font-weight:1000; cursor:pointer;
+}
+.beat-picker>footer .lock-beat { background:var(--yellow); }
+
+.stage-assemble .assembly-panel { left:5%; right:5%; bottom:8.5%; padding:1.8cqh 3cqw 2cqh; }
+.slot-picker { display:grid!important; grid-template-columns:repeat(5,1fr); gap:.7cqw!important; margin-top:1.2cqh!important; }
+.slot-picker button {
+  min-height:3.8cqh; padding:.35cqh .4cqw; border:2px solid var(--ink); border-radius:1cqw;
+  background:#fff; font-size:1.02cqw; font-weight:900; cursor:pointer;
+}
+.slot-picker button.filled { background:#bdf36a; }
+.slot-picker button.current { background:#9fe8ff; box-shadow:.25cqw .25cqw 0 var(--ink); transform:translateY(-.2cqh); }
+.part-picker { display:grid!important; grid-template-columns:repeat(4,1fr); gap:1cqw!important; margin-top:1.15cqh!important; }
+.part-picker button {
+  display:grid; place-items:center; gap:.25cqh; min-height:6.5cqh; padding:.55cqh .6cqw;
+  border:2px solid var(--ink); border-radius:1.35cqw; background:#fff; cursor:pointer;
+}
+.part-picker button:nth-child(2n) { background:#fff4ae; }
+.part-picker button.current { background:var(--coral); color:#fff; box-shadow:.35cqw .35cqw 0 var(--ink); transform:rotate(-1.5deg) translateY(-.2cqh); }
+.part-picker b { width:auto!important; height:auto!important; color:inherit!important; border-radius:0!important; font-size:2.5cqw; line-height:1; }
+.part-picker span { font-size:1cqw; font-weight:900; }
+.place-part {
+  width:100%; min-height:4.8cqh; margin-top:1.3cqh;
+  border:3px solid var(--ink); border-radius:1.35cqw; background:var(--yellow);
+  box-shadow:.35cqw .35cqw 0 var(--ink); font-size:1.45cqw; font-weight:1000; cursor:pointer;
+}
+.beat-picker button,.slot-picker button,.part-picker button,.place-part { min-height:44px; }
+.beat-picker>span,.beat-picker>footer button,.slot-picker button,.part-picker span,.place-part { font-size:clamp(11px,2.5cqw,16px); }
+.beat-picker>div b { font-size:clamp(14px,3cqw,20px); }
+.mission-card strong { font-size:clamp(13px,2.8cqw,19px); }
+.mission-card small,.assembly-panel small { font-size:clamp(10px,2.2cqw,14px); }
+.start-action { min-height:48px; font-size:clamp(16px,3.5cqw,23px); }
+.start-action small { font-size:clamp(10px,2cqw,13px); }
+.title-card p { font-size:clamp(13px,2.7cqw,18px); }
+.beat-picker button:active,.slot-picker button:active,.part-picker button:active,.place-part:active {
+  transform:translate(.2cqw,.2cqh); box-shadow:.08cqw .08cqw 0 var(--ink);
+}
+
+@media (pointer:coarse), (max-width:700px) {
+  .touch-controls { display:none; }
+  .beat-picker { bottom:8%; }
+  .stage-assemble .assembly-panel { bottom:7.5%; }
+  .stage-sound .game-footer,.stage-assemble .game-footer { opacity:.42; }
+}
