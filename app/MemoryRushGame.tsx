@@ -13,11 +13,15 @@ const W = 1080;
 const H = 1920;
 const PLAYER_Y = 0.79;
 
-type ItemKind = "photo" | "cart" | "bubble" | "rift";
+type ItemKind = "photo" | "cart" | "bubble" | "rift" | "cassette" | "ticket" | "clock" | "static";
+type DeviceKind = "touch" | "keyboard" | "gamepad";
+type MemorySource = "phone" | "search" | "self";
+type HardwareControl = { move: (axis: number) => void; press: (pressure?: number) => void; pause: () => void };
+declare global { interface Window { MemoryDriftInput?: HardwareControl } }
 type Item = { id: number; kind: ItemKind; x: number; y: number; speed: number; hit?: boolean };
 type Trail = { x: number; at: number };
 type RunStats = { caught: number; echoed: number; missed: number; bumps: number; dashes: number; rifts: number; maxCombo: number };
-type MemoryRecord = RunStats & { score: number; version: "A" | "B"; tendency: string; run: number };
+type MemoryRecord = RunStats & { score: number; version: "A" | "B"; tendency: string; run: number; source?: MemorySource };
 type Runtime = {
   clock: number;
   paused: boolean;
@@ -41,6 +45,8 @@ type Runtime = {
   portalQueued: boolean;
   startedAt: number;
   shield: number;
+  bonusTime: number;
+  source: MemorySource;
   stats: RunStats;
   photoWeight: number;
   cartWeight: number;
@@ -49,17 +55,24 @@ type Runtime = {
 };
 
 const emptyStats = (): RunStats => ({ caught: 0, echoed: 0, missed: 0, bumps: 0, dashes: 0, rifts: 0, maxCombo: 0 });
-const makeRuntime = (previous?: MemoryRecord | null): Runtime => ({
+const makeRuntime = (previous?: MemoryRecord | null, source: MemorySource = "phone"): Runtime => ({
   clock: 0, paused: false, drift: 0, effectUntil: 0, upgrade: null, offered: false,
   started: false, x: 0.5, targetX: 0.5, items: [], nextId: 1, lastSpawn: 0,
   score: 0, combo: 0, memories: 0, version: "A", versionFade: 0,
   dashUntil: 0, shakeUntil: 0, portalQueued: false, startedAt: 0, shield: 0,
+  bonusTime: 0, source,
   stats: emptyStats(),
   photoWeight: previous?.missed ? Math.min(.75, .55 + previous.missed * .025) : .58,
   cartWeight: previous?.bumps ? Math.max(.12, .27 - previous.bumps * .018) : .26,
   bubbleWeight: previous?.bumps ? Math.min(.4, .28 + previous.bumps * .018) : .28,
   trail: [],
 });
+
+const sourceCopy: Record<MemorySource, { label: string; title: string; text: string }> = {
+  phone: { label: "交给手机", title: "外置记忆", text: "手机替你保存了时间与地点，却没保存当时的感觉。" },
+  search: { label: "交给搜索", title: "谷歌效应", text: "你记得答案随时能找到，于是只记住了去哪里找。" },
+  self: { label: "留给自己", title: "虚假记忆", text: "每次回想都会重新编辑它。确信，不一定等于真实。" },
+};
 
 const getTendency = (stats: RunStats) => {
   if (stats.echoed >= 4) return "残影收藏家";
@@ -94,9 +107,56 @@ function cropDraw(
   ctx.drawImage(image, crop[0], crop[1], crop[2], crop[3], x - width / 2, y - height / 2, width, height);
 }
 
+function drawMemoryToken(ctx: CanvasRenderingContext2D, kind: ItemKind, x: number, y: number, size: number) {
+  ctx.save(); ctx.translate(x, y); ctx.shadowColor = "rgba(42,105,152,.22)"; ctx.shadowBlur = 22;
+  const box = (fill: string) => { ctx.fillStyle = fill; ctx.beginPath(); ctx.roundRect(-size / 2, -size / 2, size, size, size * .22); ctx.fill(); };
+  if (kind === "cassette") {
+    box("#6a68c9"); ctx.fillStyle = "#fff0bc"; ctx.beginPath(); ctx.roundRect(-size*.34,-size*.22,size*.68,size*.28,size*.06); ctx.fill();
+    ctx.fillStyle="#32436f"; [-.17,.17].forEach(px=>{ctx.beginPath();ctx.arc(size*px,-size*.08,size*.085,0,Math.PI*2);ctx.fill();});
+    ctx.strokeStyle="#ff936f";ctx.lineWidth=size*.065;ctx.beginPath();ctx.moveTo(-size*.22,size*.25);ctx.lineTo(size*.22,size*.25);ctx.stroke();
+  } else if (kind === "ticket") {
+    ctx.rotate(-.14); box("#ffd66f"); ctx.strokeStyle="#ef765f";ctx.lineWidth=size*.06;ctx.setLineDash([size*.1,size*.07]);ctx.beginPath();ctx.moveTo(-size*.05,-size*.38);ctx.lineTo(-size*.05,size*.38);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle="#ef765f";ctx.font=`900 ${size*.28}px sans-serif`;ctx.textAlign="center";ctx.fillText("2×",size*.18,size*.1);
+  } else if (kind === "clock") {
+    ctx.fillStyle="#76dfe4";ctx.beginPath();ctx.arc(0,0,size*.48,0,Math.PI*2);ctx.fill();ctx.fillStyle="#fff9dc";ctx.beginPath();ctx.arc(0,0,size*.35,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle="#355d84";ctx.lineWidth=size*.055;ctx.lineCap="round";ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(0,-size*.2);ctx.moveTo(0,0);ctx.lineTo(size*.17,size*.1);ctx.stroke();
+  } else if (kind === "static") {
+    box("#263247"); ["#79e6e7","#ff816d","#f7df75","#a892e8"].forEach((color,i)=>{ctx.fillStyle=color;ctx.fillRect(-size*.36+i*size*.18,-size*.34,size*.11,size*.68);});
+    ctx.strokeStyle="#fff";ctx.globalAlpha=.72;ctx.lineWidth=size*.035;ctx.beginPath();ctx.moveTo(-size*.4,size*.12);ctx.lineTo(size*.38,-size*.18);ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawSpatialCollage(ctx: CanvasRenderingContext2D, drift: number, now: number, version: "A" | "B") {
+  ctx.save();
+  const horizon = 650; const pulse = Math.sin(now * .0007) * 10;
+  ctx.globalAlpha = .22 + drift * .2; ctx.strokeStyle = version === "A" ? "#345f9f" : "#6d57a7"; ctx.lineWidth = 2;
+  for (let i = 0; i <= 10; i++) {
+    const x = i * W / 10; ctx.beginPath(); ctx.moveTo(W / 2, horizon); ctx.lineTo(x, H); ctx.stroke();
+  }
+  for (let i = 0; i < 9; i++) {
+    const t = i / 8; const y = horizon + Math.pow(t, 1.7) * (H - horizon); const width = 80 + t * 1000;
+    ctx.beginPath(); ctx.moveTo(W/2-width/2,y); ctx.lineTo(W/2+width/2,y); ctx.stroke();
+  }
+  ctx.globalAlpha = .13 + drift * .24;
+  [[80,480,260,180,"#f0a6cf"],[742,560,250,310,"#7fd8df"],[140,980,210,230,"#f5dc6c"]].forEach(([x,y,w,h,color],i)=>{
+    ctx.fillStyle=String(color);ctx.strokeStyle="#2d5489";ctx.beginPath();ctx.rect(Number(x)+pulse*(i-1),Number(y),Number(w),Number(h));ctx.fill();ctx.stroke();
+    ctx.beginPath();ctx.moveTo(Number(x),Number(y));ctx.lineTo(W/2,horizon);ctx.stroke();
+  });
+  ctx.globalAlpha = .24 + drift * .32; ctx.fillStyle="#fffdf4";
+  ctx.beginPath();ctx.moveTo(0,1110);ctx.lineTo(250,970);ctx.lineTo(430,1115);ctx.lineTo(610,930);ctx.lineTo(830,1120);ctx.lineTo(W,1010);ctx.lineTo(W,1270);ctx.lineTo(0,1300);ctx.closePath();ctx.fill();
+  ctx.strokeStyle="#254f86";ctx.globalAlpha=.35;ctx.stroke();
+  ctx.restore();
+}
+
 export default function MemoryRushGame() {
   const [intro, setIntro] = useState(0);
+  const [memorySource, setMemorySource] = useState<MemorySource>("phone");
+  const [lastDevice, setLastDevice] = useState<DeviceKind>("touch");
+  const deviceRef = useRef<DeviceKind>("touch");
   const [choice, setChoice] = useState(false);
+  const [choiceIndex, setChoiceIndex] = useState(0);
+  const choiceIndexRef = useRef(0);
   const [paused, setPaused] = useState(false);
   const [seconds, setSeconds] = useState(52);
   const [quiet, setQuiet] = useState(false);
@@ -106,24 +166,30 @@ export default function MemoryRushGame() {
   const [best, setBest] = useState(0);
   const [shareMessage, setShareMessage] = useState("");
   const audioRef = useRef<AudioContext | null>(null);
-  const [sound, setSound] = useState(false);
-  const soundRef = useRef(false);
-  const chime = useCallback((frequency = 640) => {
+  const [sound, setSound] = useState(true);
+  const soundRef = useRef(true);
+  const unlockAudio = useCallback(() => {
+    if (!audioRef.current) audioRef.current = new AudioContext();
+    void audioRef.current.resume();
+  }, []);
+  const chime = useCallback((frequency = 640, duration = .18, rough = false) => {
     if (!soundRef.current) return;
     const audio = audioRef.current;
     if (!audio) return;
     void audio.resume();
     const osc = audio.createOscillator(); const gain = audio.createGain();
-    osc.connect(gain); gain.connect(audio.destination);
+    osc.connect(gain); gain.connect(audio.destination); osc.type = rough ? "sawtooth" : "sine";
     osc.frequency.setValueAtTime(frequency, audio.currentTime);
-    gain.gain.setValueAtTime(.035, audio.currentTime);
-    gain.gain.exponentialRampToValueAtTime(.001, audio.currentTime + .18);
-    osc.start(); osc.stop(audio.currentTime + .2);
+    if (!rough) osc.frequency.exponentialRampToValueAtTime(frequency * 1.16, audio.currentTime + duration);
+    gain.gain.setValueAtTime(rough ? .025 : .035, audio.currentTime);
+    gain.gain.exponentialRampToValueAtTime(.001, audio.currentTime + duration);
+    osc.start(); osc.stop(audio.currentTime + duration + .02);
   }, []);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const runtimeRef = useRef<Runtime>(makeRuntime());
   const assetsRef = useRef<Record<string, HTMLImageElement> | null>(null);
   const pointerDown = useRef(false);
+  const inputRef = useRef({ left: false, right: false, gamepadDash: false, gamepadStart: false, gamepadHorizontal: 0 });
   const [ready, setReady] = useState(false);
   const [started, setStarted] = useState(false);
   const [record, setRecord] = useState<MemoryRecord | null>(null);
@@ -164,7 +230,8 @@ export default function MemoryRushGame() {
   }, []);
 
   const begin = useCallback(() => {
-    const fresh = makeRuntime(previous);
+    unlockAudio();
+    const fresh = makeRuntime(previous, memorySource);
     fresh.started = true;
     fresh.lastSpawn = 0; fresh.startedAt = 0;
     fresh.items = [{ id: fresh.nextId++, kind: "photo", x: .5, y: .6, speed: .12 }, { id: fresh.nextId++, kind: "bubble", x: .38, y: .3, speed: .12 }];
@@ -172,13 +239,13 @@ export default function MemoryRushGame() {
     setHud({ score: 0, combo: 0, memories: 0, version: "A" });
     setRecord(null); setStarted(true); setChoice(false); setPaused(false); setSeconds(52);
     setFeedback("左右拖动接照片 · 轻点相框泡泡");
-  }, [previous]);
+  }, [previous, memorySource, unlockAudio]);
 
   const finishRun = useCallback(() => {
     const r = runtimeRef.current;
     if (!r.started) return;
     r.started = false;
-    const next: MemoryRecord = { ...r.stats, score: r.score, version: r.version, tendency: getTendency(r.stats), run: (previous?.run ?? 0) + 1 };
+    const next: MemoryRecord = { ...r.stats, score: r.score, version: r.version, tendency: getTendency(r.stats), run: (previous?.run ?? 0) + 1, source: r.source };
     try { localStorage.setItem("memory-rush-record", JSON.stringify(next)); } catch { /* optional persistence */ }
     setPrevious(next); setRecord(next); setStarted(false);
     const earned = ["第一张回忆", ...(next.caught >= 12 ? ["满载而归"] : []), ...(next.echoed >= 3 ? ["过去的帮手"] : []), ...(next.dashes >= 3 ? ["轻装上路"] : []), ...(next.rifts >= 1 ? ["另一个夏天"] : []), ...(next.maxCombo >= 5 ? ["连成一段"] : [])];
@@ -205,28 +272,71 @@ export default function MemoryRushGame() {
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
     runtimeRef.current.targetX = Math.max(0.22, Math.min(0.78, (clientX - rect.left) / rect.width));
+    if (deviceRef.current !== "touch") { deviceRef.current = "touch"; setLastDevice("touch"); }
   }, []);
 
+  const chooseUpgrade = useCallback((upgrade: "magnet" | "echo" | "shield") => {
+    const r = runtimeRef.current; r.upgrade = upgrade;
+    if (upgrade === "shield") { r.shield = 3; r.drift = 0; }
+    r.paused = false; setPaused(false); setChoice(false);
+    setFeedback("带上新能力，追回剩下的夏天"); chime(880);
+  }, [chime]);
+
+  const advanceIntro = useCallback(() => {
+    unlockAudio(); chime(720, .1);
+    if (intro < 3) setIntro(intro + 1); else begin();
+  }, [intro, begin, unlockAudio, chime]);
+
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
+    const onKeyDown = (event: KeyboardEvent) => {
       if ((event.target as HTMLElement)?.closest("button,input,select,textarea")) return;
-      if (!runtimeRef.current.started || runtimeRef.current.paused) return;
-      if (event.key.startsWith("Arrow")) event.preventDefault();
-      if (event.key === " " || event.key === "ArrowUp") { event.preventDefault(); dash(); return; }
-      if (event.key === "ArrowLeft" || event.key.toLowerCase() === "a") runtimeRef.current.targetX -= 0.16;
-      if (event.key === "ArrowRight" || event.key.toLowerCase() === "d") runtimeRef.current.targetX += 0.16;
-      runtimeRef.current.targetX = Math.max(0.22, Math.min(0.78, runtimeRef.current.targetX));
+      const key = event.key.toLowerCase();
+      if (["arrowleft","arrowright","arrowup"," "].includes(key)) event.preventDefault();
+      if (deviceRef.current !== "keyboard") { deviceRef.current = "keyboard"; setLastDevice("keyboard"); }
+      if (!runtimeRef.current.started && !record && (key === "enter" || key === " ")) { advanceIntro(); return; }
+      if (!runtimeRef.current.started) return;
+      if (choice) {
+        if (["arrowleft","a","j"].includes(key)) { choiceIndexRef.current = (choiceIndexRef.current + 2) % 3; setChoiceIndex(choiceIndexRef.current); }
+        else if (["arrowright","d","l"].includes(key)) { choiceIndexRef.current = (choiceIndexRef.current + 1) % 3; setChoiceIndex(choiceIndexRef.current); }
+        else if ([" ","enter","z","x"].includes(key)) chooseUpgrade((["magnet","echo","shield"] as const)[choiceIndexRef.current]);
+        return;
+      }
+      if (key === "p" || key === "escape") { const r = runtimeRef.current; if (!choice) { r.paused = !r.paused; setPaused(r.paused); } return; }
+      if (runtimeRef.current.paused) return;
+      if (key === " " || key === "arrowup" || key === "z" || key === "x" || key === "enter") { dash(); return; }
+      if (key === "arrowleft" || key === "a" || key === "j") { inputRef.current.left = true; runtimeRef.current.targetX -= .055; }
+      if (key === "arrowright" || key === "d" || key === "l") { inputRef.current.right = true; runtimeRef.current.targetX += .055; }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [dash]);
+    const onKeyUp = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      if (key === "arrowleft" || key === "a" || key === "j") inputRef.current.left = false;
+      if (key === "arrowright" || key === "d" || key === "l") inputRef.current.right = false;
+    };
+    window.addEventListener("keydown", onKeyDown); window.addEventListener("keyup", onKeyUp);
+    return () => { window.removeEventListener("keydown", onKeyDown); window.removeEventListener("keyup", onKeyUp); };
+  }, [dash, advanceIntro, record, choice, chooseUpgrade]);
+
+  useEffect(() => {
+    const markHardware = () => { if (deviceRef.current !== "gamepad") { deviceRef.current = "gamepad"; setLastDevice("gamepad"); } };
+    const control: HardwareControl = {
+      move: (axis) => { markHardware(); const r=runtimeRef.current; r.targetX=Math.max(.22,Math.min(.78,r.targetX+Math.max(-1,Math.min(1,axis))*.075)); },
+      press: () => { markHardware(); if (choice) chooseUpgrade((["magnet","echo","shield"] as const)[choiceIndexRef.current]); else if (runtimeRef.current.started) dash(); else if (!record) advanceIntro(); },
+      pause: () => { markHardware(); const r=runtimeRef.current; if (r.started && !choice) { r.paused=!r.paused; setPaused(r.paused); } },
+    };
+    window.MemoryDriftInput = control;
+    const onHardware = (event: Event) => { const detail=(event as CustomEvent<{action:string;value?:number}>).detail; if (!detail) return; if (detail.action==="move") control.move(detail.value ?? 0); if (detail.action==="press") control.press(detail.value); if (detail.action==="pause") control.pause(); };
+    window.addEventListener("memory-control", onHardware);
+    return () => { window.removeEventListener("memory-control", onHardware); delete window.MemoryDriftInput; };
+  }, [advanceIntro, choice, chooseUpgrade, dash, record]);
 
   useEffect(() => {
     let frame = 0;
+    let active = true;
     let previous = performance.now();
     let hudAt = 0;
 
     const tick = (wallNow: number) => {
+      if (!active) return;
       const canvas = canvasRef.current;
       const assets = assetsRef.current;
       if (!canvas || !assets) { frame = requestAnimationFrame(tick); return; }
@@ -237,7 +347,25 @@ export default function MemoryRushGame() {
       if (r.started && !r.paused && !document.hidden) r.clock += dt * 1000;
       const now = r.clock;
 
+      const pad = Array.from(navigator.getGamepads?.() ?? []).find((candidate) => candidate?.connected);
+      let stick = 0;
+      if (pad) {
+        const raw = pad.axes[0] || 0; stick = Math.abs(raw) > .18 ? raw : 0;
+        if (pad.buttons[14]?.pressed) stick = -1;
+        if (pad.buttons[15]?.pressed) stick = 1;
+        const actionPressed = Boolean(pad.buttons[0]?.pressed || pad.buttons[1]?.pressed || pad.buttons[2]?.pressed);
+        const startPressed = Boolean(pad.buttons[9]?.pressed);
+        if ((stick || actionPressed || startPressed) && deviceRef.current !== "gamepad") { deviceRef.current = "gamepad"; setLastDevice("gamepad"); }
+        if (choice && stick && !inputRef.current.gamepadHorizontal) { choiceIndexRef.current = (choiceIndexRef.current + (stick > 0 ? 1 : 2)) % 3; setChoiceIndex(choiceIndexRef.current); chime(680, .07); }
+        if (actionPressed && !inputRef.current.gamepadDash) { if (choice) chooseUpgrade((["magnet","echo","shield"] as const)[choiceIndexRef.current]); else if (r.started) dash(); else if (!record) advanceIntro(); }
+        if (startPressed && !inputRef.current.gamepadStart) { if (choice) { /* keep the choice pause */ } else if (r.started) { r.paused = !r.paused; setPaused(r.paused); } else if (!record) advanceIntro(); }
+        inputRef.current.gamepadDash = actionPressed; inputRef.current.gamepadStart = startPressed; inputRef.current.gamepadHorizontal = stick ? Math.sign(stick) : 0;
+      }
+
       if (r.started && !r.paused && !document.hidden) {
+        const digital = (inputRef.current.right ? 1 : 0) - (inputRef.current.left ? 1 : 0);
+        const moveAxis = Math.abs(stick) > Math.abs(digital) ? stick : digital;
+        if (moveAxis) r.targetX += moveAxis * dt * .72;
         r.targetX = Math.max(0.22, Math.min(0.78, r.targetX));
         r.x += (r.targetX - r.x) * Math.min(1, dt * 12);
         r.trail.push({ x: r.x, at: now });
@@ -251,7 +379,11 @@ export default function MemoryRushGame() {
           const total = r.photoWeight + r.cartWeight + r.bubbleWeight;
           const photoEdge = r.photoWeight / total;
           const cartEdge = photoEdge + r.cartWeight / total;
-          const kind: ItemKind = now < 6000 ? "photo" : roll < photoEdge ? "photo" : roll < cartEdge ? "cart" : "bubble";
+          let kind: ItemKind = now < 6000 ? "photo" : roll < photoEdge ? "photo" : roll < cartEdge ? "cart" : "bubble";
+          if (now > 7000 && Math.random() < .2) {
+            const specials: ItemKind[] = r.source === "phone" ? ["cassette", "clock", "bubble", "static"] : r.source === "search" ? ["clock", "ticket", "ticket", "static"] : ["cassette", "bubble", "ticket", "static"];
+            kind = specials[Math.floor(Math.random() * specials.length)];
+          }
           r.items.push({ id: r.nextId++, kind, x: lane, y: 0.08, speed: 0.21 + Math.min(0.11, r.score / 30000) });
           r.lastSpawn = now;
           if (r.nextId % 4 === 0) r.items.push({ id: r.nextId++, kind: "bubble", x: lane < .5 ? .68 : .32, y: .04, speed: .14 });
@@ -298,6 +430,20 @@ export default function MemoryRushGame() {
             item.hit = true; r.shield = Math.min(3, r.shield + 1); r.score += 120; r.stats.caught += 1;
             r.memories = Math.min(6, r.memories + 1); r.drift = Math.max(0, r.drift - .18);
             setFeedback("相框泡泡：照片 +1，颜色回来了"); chime(980);
+          } else if (item.kind === "cassette" && playerHit) {
+            item.hit = true; r.combo += 2; r.score += 260; r.memories = Math.min(6, r.memories + 1); r.stats.caught += 1;
+            r.effectUntil = now + 480; r.drift = Math.max(0, r.drift - .08); setFeedback("旧磁带：下一段回声提前响起 · 连击 +2"); chime(520, .25);
+          } else if (item.kind === "ticket" && playerHit) {
+            item.hit = true; r.combo += 1; r.score += 180; r.memories = Math.min(6, r.memories + 2); r.stats.caught += 1;
+            setFeedback("褪色票根：一次带回 2 格记忆"); chime(840, .28);
+          } else if (item.kind === "clock" && playerHit) {
+            item.hit = true; r.bonusTime = Math.min(12000, r.bonusTime + 5000); r.score += 150; r.stats.caught += 1;
+            setFeedback("停摆时钟：展厅时间 +5 秒"); chime(1180, .32);
+          } else if (item.kind === "static" && playerHit) {
+            item.hit = true;
+            if (now < r.dashUntil) { r.score += 140; setFeedback("冲刺穿过了坏掉的像素"); chime(400, .08, true); }
+            else if (r.shield > 0) { r.shield -= 1; setFeedback("保护泡泡隔开了静电噪点"); chime(720, .1); }
+            else { r.stats.bumps += 1; r.combo = 0; r.drift = Math.min(1, r.drift + .18); r.effectUntil = now + 1100; r.shakeUntil = now + 240; setFeedback("记忆被压缩坏了：物体暂时失去颜色"); chime(120, .22, true); }
           } else if (item.kind === "rift" && playerHit) {
             item.hit = true;
             r.version = r.version === "A" ? "B" : "A";
@@ -323,10 +469,10 @@ export default function MemoryRushGame() {
         r.items = r.items.filter((item) => !item.hit && item.y < 1.08);
         r.versionFade = Math.max(0, r.versionFade - dt * 1.7);
 
-        if (now >= 18000 && !r.offered) { r.offered = true; r.paused = true; setChoice(true); }
-        setSeconds((old) => { const value = Math.max(0, Math.ceil((52000 - now) / 1000)); return old === value ? old : value; });
+        if (now >= 18000 && !r.offered) { r.offered = true; r.paused = true; choiceIndexRef.current = 0; setChoiceIndex(0); setChoice(true); }
+        setSeconds((old) => { const value = Math.max(0, Math.ceil((52000 + r.bonusTime - now) / 1000)); return old === value ? old : value; });
 
-        if (now - r.startedAt >= 52000 || r.stats.rifts >= 3) finishRun();
+        if (now - r.startedAt >= 52000 + r.bonusTime || r.stats.rifts >= 3) finishRun();
 
         if (now - hudAt > 90) {
           hudAt = now;
@@ -344,6 +490,7 @@ export default function MemoryRushGame() {
       const shade = ctx.createLinearGradient(0, 0, 0, H);
       shade.addColorStop(0, "rgba(30,91,139,.08)"); shade.addColorStop(.56, "rgba(255,255,255,0)"); shade.addColorStop(1, "rgba(86,43,20,.13)");
       ctx.fillStyle = shade; ctx.fillRect(0, 0, W, H);
+      drawSpatialCollage(ctx, r.drift, now, r.version);
 
       if (r.started) {
         const echoes = [540, 1020].map((delay) => {
@@ -372,6 +519,7 @@ export default function MemoryRushGame() {
             ctx.drawImage(assets.rift, item.x * W - 220 * scale, item.y * H - 220 * scale, 440 * scale, 440 * scale);
             ctx.restore();
           }
+          if (["cassette", "ticket", "clock", "static"].includes(item.kind)) drawMemoryToken(ctx, item.kind, item.x * W, item.y * H, 132 * scale);
           ctx.restore();
         });
 
@@ -392,20 +540,21 @@ export default function MemoryRushGame() {
       if (r.started && now < r.effectUntil) {
         ctx.save();
         const fade = Math.min(1, (r.effectUntil - now) / 500);
-        ctx.globalAlpha = (quietRef.current ? .05 : .22) * fade;
-        const phase = quietRef.current ? 0 : Math.floor(now / 240);
-        for (let strip = 0; strip < 12; strip++) {
-          const x = (strip * 173 + phase * 31) % W;
-          ctx.fillStyle = ["#263247", "#80e8e7", "#d5c5ec"][strip % 3];
-          ctx.fillRect(x, 250, strip % 3 === 0 ? 18 : 4, 1250);
+        const strength = (quietRef.current ? .05 : .28) * fade;
+        for (let band = 0; band < 8; band++) {
+          const sy = 210 + ((band * 233 + Math.floor(now / 90) * 71) % 1320); const bh = 16 + (band % 3) * 18; const offset = quietRef.current ? 2 : (band % 2 ? 34 : -26) * fade;
+          ctx.globalAlpha = strength; ctx.drawImage(canvas, 0, sy, W, bh, offset, sy, W, bh);
+          ctx.fillStyle = band % 3 === 0 ? "#20e6d0" : band % 3 === 1 ? "#ff4f7d" : "#fff16c"; ctx.globalCompositeOperation = "screen"; ctx.fillRect(offset, sy, W, Math.max(2,bh*.16));
         }
+        ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = strength * .75;
+        for (let strip = 0; strip < 9; strip++) { const x=(strip*149+Math.floor(now/120)*37)%W;ctx.fillStyle=strip%2?"#202631":"#f8fbef";ctx.fillRect(x,260,strip%3?3:11,1170); }
         ctx.restore();
       }
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [finishRun, chime]);
+    return () => { active = false; cancelAnimationFrame(frame); };
+  }, [finishRun, chime, dash, advanceIntro, record, choice, chooseUpgrade]);
 
   const saveCard = useCallback(() => {
     if (!record) return;
@@ -454,13 +603,6 @@ export default function MemoryRushGame() {
     chime(1080); setFeedback("啪！记忆 +1 · 恢复颜色 · 保护 +1"); return true;
   };
 
-  const chooseUpgrade = (upgrade: "magnet" | "echo" | "shield") => {
-    const r = runtimeRef.current; r.upgrade = upgrade;
-    if (upgrade === "shield") { r.shield = 3; r.drift = 0; }
-    r.paused = false; setPaused(false); setChoice(false);
-    setFeedback("带上新能力，追回剩下的夏天"); chime(880);
-  };
-
   return (
     <main className="rush-page">
       <section className="rush-game" aria-label="记忆与遗忘竖屏游戏">
@@ -483,31 +625,36 @@ export default function MemoryRushGame() {
 
         <div className="rush-settings">
           <button aria-pressed={quiet} onClick={() => { quietRef.current = !quiet; setQuiet(!quiet); }}>视觉：{quiet ? "柔和" : "条纹"}</button>
-          <button aria-pressed={sound} onClick={() => { if (!audioRef.current) audioRef.current = new AudioContext(); soundRef.current = !sound; setSound(!sound); void audioRef.current.resume(); }}>声音：{sound ? "开" : "关"}</button>
+          <button aria-pressed={sound} onClick={() => { unlockAudio(); soundRef.current = !sound; setSound(!sound); }}>声音：{sound ? "开" : "关"}</button>
+          <span className="device-pill">{lastDevice === "gamepad" ? "街机 / 手柄" : lastDevice === "keyboard" ? "键盘" : "触控"}</span>
           {started && <button onClick={pauseGame} disabled={choice}>{paused ? "继续" : "暂停"}</button>}
         </div>
         {started && <><div className="combo-pill" data-active={hud.combo > 1}>{hud.combo > 1 ? `×${hud.combo} 记忆连击` : "接住漂走的照片"}</div>
           <div className="rush-journey"><span>{seconds > 34 ? "01 / 找回颜色" : seconds > 16 ? "02 / 过去的帮手" : "03 / 追回夏天"}</span><strong>{seconds}s</strong><progress max={52} value={52-seconds} aria-label="旅程进度" /></div>
-          <div className="rush-feedback" role="status">{feedback}</div></>}
+          <div className="rush-feedback" data-fault={feedback.includes("串线") || feedback.includes("压缩坏了")} role="status">{feedback}</div>
+          <div className="pickup-legend" aria-label="可收集物提示"><span>▣ 照片</span><span>▤ 磁带</span><span>⌁ 票根</span><span>◷ 加时</span><span className="danger">▥ 坏像素</span></div></>}
 
         {!started && !record && <div className="rush-intro">
-          <span>一段正在消失的夏天 · 约一分钟</span>
-          <h1>忘了自己是什么</h1>
-          <div className={`intro-photo intro-photo-${intro}`}><img src={resolveImageUrl(photoUrl)} alt="通往夏日乐园的旧照片" /><i /></div>
-          <p>{intro === 0 ? "旧手机里，只剩下这张照片。你记得那条街，却想不起一起去乐园的人。" : intro === 1 ? "你触碰照片。窗户变了，颜色正在消失……记得越用力，画面越不可靠。" : "相框泡泡正带着照片飘走。接住它们，找回颜色；丢掉一张记忆，可以冲过挡路的柜子。"}</p>
+          <span>{intro === 0 ? "展览终点 · 一次约一分钟的记忆旅行" : `MEMORY INPUT 0${intro} / 03`}</span>
+          <h1>{intro === 0 ? "忘了自己是什么" : intro === 1 ? "你把记忆放在哪里？" : intro === 2 ? sourceCopy[memorySource].title : "接住正在逃跑的记忆"}</h1>
+          {intro !== 1 && <div className={`intro-photo intro-photo-${intro}`}><img src={resolveImageUrl(photoUrl)} alt="通往夏日乐园的旧照片" /><i /></div>}
+          {intro === 1 && <div className="memory-source-grid" role="group" aria-label="选择本局记忆来源">
+            {(Object.keys(sourceCopy) as MemorySource[]).map((source) => <button key={source} data-selected={memorySource === source} onClick={() => { unlockAudio(); setMemorySource(source); chime(source === "phone" ? 620 : source === "search" ? 780 : 940, .12); }}><strong>{sourceCopy[source].label}</strong><span>{sourceCopy[source].title}</span></button>)}
+          </div>}
+          <p>{intro === 0 ? "前面的展览讨论了数字失忆、谷歌效应与被反复改写的回忆。这里不再给你结论——把一段记忆投进系统，看看它在追逐中变成什么。" : intro === 1 ? "手机可以成为大脑的延伸，搜索让答案随时可得，而回想本身也会重构过去。选择一个入口，系统会据此生成这一局的偏差。" : intro === 2 ? sourceCopy[memorySource].text + " 现在，照片里的窗户和颜色开始漂移。" : "照片、相框泡泡、磁带、票根和停摆时钟都能收集；坏像素和小车会打乱画面。漏掉不是失败，它会改变下一轮出现的东西。"}</p>
           {previous && intro === 0 && <div className="previous-memory"><b>最高 {best} 分</b><span>相册 {album.length}/6 · 上次留下了 {previous.caught} 张照片</span></div>}
-          <button disabled={!ready} onClick={() => { if (intro < 2) setIntro(intro+1); else begin(); }}>{loadError ? "素材加载失败，请刷新页面" : !ready ? "正在装载记忆…" : intro === 0 ? "打开旧照片" : intro === 1 ? "追上漂走的相框" : "进入街道 · 找回 12 张照片"}</button>
+          <button disabled={!ready} onClick={advanceIntro}>{loadError ? "素材加载失败，请刷新页面" : !ready ? "正在装载记忆…" : intro === 0 ? "读取前一段展览" : intro === 1 ? "生成我的记忆版本" : intro === 2 ? "看看哪里变了" : "进入街道 · 找回 12 张照片"}</button>
           {loadError && <button onClick={() => location.reload()}>重新加载</button>}
-          <small>{intro === 2 ? "拖动左右移动 · 点泡泡 · 空格或按钮冲刺" : "点击继续故事"}</small>
+          <small>{intro === 3 ? (lastDevice === "gamepad" ? "摇杆移动 · 任意动作按钮冲刺 · START 暂停" : lastDevice === "keyboard" ? "方向键 / A D / J L 移动 · 空格 / Z / X 冲刺" : "拖动移动 · 点泡泡 · 点击冲刺") : "点击、回车或街机按钮继续"}</small>
           {previous && <button className="rush-skip" disabled={!ready} onClick={begin}>跳过故事，直接出发</button>}
         </div>}
 
         {(choice || paused) && <section className="rush-choice" aria-label={choice ? "选择记忆能力" : "游戏已暂停"}>
           <span>{choice ? "口袋里腾出了一点空间" : "记忆已暂停"}</span><h2>{choice ? "这次，带走什么？" : "等你回来再出发"}</h2>
           {choice ? <><p>选择一个本局能力。时间已暂停。</p>
-            <button onClick={() => chooseUpgrade("magnet")}><strong>照片磁铁</strong><span>附近的照片和泡泡会靠过来</span></button>
-            <button onClick={() => chooseUpgrade("echo")}><strong>更清晰的昨天</strong><span>残影的补捡范围扩大</span></button>
-            <button onClick={() => chooseUpgrade("shield")}><strong>彩色保护壳</strong><span>恢复颜色，获得 3 次保护</span></button></> : <button onClick={pauseGame}>继续旅程</button>}
+            <button data-selected={choiceIndex === 0} onFocus={() => { choiceIndexRef.current=0; setChoiceIndex(0); }} onClick={() => chooseUpgrade("magnet")}><strong>照片磁铁</strong><span>附近的照片和泡泡会靠过来</span></button>
+            <button data-selected={choiceIndex === 1} onFocus={() => { choiceIndexRef.current=1; setChoiceIndex(1); }} onClick={() => chooseUpgrade("echo")}><strong>更清晰的昨天</strong><span>残影的补捡范围扩大</span></button>
+            <button data-selected={choiceIndex === 2} onFocus={() => { choiceIndexRef.current=2; setChoiceIndex(2); }} onClick={() => chooseUpgrade("shield")}><strong>彩色保护壳</strong><span>恢复颜色，获得 3 次保护</span></button></> : <button onClick={pauseGame}>继续旅程</button>}
         </section>}
 
         {started && <button className="forget-dash" disabled={hud.memories < 1} onClick={dash}>
@@ -524,7 +671,7 @@ export default function MemoryRushGame() {
             <div><dt>遗漏</dt><dd>{record.missed}</dd></div><div><dt>碰撞</dt><dd>{record.bumps}</dd></div>
             <div><dt>主动遗忘</dt><dd>{record.dashes}</dd></div><div><dt>最高连击</dt><dd>×{record.maxCombo}</dd></div>
           </dl>
-          <div className="result-note">个人最佳 {best} 分 · 夏日相册 {album.length}/6<br />{["第一张回忆", "满载而归", "过去的帮手", "轻装上路", "另一个夏天", "连成一段"].map(name => <span className="album-stamp" key={name} data-earned={album.includes(name)}>{album.includes(name) ? "✓ " : "○ "}{name}</span>)}<br />下个目标：{!album.includes("满载而归") ? "单局找回 12 张照片" : !album.includes("过去的帮手") ? "让残影补捡 3 张照片" : !album.includes("轻装上路") ? "使用 3 次遗忘冲刺" : !album.includes("另一个夏天") ? "穿过一次记忆裂隙" : "挑战 5 连击与个人最佳"}</div>
+          <div className="result-note">本局入口：{sourceCopy[record.source ?? "phone"].label} · 个人最佳 {best} 分 · 夏日相册 {album.length}/6<br />{["第一张回忆", "满载而归", "过去的帮手", "轻装上路", "另一个夏天", "连成一段"].map(name => <span className="album-stamp" key={name} data-earned={album.includes(name)}>{album.includes(name) ? "✓ " : "○ "}{name}</span>)}<br />下个目标：{!album.includes("满载而归") ? "单局找回 12 张照片" : !album.includes("过去的帮手") ? "让残影补捡 3 张照片" : !album.includes("轻装上路") ? "使用 3 次遗忘冲刺" : !album.includes("另一个夏天") ? "穿过一次记忆裂隙" : "挑战 5 连击与个人最佳"}</div>
           <p role="status">{shareMessage}</p>
           <div className="result-actions"><button onClick={saveCard}>保存记忆卡</button><button onClick={shareCard}>分享结果</button></div>
           <button className="replay-memory" onClick={begin}>带着这段记忆再跑一次</button>
