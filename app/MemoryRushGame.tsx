@@ -82,6 +82,40 @@ const getTendency = (stats: RunStats) => {
   if (stats.missed <= 2) return "记忆守门人";
   return "漂移旅行者";
 };
+const getTendencyEn = (stats: RunStats) => {
+  if (stats.echoed >= 4) return "ECHO COLLECTOR";
+  if (stats.dashes >= 4) return "ACTIVE FORGETTER";
+  if (stats.bumps >= 3) return "BUMP ARCHAEOLOGIST";
+  if (stats.missed <= 2) return "MEMORY KEEPER";
+  return "DRIFT TRAVELER";
+};
+
+const feedbackEn = (text: string) => {
+  if (text.startsWith("连续记住")) return text.replace("连续记住", "MEMORY CHAIN");
+  if (text.startsWith("进入 VERSION")) return text.replace("进入", "ENTERED").replace("场景记忆已重排", "SCENE MEMORY REORDERED");
+  const table: Record<string, string> = {
+    "过去的你会帮忙补捡": "YOUR PAST ECHO WILL CATCH MISSED PHOTOS",
+    "左右拖动接照片 · 轻点相框泡泡": "MOVE LEFT OR RIGHT · TAP FRAME BUBBLES",
+    "你主动丢掉一张记忆，换来短暂加速": "ONE MEMORY RELEASED · TEMPORARY DASH",
+    "带上新能力，追回剩下的夏天": "ABILITY EQUIPPED · CHASE THE REST OF SUMMER",
+    "残影替你接住了遗漏": "YOUR ECHO CAUGHT A MISSED PHOTO",
+    "照片已装入口袋": "PHOTO STORED IN YOUR POCKET",
+    "冲刺撞开了记忆柜": "DASH BROKE THROUGH THE MEMORY CART",
+    "记忆泡泡替你挡住一次碰撞": "MEMORY BUBBLE BLOCKED THE COLLISION",
+    "画面串线了！接泡泡能找回颜色": "SIGNAL CROSSED · CATCH A BUBBLE TO RESTORE COLOR",
+    "相框泡泡：照片 +1，颜色回来了": "FRAME BUBBLE · PHOTO +1 · COLOR RESTORED",
+    "旧磁带：下一段回声提前响起 · 连击 +2": "OLD TAPE · EARLY ECHO · CHAIN +2",
+    "褪色票根：一次带回 2 格记忆": "FADED TICKET · MEMORY +2",
+    "停摆时钟：展厅时间 +5 秒": "STOPPED CLOCK · TIME +5 SEC",
+    "冲刺穿过了坏掉的像素": "DASHED THROUGH CORRUPTED PIXELS",
+    "保护泡泡隔开了静电噪点": "COLOR SHELL BLOCKED SIGNAL NOISE",
+    "记忆被压缩坏了：物体暂时失去颜色": "MEMORY COMPRESSION ERROR · COLOR TEMPORARILY LOST",
+    "错过入口也没关系，再接一张就能重开": "RIFT MISSED · CATCH ONE MORE PHOTO TO REOPEN IT",
+    "漏掉的照片，下轮更容易再次出现": "MISSED PHOTO · MORE LIKELY TO RETURN NEXT RUN",
+    "啪！记忆 +1 · 恢复颜色 · 保护 +1": "POP · MEMORY +1 · COLOR RESTORED · SHIELD +1",
+  };
+  return table[text] ?? text;
+};
 
 const resolveImageUrl = (source: unknown) => typeof source === "string"
   ? source
@@ -211,6 +245,12 @@ export default function MemoryRushGame() {
   });
   const [feedback, setFeedback] = useState("过去的你会帮忙补捡");
   const [hud, setHud] = useState({ score: 0, combo: 0, memories: 0, version: "A" as "A" | "B" });
+  const shownFeedback = language === "zh" ? feedback : feedbackEn(feedback);
+
+  useEffect(() => {
+    document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
+    document.title = language === "zh" ? "忘了自己是什么｜记忆漂移游戏" : "WHAT WAS I AGAIN? | MEMORY DRIFT GAME";
+  }, [language]);
 
   useEffect(() => {
     let live = true;
@@ -584,7 +624,8 @@ export default function MemoryRushGame() {
           ctx.fillStyle = band % 3 === 0 ? "#20e6d0" : band % 3 === 1 ? "#ff4f7d" : "#fff16c"; ctx.globalCompositeOperation = "screen"; ctx.fillRect(offset, sy, W, Math.max(2,bh*.16));
         }
         ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = strength * .75;
-        for (let strip = 0; strip < 9; strip++) { const x=(strip*149+Math.floor(now/120)*37)%W;ctx.fillStyle=strip%2?"#202631":"#f8fbef";ctx.fillRect(x,260,strip%3?3:11,1170); }
+        const signalColors = ["#20e6d0", "#3b8cff", "#ff3fb4", "#ff7658", "#f7dc55", "#9a6cff"];
+        for (let strip = 0; strip < 15; strip++) { const x=(strip*83+Math.floor(now/90)*29)%W;ctx.fillStyle=signalColors[strip%signalColors.length];ctx.globalAlpha=strength*(.45+(strip%3)*.18);ctx.fillRect(x,230+(strip%5)*36,strip%4===0?4:2,1050-(strip%4)*90); }
         ctx.restore();
       }
       frame = requestAnimationFrame(tick);
@@ -600,21 +641,21 @@ export default function MemoryRushGame() {
     g.addColorStop(0, "#5ee0ff"); g.addColorStop(.48, "#fff0a8"); g.addColorStop(1, "#ff8c67"); c.fillStyle = g; c.fillRect(0, 0, 1080, 1440);
     c.fillStyle = "rgba(255,255,255,.84)"; c.roundRect(75, 80, 930, 1280, 52); c.fill(); c.fillStyle = "#173755";
     c.font = "800 34px sans-serif"; c.fillText(`MEMORY JOURNEY · RUN ${String(record.run).padStart(2,"0")}`, 130, 160);
-    c.font = "900 76px sans-serif"; c.fillText("忘了自己是什么", 130, 280); c.font = "700 38px sans-serif"; c.fillStyle = "#ef704f"; c.fillText(record.tendency, 130, 360);
+    c.font = "900 76px sans-serif"; c.fillText(tr("忘了自己是什么", "WHAT WAS I AGAIN?"), 130, 280); c.font = "700 38px sans-serif"; c.fillStyle = "#ef704f"; c.fillText(language === "zh" ? record.tendency : getTendencyEn(record), 130, 360);
     c.fillStyle = "#173755"; c.font = "800 42px sans-serif";
-    [["SCORE",record.score],["记住",record.caught],["残影补捡",record.echoed],["遗漏",record.missed],["碰撞",record.bumps],["主动遗忘",record.dashes]].forEach(([label,value],i)=>c.fillText(`${label}  ${value}`,130,500+i*105));
-    c.font = "800 38px sans-serif"; c.fillText(`CURRENT VERSION  ${record.version}`,130,1190); c.font = "600 28px sans-serif"; c.fillText("下一次奔跑会继承这一次留下的偏差。",130,1270);
+    [["SCORE",record.score],[tr("记住","CAUGHT"),record.caught],[tr("残影补捡","ECHO CATCH"),record.echoed],[tr("遗漏","MISSED"),record.missed],[tr("碰撞","COLLISIONS"),record.bumps],[tr("主动遗忘","RELEASED"),record.dashes]].forEach(([label,value],i)=>c.fillText(`${label}  ${value}`,130,500+i*105));
+    c.font = "800 38px sans-serif"; c.fillText(`CURRENT VERSION  ${record.version}`,130,1190); c.font = "600 28px sans-serif"; c.fillText(tr("下一次奔跑会继承这一次留下的偏差。", "THE NEXT RUN WILL INHERIT THIS DRIFT."),130,1270);
     const a = document.createElement("a"); a.download = `memory-journey-${record.run}.png`; a.href = card.toDataURL("image/png"); a.click();
-  }, [record]);
+  }, [record, language, tr]);
 
   const shareCard = useCallback(async () => {
     if (!record) return;
-    const text = `我的记忆身份：${record.tendency}｜${record.score} 分｜Version ${record.version}`;
+    const text = language === "zh" ? `我的记忆身份：${record.tendency}｜${record.score} 分｜Version ${record.version}` : `MY MEMORY IDENTITY: ${getTendencyEn(record)} | ${record.score} POINTS | VERSION ${record.version}`;
     try {
-      if (navigator.share) await navigator.share({ title: "忘了自己是什么", text, url: location.href });
-      else { await navigator.clipboard.writeText(`${text} ${location.href}`); setShareMessage("结算文字和网址已复制"); }
-    } catch { setShareMessage("分享未完成，可以用保存记忆卡下载图片。"); }
-  }, [record]);
+      if (navigator.share) await navigator.share({ title: tr("忘了自己是什么", "WHAT WAS I AGAIN?"), text, url: location.href });
+      else { await navigator.clipboard.writeText(`${text} ${location.href}`); setShareMessage(tr("结算文字和网址已复制", "RESULT AND LINK COPIED")); }
+    } catch { setShareMessage(tr("分享未完成，可以用保存记忆卡下载图片。", "SHARE NOT COMPLETED · SAVE THE MEMORY CARD INSTEAD")); }
+  }, [record, language, tr]);
 
   const pauseGame = useCallback(() => {
     const r = runtimeRef.current;
@@ -642,7 +683,7 @@ export default function MemoryRushGame() {
 
   return (
     <main className="rush-page">
-      <section className="rush-game" aria-label="记忆与遗忘竖屏游戏">
+      <section className="rush-game" data-lang={language} aria-label={tr("记忆与遗忘竖屏游戏", "Vertical game about memory and forgetting")}>
         <canvas
           ref={canvasRef}
           width={W}
@@ -680,20 +721,20 @@ export default function MemoryRushGame() {
         </button>}
         {started && <><div className="combo-pill" data-active={hud.combo > 1}>{hud.combo > 1 ? `×${hud.combo} ${tr("记忆连击", "MEMORY CHAIN")}` : tr("接住漂走的照片", "CATCH THE DRIFTING PHOTOS")}</div>
           <div className="rush-journey"><span>{seconds > 34 ? tr("01 / 找回颜色", "01 / FIND COLOR") : seconds > 16 ? tr("02 / 过去的帮手", "02 / PAST ECHOES") : tr("03 / 追回夏天", "03 / CHASE SUMMER")}</span><strong>{seconds}s</strong><progress max={52} value={52-seconds} aria-label={tr("旅程进度", "Journey progress")} /></div>
-          <div className="rush-feedback" data-fault={feedback.includes("串线") || feedback.includes("压缩坏了")} role="status">{feedback}</div>
-          <div className="pickup-legend" aria-label="可收集物提示"><span>▣ 照片</span><span>▤ 磁带</span><span>⌁ 票根</span><span>◷ 加时</span><span className="danger">▥ 坏像素</span></div></>}
+          <div className="rush-feedback" data-fault={feedback.includes("串线") || feedback.includes("压缩坏了")} role="status">{shownFeedback}</div>
+          <div className="pickup-legend" aria-label={tr("可收集物提示", "Collectible guide")}><span>▣ {tr("照片", "PHOTO")}</span><span>▤ {tr("磁带", "TAPE")}</span><span>⌁ {tr("票根", "TICKET")}</span><span>◷ {tr("加时", "TIME")}</span><span className="danger">▥ {tr("坏像素", "BAD PIXEL")}</span></div></>}
 
         {awake && !started && !record && <div className="rush-intro">
           <span>{intro === 0 ? tr("展览终点 · 一次约一分钟的记忆旅行", "EXHIBITION EXIT · A ONE-MINUTE MEMORY RUN") : `MEMORY INPUT 0${intro} / 03`}</span>
           <h1>{intro === 0 ? tr("忘了自己是什么", "WHAT WAS I AGAIN?") : intro === 1 ? tr("你把记忆放在哪里？", "WHERE DO YOU KEEP A MEMORY?") : intro === 2 ? (language === "zh" ? sourceCopy[memorySource].title : memorySource === "phone" ? "EXTENDED MEMORY" : memorySource === "search" ? "THE GOOGLE EFFECT" : "FALSE MEMORY") : tr("接住正在逃跑的记忆", "CATCH THE MEMORIES ESCAPING")}</h1>
-          {intro !== 1 && <div className={`intro-photo intro-photo-${intro}`}><img src={resolveImageUrl(photoUrl)} alt="通往夏日乐园的旧照片" /><i /></div>}
-          {intro === 1 && <div className="memory-source-grid" role="group" aria-label="选择本局记忆来源">
+          {intro !== 1 && <div className={`intro-photo intro-photo-${intro}`}><img src={resolveImageUrl(photoUrl)} alt={tr("通往夏日乐园的旧照片", "Old photograph of a road to the summer park")} /><i /></div>}
+          {intro === 1 && <div className="memory-source-grid" role="group" aria-label={tr("选择本局记忆来源", "Choose this run's memory source")}>
             {(Object.keys(sourceCopy) as MemorySource[]).map((source) => <button key={source} data-selected={memorySource === source} onClick={() => { unlockAudio(); setMemorySource(source); chime(source === "phone" ? 620 : source === "search" ? 780 : 940, .12); }}><strong>{language === "zh" ? sourceCopy[source].label : source === "phone" ? "PHONE" : source === "search" ? "SEARCH" : "MYSELF"}</strong><span>{language === "zh" ? sourceCopy[source].title : source === "phone" ? "Extended Memory" : source === "search" ? "Google Effect" : "False Memory"}</span></button>)}
           </div>}
           <p>{intro === 0 ? tr("前面的展览讨论了数字失忆、谷歌效应与被反复改写的回忆。这里不再给你结论——把一段记忆投进系统，看看它在追逐中变成什么。", "The exhibition traced digital amnesia, the Google effect, and memories rewritten through repetition. Here, there is no final answer. Feed one memory into the system and watch what the chase turns it into.") : intro === 1 ? tr("手机可以成为大脑的延伸，搜索让答案随时可得，而回想本身也会重构过去。选择一个入口，系统会据此生成这一局的偏差。", "A phone can extend the mind. Search keeps answers close. Recalling a moment also rebuilds it. Choose an entry point; the system will generate this run's drift from it.") : intro === 2 ? tr(sourceCopy[memorySource].text + " 现在，照片里的窗户和颜色开始漂移。", memorySource === "phone" ? "Your phone kept the time and place, but not how the moment felt. Now the window and colors in the photo begin to drift." : memorySource === "search" ? "You remember that an answer can be found, so you remember where to look instead. Now the image begins to drift." : "Every recollection edits the memory again. Certainty is not the same as truth. Now the image begins to drift.") : tr("照片、相框泡泡、磁带、票根和停摆时钟都能收集；坏像素和小车会打乱画面。漏掉不是失败，它会改变下一轮出现的东西。", "Collect photos, frame bubbles, tapes, tickets and stopped clocks. Broken pixels and carts scramble the image. Missing an item is not failure; it changes what returns next.")}</p>
-          {previous && intro === 0 && <div className="previous-memory"><b>最高 {best} 分</b><span>相册 {album.length}/6 · 上次留下了 {previous.caught} 张照片</span></div>}
+          {previous && intro === 0 && <div className="previous-memory"><b>{tr(`最高 ${best} 分`, `BEST ${best}`)}</b><span>{tr(`相册 ${album.length}/6 · 上次留下了 ${previous.caught} 张照片`, `ALBUM ${album.length}/6 · LAST RUN ${previous.caught} PHOTOS`)}</span></div>}
           <button disabled={!ready} onClick={advanceIntro}>{loadError ? tr("素材加载失败，请刷新页面", "ASSET LOAD FAILED · REFRESH") : !ready ? tr("正在装载记忆…", "LOADING MEMORY…") : intro === 0 ? tr("读取前一段展览", "READ THE EXHIBITION TRACE") : intro === 1 ? tr("生成我的记忆版本", "GENERATE MY MEMORY") : intro === 2 ? tr("看看哪里变了", "SEE WHAT CHANGED") : tr("进入街道 · 找回 12 张照片", "ENTER THE STREET · FIND 12 PHOTOS")}</button>
-          {loadError && <button onClick={() => location.reload()}>重新加载</button>}
+          {loadError && <button onClick={() => location.reload()}>{tr("重新加载", "RELOAD")}</button>}
           <small>{intro === 3 ? (lastDevice === "gamepad" ? tr("摇杆移动 · 任意动作按钮冲刺 · START 暂停", "STICK MOVE · ACTION DASH · START PAUSE") : lastDevice === "keyboard" ? tr("方向键 / A D / J L 移动 · 空格 / Z / X 冲刺", "ARROWS / A D / J L MOVE · SPACE / Z / X DASH") : tr("拖动移动 · 点泡泡 · 点击冲刺", "DRAG TO MOVE · TAP BUBBLES · TAP DASH")) : tr("点击、回车或街机按钮继续", "CLICK · ENTER · OR ARCADE BUTTON")}</small>
           {previous && <button className="rush-skip" disabled={!ready} onClick={begin}>{tr("跳过故事，直接出发", "SKIP STORY · START RUN")}</button>}
         </div>}
@@ -707,20 +748,22 @@ export default function MemoryRushGame() {
         </section>}
 
         {started && <button className="forget-dash" disabled={hud.memories < 1} onClick={dash}>
-          <span>遗忘 1 张</span><strong>冲刺</strong>
+          <span>{tr("遗忘 1 张", "RELEASE 1")}</span><strong>{tr("冲刺", "DASH")}</strong>
         </button>}
 
-        {record && <section className="memory-result" aria-label="本局记忆旅程卡">
+        {record && <section className="memory-result" aria-label={tr("本局记忆旅程卡", "Memory journey result card")}>
           <div className="result-kicker">MEMORY JOURNEY · RUN {String(record.run).padStart(2,"0")}</div>
-          <h2>{language === "zh" ? record.tendency : record.echoed >= 4 ? "ECHO COLLECTOR" : record.dashes >= 4 ? "ACTIVE FORGETTER" : record.bumps >= 3 ? "BUMP ARCHAEOLOGIST" : record.missed <= 2 ? "MEMORY KEEPER" : "DRIFT TRAVELER"}</h2>
+          <h2>{language === "zh" ? record.tendency : getTendencyEn(record)}</h2>
           <p>{record.caught >= 12 ? tr("12 张照片目标达成！这段夏天又清晰了一点。", "12-photo goal complete. This summer is a little clearer.") : tr(`带回了 ${record.caught} 张照片，再找 ${12-record.caught} 张就能达成收藏目标。`, `${record.caught} photos returned. Find ${12-record.caught} more to complete the collection.`)}</p>
           <div className="result-score"><span>SCORE</span><strong>{record.score}</strong><i>VERSION {record.version}</i></div>
           <dl>
-            <div><dt>记住</dt><dd>{record.caught}</dd></div><div><dt>残影补捡</dt><dd>{record.echoed}</dd></div>
-            <div><dt>遗漏</dt><dd>{record.missed}</dd></div><div><dt>碰撞</dt><dd>{record.bumps}</dd></div>
-            <div><dt>主动遗忘</dt><dd>{record.dashes}</dd></div><div><dt>最高连击</dt><dd>×{record.maxCombo}</dd></div>
+            <div><dt>{tr("记住", "CAUGHT")}</dt><dd>{record.caught}</dd></div><div><dt>{tr("残影补捡", "ECHO CATCH")}</dt><dd>{record.echoed}</dd></div>
+            <div><dt>{tr("遗漏", "MISSED")}</dt><dd>{record.missed}</dd></div><div><dt>{tr("碰撞", "COLLISIONS")}</dt><dd>{record.bumps}</dd></div>
+            <div><dt>{tr("主动遗忘", "RELEASED")}</dt><dd>{record.dashes}</dd></div><div><dt>{tr("最高连击", "BEST CHAIN")}</dt><dd>×{record.maxCombo}</dd></div>
           </dl>
-          <div className="result-note">本局入口：{sourceCopy[record.source ?? "phone"].label} · 个人最佳 {best} 分 · 夏日相册 {album.length}/6<br />{["第一张回忆", "满载而归", "过去的帮手", "轻装上路", "另一个夏天", "连成一段"].map(name => <span className="album-stamp" key={name} data-earned={album.includes(name)}>{album.includes(name) ? "✓ " : "○ "}{name}</span>)}<br />下个目标：{!album.includes("满载而归") ? "单局找回 12 张照片" : !album.includes("过去的帮手") ? "让残影补捡 3 张照片" : !album.includes("轻装上路") ? "使用 3 次遗忘冲刺" : !album.includes("另一个夏天") ? "穿过一次记忆裂隙" : "挑战 5 连击与个人最佳"}</div>
+          <div className="result-note">{language === "zh" ? <>本局入口：{sourceCopy[record.source ?? "phone"].label} · 个人最佳 {best} 分 · 夏日相册 {album.length}/6</> : <>ENTRY: {(record.source ?? "phone").toUpperCase()} · PERSONAL BEST {best} · SUMMER ALBUM {album.length}/6</>}<br />
+            {["第一张回忆", "满载而归", "过去的帮手", "轻装上路", "另一个夏天", "连成一段"].map((name,index) => <span className="album-stamp" key={name} data-earned={album.includes(name)}>{album.includes(name) ? "✓ " : "○ "}{language === "zh" ? name : ["FIRST MEMORY","FULL RETURN","PAST HELPER","TRAVEL LIGHT","ANOTHER SUMMER","ONE THREAD"][index]}</span>)}<br />
+            {tr("下个目标：", "NEXT TARGET: ")}{!album.includes("满载而归") ? tr("单局找回 12 张照片", "CATCH 12 PHOTOS IN ONE RUN") : !album.includes("过去的帮手") ? tr("让残影补捡 3 张照片", "LET ECHOES CATCH 3 PHOTOS") : !album.includes("轻装上路") ? tr("使用 3 次遗忘冲刺", "USE MEMORY DASH 3 TIMES") : !album.includes("另一个夏天") ? tr("穿过一次记忆裂隙", "PASS THROUGH A MEMORY RIFT") : tr("挑战 5 连击与个人最佳", "REACH A 5-CHAIN AND BEAT YOUR BEST")}</div>
           <p role="status">{shareMessage}</p>
           <div className="result-actions"><button onClick={saveCard}>{tr("保存记忆卡", "SAVE MEMORY CARD")}</button><button onClick={shareCard}>{tr("分享结果", "SHARE RESULT")}</button></div>
           <button className="replay-memory" onClick={begin}>{tr("带着这段记忆再跑一次", "RUN AGAIN WITH THIS MEMORY")}</button>

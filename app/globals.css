@@ -322,7 +322,7 @@ body { font-family:"Arial Rounded MT Bold","PingFang SC","Microsoft YaHei",syste
 }
 .dormant-screen::before {
   content:""; position:absolute; inset:0; pointer-events:none;
-  background:repeating-linear-gradient(180deg,rgba(255,255,255,.025) 0 1px,transparent 1px 5px),
+  background:repeating-linear-gradient(180deg,rgba(32,230,208,.035) 0 1px,transparent 1px 5px),
     linear-gradient(90deg,transparent 0 17%,rgba(40,230,220,.07) 17% 17.4%,transparent 17.4% 82%,rgba(255,71,118,.07) 82% 82.5%,transparent 82.5%);
 }
 .dormant-code { position:absolute; top:5%; left:5%; color:#88e8e4; font-size:clamp(9px,1.9cqw,13px); letter-spacing:.18em; }
@@ -347,6 +347,23 @@ body { font-family:"Arial Rounded MT Bold","PingFang SC","Microsoft YaHei",syste
 }
 
 @media (prefers-reduced-motion:reduce) { .dormant-mark i { animation:none; } }
+
+/* Language-specific editorial typography. Uses installed system faces for offline exhibitions. */
+.rush-game[data-lang="en"] { font-family:"Bahnschrift Condensed","Arial Narrow","Aptos Narrow",sans-serif; }
+.rush-game[data-lang="en"] .rush-title span,
+.rush-game[data-lang="en"] .result-kicker,
+.rush-game[data-lang="en"] .dormant-code,
+.rush-game[data-lang="en"] .rush-journey,
+.rush-game[data-lang="en"] .pickup-legend { font-family:"Cascadia Mono","Lucida Console",monospace; letter-spacing:.13em; }
+.rush-game[data-lang="en"] .rush-intro h1,
+.rush-game[data-lang="en"] .memory-result h2,
+.rush-game[data-lang="en"] .dormant-screen strong {
+  font-family:"Bahnschrift Condensed","Arial Narrow",sans-serif; font-stretch:condensed;
+  font-style:italic; letter-spacing:-.035em; text-transform:uppercase;
+}
+.rush-game[data-lang="en"] .memory-result h2 { font-size:clamp(28px,7.2cqw,50px); line-height:.9; }
+.rush-game[data-lang="en"] button { font-family:"Bahnschrift Condensed","Arial Narrow",sans-serif; letter-spacing:.025em; }
+.rush-game[data-lang="en"] .result-note,.rush-game[data-lang="en"] .memory-result dt { letter-spacing:.025em; }
 
 /* Memory Rush vertical action prototype */
 .rush-page { min-height:100dvh; display:grid; place-items:center; overflow:hidden; background:#153f67; }
