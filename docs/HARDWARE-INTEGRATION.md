@@ -16,6 +16,7 @@
 厂家可在浏览器容器或 TouchDesigner Web Render 中调用：
 
 ```js
+window.MemoryDriftInput.wake();   // 距离/压力传感器检测到观众后唤醒
 window.MemoryDriftInput.move(-1); // 左移，范围 -1..1
 window.MemoryDriftInput.move(1);  // 右移
 window.MemoryDriftInput.press(0.8); // 压力超过厂家阈值时触发一次
@@ -25,6 +26,10 @@ window.MemoryDriftInput.pause();
 也可以派发事件，适合串口桥接脚本：
 
 ```js
+window.dispatchEvent(new CustomEvent("memory-control", {
+  detail: { action: "wake" }
+}));
+
 window.dispatchEvent(new CustomEvent("memory-control", {
   detail: { action: "move", value: 0.65 }
 }));
@@ -41,6 +46,8 @@ window.dispatchEvent(new CustomEvent("memory-control", {
 3. 街机只有方向与一个按钮也可完成所有页面；第二按钮可映射为 `pause`。
 4. 竖屏建议 1080×1920；浏览器全屏并隐藏鼠标。网页会在其他比例中保持完整竖屏画面。
 5. 第一次现场开机需用任意按钮完成一次用户手势，浏览器才允许播放声音。
+6. 待机画面收到 `wake`、首次 `press`、键盘、触控或手柄动作后进入引导；引导 90 秒无操作、结算 45 秒无操作会自动回到待唤醒状态。
+7. 中文/英文可在右上角设置中切换，选择会保存在浏览器本地。
 
 ## 交付验收
 
@@ -50,4 +57,3 @@ window.dispatchEvent(new CustomEvent("memory-control", {
 - 碰撞、收集、泡泡、裂隙均有不同音效。
 - 断开硬件后仍可用键盘和触控继续游戏。
 - 刷新页面后最高分、相册和上一局痕迹仍保留。
-

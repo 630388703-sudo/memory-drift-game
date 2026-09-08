@@ -8,6 +8,7 @@ import photoUrl from "../game/assets/memory-photo.png";
 import cartUrl from "../game/assets/memory-cart.png";
 import riftUrl from "../game/assets/memory-rift.webp";
 import bubbleUrl from "../game/assets/memory-bubble.webp";
+import glitchOverlayUrl from "../game/assets/memory-glitch-overlay.webp";
 
 const W = 1080;
 const H = 1920;
@@ -16,7 +17,7 @@ const PLAYER_Y = 0.79;
 type ItemKind = "photo" | "cart" | "bubble" | "rift" | "cassette" | "ticket" | "clock" | "static";
 type DeviceKind = "touch" | "keyboard" | "gamepad";
 type MemorySource = "phone" | "search" | "self";
-type HardwareControl = { move: (axis: number) => void; press: (pressure?: number) => void; pause: () => void };
+type HardwareControl = { wake: () => void; move: (axis: number) => void; press: (pressure?: number) => void; pause: () => void };
 declare global { interface Window { MemoryDriftInput?: HardwareControl } }
 type Item = { id: number; kind: ItemKind; x: number; y: number; speed: number; hit?: boolean };
 type Trail = { x: number; at: number };
@@ -150,7 +151,15 @@ function drawSpatialCollage(ctx: CanvasRenderingContext2D, drift: number, now: n
 }
 
 export default function MemoryRushGame() {
+  const [awake, setAwake] = useState(false);
+  const awakeRef = useRef(false);
   const [intro, setIntro] = useState(0);
+  const [language, setLanguage] = useState<"zh" | "en">(() => {
+    if (typeof window === "undefined") return "zh";
+    return window.localStorage.getItem("memory-rush-language") === "en" ? "en" : "zh";
+  });
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const tr = useCallback((zh: string, en: string) => language === "zh" ? zh : en, [language]);
   const [memorySource, setMemorySource] = useState<MemorySource>("phone");
   const [lastDevice, setLastDevice] = useState<DeviceKind>("touch");
   const deviceRef = useRef<DeviceKind>("touch");
@@ -207,10 +216,10 @@ export default function MemoryRushGame() {
     let live = true;
     Promise.all([
       loadImage(backgroundAUrl), loadImage(backgroundBUrl), loadImage(playerUrl),
-      loadImage(photoUrl), loadImage(cartUrl), loadImage(riftUrl), loadImage(bubbleUrl),
-    ]).then(([backgroundA, backgroundB, player, photo, cart, rift, bubble]) => {
+      loadImage(photoUrl), loadImage(cartUrl), loadImage(riftUrl), loadImage(bubbleUrl), loadImage(glitchOverlayUrl),
+    ]).then(([backgroundA, backgroundB, player, photo, cart, rift, bubble, glitchOverlay]) => {
       if (!live) return;
-      assetsRef.current = { backgroundA, backgroundB, player, photo, cart, rift, bubble };
+      assetsRef.current = { backgroundA, backgroundB, player, photo, cart, rift, bubble, glitchOverlay };
       setReady(true);
     }).catch(() => { if (live) setLoadError(true); });
     return () => { live = false; };
@@ -287,10 +296,27 @@ export default function MemoryRushGame() {
     if (intro < 3) setIntro(intro + 1); else begin();
   }, [intro, begin, unlockAudio, chime]);
 
+  const wake = useCallback(() => {
+    if (awakeRef.current) return;
+    awakeRef.current = true; setAwake(true); unlockAudio(); chime(410, .35, true);
+  }, [unlockAudio, chime]);
+
+  const sleep = useCallback(() => {
+    if (runtimeRef.current.started) return;
+    awakeRef.current = false; setAwake(false); setIntro(0); setRecord(null); setSettingsOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (!awake || started) return;
+    const timer = window.setTimeout(sleep, record ? 45000 : 90000);
+    return () => window.clearTimeout(timer);
+  }, [awake, started, record, sleep]);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.target as HTMLElement)?.closest("button,input,select,textarea")) return;
       const key = event.key.toLowerCase();
+      if (!awakeRef.current) { event.preventDefault(); wake(); return; }
       if (["arrowleft","arrowright","arrowup"," "].includes(key)) event.preventDefault();
       if (deviceRef.current !== "keyboard") { deviceRef.current = "keyboard"; setLastDevice("keyboard"); }
       if (!runtimeRef.current.started && !record && (key === "enter" || key === " ")) { advanceIntro(); return; }
@@ -314,20 +340,21 @@ export default function MemoryRushGame() {
     };
     window.addEventListener("keydown", onKeyDown); window.addEventListener("keyup", onKeyUp);
     return () => { window.removeEventListener("keydown", onKeyDown); window.removeEventListener("keyup", onKeyUp); };
-  }, [dash, advanceIntro, record, choice, chooseUpgrade]);
+  }, [dash, advanceIntro, record, choice, chooseUpgrade, wake]);
 
   useEffect(() => {
     const markHardware = () => { if (deviceRef.current !== "gamepad") { deviceRef.current = "gamepad"; setLastDevice("gamepad"); } };
     const control: HardwareControl = {
+      wake: () => { markHardware(); wake(); },
       move: (axis) => { markHardware(); const r=runtimeRef.current; r.targetX=Math.max(.22,Math.min(.78,r.targetX+Math.max(-1,Math.min(1,axis))*.075)); },
-      press: () => { markHardware(); if (choice) chooseUpgrade((["magnet","echo","shield"] as const)[choiceIndexRef.current]); else if (runtimeRef.current.started) dash(); else if (!record) advanceIntro(); },
+      press: () => { markHardware(); if (!awakeRef.current) wake(); else if (choice) chooseUpgrade((["magnet","echo","shield"] as const)[choiceIndexRef.current]); else if (runtimeRef.current.started) dash(); else if (!record) advanceIntro(); },
       pause: () => { markHardware(); const r=runtimeRef.current; if (r.started && !choice) { r.paused=!r.paused; setPaused(r.paused); } },
     };
     window.MemoryDriftInput = control;
-    const onHardware = (event: Event) => { const detail=(event as CustomEvent<{action:string;value?:number}>).detail; if (!detail) return; if (detail.action==="move") control.move(detail.value ?? 0); if (detail.action==="press") control.press(detail.value); if (detail.action==="pause") control.pause(); };
+    const onHardware = (event: Event) => { const detail=(event as CustomEvent<{action:string;value?:number}>).detail; if (!detail) return; if (detail.action==="wake") control.wake(); if (detail.action==="move") control.move(detail.value ?? 0); if (detail.action==="press") control.press(detail.value); if (detail.action==="pause") control.pause(); };
     window.addEventListener("memory-control", onHardware);
     return () => { window.removeEventListener("memory-control", onHardware); delete window.MemoryDriftInput; };
-  }, [advanceIntro, choice, chooseUpgrade, dash, record]);
+  }, [advanceIntro, choice, chooseUpgrade, dash, record, wake]);
 
   useEffect(() => {
     let frame = 0;
@@ -357,8 +384,8 @@ export default function MemoryRushGame() {
         const startPressed = Boolean(pad.buttons[9]?.pressed);
         if ((stick || actionPressed || startPressed) && deviceRef.current !== "gamepad") { deviceRef.current = "gamepad"; setLastDevice("gamepad"); }
         if (choice && stick && !inputRef.current.gamepadHorizontal) { choiceIndexRef.current = (choiceIndexRef.current + (stick > 0 ? 1 : 2)) % 3; setChoiceIndex(choiceIndexRef.current); chime(680, .07); }
-        if (actionPressed && !inputRef.current.gamepadDash) { if (choice) chooseUpgrade((["magnet","echo","shield"] as const)[choiceIndexRef.current]); else if (r.started) dash(); else if (!record) advanceIntro(); }
-        if (startPressed && !inputRef.current.gamepadStart) { if (choice) { /* keep the choice pause */ } else if (r.started) { r.paused = !r.paused; setPaused(r.paused); } else if (!record) advanceIntro(); }
+        if (actionPressed && !inputRef.current.gamepadDash) { if (!awakeRef.current) wake(); else if (choice) chooseUpgrade((["magnet","echo","shield"] as const)[choiceIndexRef.current]); else if (r.started) dash(); else if (!record) advanceIntro(); }
+        if (startPressed && !inputRef.current.gamepadStart) { if (!awakeRef.current) wake(); else if (choice) { /* keep the choice pause */ } else if (r.started) { r.paused = !r.paused; setPaused(r.paused); } else if (!record) advanceIntro(); }
         inputRef.current.gamepadDash = actionPressed; inputRef.current.gamepadStart = startPressed; inputRef.current.gamepadHorizontal = stick ? Math.sign(stick) : 0;
       }
 
@@ -492,6 +519,13 @@ export default function MemoryRushGame() {
       ctx.fillStyle = shade; ctx.fillRect(0, 0, W, H);
       drawSpatialCollage(ctx, r.drift, now, r.version);
 
+      if (!awakeRef.current) {
+        const blink = Math.sin(wallNow * .0017) > .78 ? .28 : .07;
+        ctx.save(); ctx.globalAlpha = quietRef.current ? .035 : blink; ctx.globalCompositeOperation = "screen";
+        ctx.drawImage(assets.glitchOverlay, 0, 0, W, H); ctx.restore();
+        ctx.fillStyle = "rgba(10,24,39,.58)"; ctx.fillRect(0, 0, W, H);
+      }
+
       if (r.started) {
         const echoes = [540, 1020].map((delay) => {
           const candidates = r.trail.filter((point) => point.at <= now - delay);
@@ -541,6 +575,9 @@ export default function MemoryRushGame() {
         ctx.save();
         const fade = Math.min(1, (r.effectUntil - now) / 500);
         const strength = (quietRef.current ? .05 : .28) * fade;
+        ctx.globalAlpha = strength * 1.2; ctx.globalCompositeOperation = "screen";
+        ctx.drawImage(assets.glitchOverlay, 0, 0, W, H);
+        ctx.globalCompositeOperation = "source-over";
         for (let band = 0; band < 8; band++) {
           const sy = 210 + ((band * 233 + Math.floor(now / 90) * 71) % 1320); const bh = 16 + (band % 3) * 18; const offset = quietRef.current ? 2 : (band % 2 ? 34 : -26) * fade;
           ctx.globalAlpha = strength; ctx.drawImage(canvas, 0, sy, W, bh, offset, sy, W, bh);
@@ -554,7 +591,7 @@ export default function MemoryRushGame() {
     };
     frame = requestAnimationFrame(tick);
     return () => { active = false; cancelAnimationFrame(frame); };
-  }, [finishRun, chime, dash, advanceIntro, record, choice, chooseUpgrade]);
+  }, [finishRun, chime, dash, advanceIntro, record, choice, chooseUpgrade, wake]);
 
   const saveCard = useCallback(() => {
     if (!record) return;
@@ -610,51 +647,63 @@ export default function MemoryRushGame() {
           ref={canvasRef}
           width={W}
           height={H}
-          aria-label="滑动控制旅行者收集记忆照片"
-          onPointerDown={(event) => { if (popBubble(event.clientX, event.clientY)) return; pointerDown.current = true; event.currentTarget.setPointerCapture(event.pointerId); movePointer(event.clientX); }}
+          aria-label={tr("滑动控制旅行者收集记忆照片", "Slide to guide the traveler and collect memory photos")}
+          onPointerDown={(event) => { if (!awakeRef.current) { wake(); return; } if (popBubble(event.clientX, event.clientY)) return; pointerDown.current = true; event.currentTarget.setPointerCapture(event.pointerId); movePointer(event.clientX); }}
           onPointerMove={(event) => { if (pointerDown.current) movePointer(event.clientX); }}
           onPointerUp={() => { pointerDown.current = false; }}
           onPointerCancel={() => { pointerDown.current = false; }}
         />
 
-        <header className="rush-hud">
+        {awake && <header className="rush-hud">
           <div><span>MEMORY</span><strong>{hud.memories}/6</strong></div>
           <div className="rush-title"><span>WHAT WAS I AGAIN?</span><strong>VERSION {hud.version}</strong></div>
           <div><span>SCORE</span><strong>{hud.score.toString().padStart(5, "0")}</strong></div>
-        </header>
+        </header>}
 
-        <div className="rush-settings">
-          <button aria-pressed={quiet} onClick={() => { quietRef.current = !quiet; setQuiet(!quiet); }}>视觉：{quiet ? "柔和" : "条纹"}</button>
-          <button aria-pressed={sound} onClick={() => { unlockAudio(); soundRef.current = !sound; setSound(!sound); }}>声音：{sound ? "开" : "关"}</button>
-          <span className="device-pill">{lastDevice === "gamepad" ? "街机 / 手柄" : lastDevice === "keyboard" ? "键盘" : "触控"}</span>
-          {started && <button onClick={pauseGame} disabled={choice}>{paused ? "继续" : "暂停"}</button>}
-        </div>
-        {started && <><div className="combo-pill" data-active={hud.combo > 1}>{hud.combo > 1 ? `×${hud.combo} 记忆连击` : "接住漂走的照片"}</div>
-          <div className="rush-journey"><span>{seconds > 34 ? "01 / 找回颜色" : seconds > 16 ? "02 / 过去的帮手" : "03 / 追回夏天"}</span><strong>{seconds}s</strong><progress max={52} value={52-seconds} aria-label="旅程进度" /></div>
+        {awake && <div className="rush-settings">
+          <span className="device-pill">{lastDevice === "gamepad" ? tr("街机", "ARCADE") : lastDevice === "keyboard" ? tr("键盘", "KEYS") : tr("触控", "TOUCH")}</span>
+          {started && <button className="pause-quick" onClick={pauseGame} disabled={choice}>{paused ? tr("继续", "RESUME") : tr("暂停", "PAUSE")}</button>}
+          <button className="settings-toggle" aria-expanded={settingsOpen} aria-controls="display-controls" onClick={() => setSettingsOpen(!settingsOpen)}>{tr("设置", "SETTINGS")} <span>{settingsOpen ? "×" : "+"}</span></button>
+          {settingsOpen && <div className="settings-popover" id="display-controls">
+            <button aria-pressed={quiet} onClick={() => { quietRef.current = !quiet; setQuiet(!quiet); }}>{tr("故障强度", "GLITCH")}<strong>{quiet ? tr("柔和", "SOFT") : tr("完整", "FULL")}</strong></button>
+            <button aria-pressed={sound} onClick={() => { unlockAudio(); soundRef.current = !sound; setSound(!sound); }}>{tr("声音", "SOUND")}<strong>{sound ? tr("开", "ON") : tr("关", "OFF")}</strong></button>
+            <button onClick={() => { const next=language === "zh" ? "en" : "zh"; setLanguage(next); localStorage.setItem("memory-rush-language", next); }}>{tr("语言", "LANGUAGE")}<strong>{language === "zh" ? "EN" : "中文"}</strong></button>
+          </div>}
+        </div>}
+
+        {!awake && <button className="dormant-screen" onClick={wake} aria-label={tr("唤醒装置", "Wake installation")}>
+          <span className="dormant-code">MEMORY CHANNEL / 00</span>
+          <span className="dormant-mark" aria-hidden="true"><i /><i /><i /></span>
+          <strong>{tr("等待一段记忆靠近", "WAITING FOR A MEMORY")}</strong>
+          <small>{tr("靠近 · 触碰 · 按下任意键", "APPROACH · TOUCH · PRESS ANY KEY")}</small>
+          <em>{tr("信号未响应", "SIGNAL DORMANT")}</em>
+        </button>}
+        {started && <><div className="combo-pill" data-active={hud.combo > 1}>{hud.combo > 1 ? `×${hud.combo} ${tr("记忆连击", "MEMORY CHAIN")}` : tr("接住漂走的照片", "CATCH THE DRIFTING PHOTOS")}</div>
+          <div className="rush-journey"><span>{seconds > 34 ? tr("01 / 找回颜色", "01 / FIND COLOR") : seconds > 16 ? tr("02 / 过去的帮手", "02 / PAST ECHOES") : tr("03 / 追回夏天", "03 / CHASE SUMMER")}</span><strong>{seconds}s</strong><progress max={52} value={52-seconds} aria-label={tr("旅程进度", "Journey progress")} /></div>
           <div className="rush-feedback" data-fault={feedback.includes("串线") || feedback.includes("压缩坏了")} role="status">{feedback}</div>
           <div className="pickup-legend" aria-label="可收集物提示"><span>▣ 照片</span><span>▤ 磁带</span><span>⌁ 票根</span><span>◷ 加时</span><span className="danger">▥ 坏像素</span></div></>}
 
-        {!started && !record && <div className="rush-intro">
-          <span>{intro === 0 ? "展览终点 · 一次约一分钟的记忆旅行" : `MEMORY INPUT 0${intro} / 03`}</span>
-          <h1>{intro === 0 ? "忘了自己是什么" : intro === 1 ? "你把记忆放在哪里？" : intro === 2 ? sourceCopy[memorySource].title : "接住正在逃跑的记忆"}</h1>
+        {awake && !started && !record && <div className="rush-intro">
+          <span>{intro === 0 ? tr("展览终点 · 一次约一分钟的记忆旅行", "EXHIBITION EXIT · A ONE-MINUTE MEMORY RUN") : `MEMORY INPUT 0${intro} / 03`}</span>
+          <h1>{intro === 0 ? tr("忘了自己是什么", "WHAT WAS I AGAIN?") : intro === 1 ? tr("你把记忆放在哪里？", "WHERE DO YOU KEEP A MEMORY?") : intro === 2 ? (language === "zh" ? sourceCopy[memorySource].title : memorySource === "phone" ? "EXTENDED MEMORY" : memorySource === "search" ? "THE GOOGLE EFFECT" : "FALSE MEMORY") : tr("接住正在逃跑的记忆", "CATCH THE MEMORIES ESCAPING")}</h1>
           {intro !== 1 && <div className={`intro-photo intro-photo-${intro}`}><img src={resolveImageUrl(photoUrl)} alt="通往夏日乐园的旧照片" /><i /></div>}
           {intro === 1 && <div className="memory-source-grid" role="group" aria-label="选择本局记忆来源">
-            {(Object.keys(sourceCopy) as MemorySource[]).map((source) => <button key={source} data-selected={memorySource === source} onClick={() => { unlockAudio(); setMemorySource(source); chime(source === "phone" ? 620 : source === "search" ? 780 : 940, .12); }}><strong>{sourceCopy[source].label}</strong><span>{sourceCopy[source].title}</span></button>)}
+            {(Object.keys(sourceCopy) as MemorySource[]).map((source) => <button key={source} data-selected={memorySource === source} onClick={() => { unlockAudio(); setMemorySource(source); chime(source === "phone" ? 620 : source === "search" ? 780 : 940, .12); }}><strong>{language === "zh" ? sourceCopy[source].label : source === "phone" ? "PHONE" : source === "search" ? "SEARCH" : "MYSELF"}</strong><span>{language === "zh" ? sourceCopy[source].title : source === "phone" ? "Extended Memory" : source === "search" ? "Google Effect" : "False Memory"}</span></button>)}
           </div>}
-          <p>{intro === 0 ? "前面的展览讨论了数字失忆、谷歌效应与被反复改写的回忆。这里不再给你结论——把一段记忆投进系统，看看它在追逐中变成什么。" : intro === 1 ? "手机可以成为大脑的延伸，搜索让答案随时可得，而回想本身也会重构过去。选择一个入口，系统会据此生成这一局的偏差。" : intro === 2 ? sourceCopy[memorySource].text + " 现在，照片里的窗户和颜色开始漂移。" : "照片、相框泡泡、磁带、票根和停摆时钟都能收集；坏像素和小车会打乱画面。漏掉不是失败，它会改变下一轮出现的东西。"}</p>
+          <p>{intro === 0 ? tr("前面的展览讨论了数字失忆、谷歌效应与被反复改写的回忆。这里不再给你结论——把一段记忆投进系统，看看它在追逐中变成什么。", "The exhibition traced digital amnesia, the Google effect, and memories rewritten through repetition. Here, there is no final answer. Feed one memory into the system and watch what the chase turns it into.") : intro === 1 ? tr("手机可以成为大脑的延伸，搜索让答案随时可得，而回想本身也会重构过去。选择一个入口，系统会据此生成这一局的偏差。", "A phone can extend the mind. Search keeps answers close. Recalling a moment also rebuilds it. Choose an entry point; the system will generate this run's drift from it.") : intro === 2 ? tr(sourceCopy[memorySource].text + " 现在，照片里的窗户和颜色开始漂移。", memorySource === "phone" ? "Your phone kept the time and place, but not how the moment felt. Now the window and colors in the photo begin to drift." : memorySource === "search" ? "You remember that an answer can be found, so you remember where to look instead. Now the image begins to drift." : "Every recollection edits the memory again. Certainty is not the same as truth. Now the image begins to drift.") : tr("照片、相框泡泡、磁带、票根和停摆时钟都能收集；坏像素和小车会打乱画面。漏掉不是失败，它会改变下一轮出现的东西。", "Collect photos, frame bubbles, tapes, tickets and stopped clocks. Broken pixels and carts scramble the image. Missing an item is not failure; it changes what returns next.")}</p>
           {previous && intro === 0 && <div className="previous-memory"><b>最高 {best} 分</b><span>相册 {album.length}/6 · 上次留下了 {previous.caught} 张照片</span></div>}
-          <button disabled={!ready} onClick={advanceIntro}>{loadError ? "素材加载失败，请刷新页面" : !ready ? "正在装载记忆…" : intro === 0 ? "读取前一段展览" : intro === 1 ? "生成我的记忆版本" : intro === 2 ? "看看哪里变了" : "进入街道 · 找回 12 张照片"}</button>
+          <button disabled={!ready} onClick={advanceIntro}>{loadError ? tr("素材加载失败，请刷新页面", "ASSET LOAD FAILED · REFRESH") : !ready ? tr("正在装载记忆…", "LOADING MEMORY…") : intro === 0 ? tr("读取前一段展览", "READ THE EXHIBITION TRACE") : intro === 1 ? tr("生成我的记忆版本", "GENERATE MY MEMORY") : intro === 2 ? tr("看看哪里变了", "SEE WHAT CHANGED") : tr("进入街道 · 找回 12 张照片", "ENTER THE STREET · FIND 12 PHOTOS")}</button>
           {loadError && <button onClick={() => location.reload()}>重新加载</button>}
-          <small>{intro === 3 ? (lastDevice === "gamepad" ? "摇杆移动 · 任意动作按钮冲刺 · START 暂停" : lastDevice === "keyboard" ? "方向键 / A D / J L 移动 · 空格 / Z / X 冲刺" : "拖动移动 · 点泡泡 · 点击冲刺") : "点击、回车或街机按钮继续"}</small>
-          {previous && <button className="rush-skip" disabled={!ready} onClick={begin}>跳过故事，直接出发</button>}
+          <small>{intro === 3 ? (lastDevice === "gamepad" ? tr("摇杆移动 · 任意动作按钮冲刺 · START 暂停", "STICK MOVE · ACTION DASH · START PAUSE") : lastDevice === "keyboard" ? tr("方向键 / A D / J L 移动 · 空格 / Z / X 冲刺", "ARROWS / A D / J L MOVE · SPACE / Z / X DASH") : tr("拖动移动 · 点泡泡 · 点击冲刺", "DRAG TO MOVE · TAP BUBBLES · TAP DASH")) : tr("点击、回车或街机按钮继续", "CLICK · ENTER · OR ARCADE BUTTON")}</small>
+          {previous && <button className="rush-skip" disabled={!ready} onClick={begin}>{tr("跳过故事，直接出发", "SKIP STORY · START RUN")}</button>}
         </div>}
 
-        {(choice || paused) && <section className="rush-choice" aria-label={choice ? "选择记忆能力" : "游戏已暂停"}>
-          <span>{choice ? "口袋里腾出了一点空间" : "记忆已暂停"}</span><h2>{choice ? "这次，带走什么？" : "等你回来再出发"}</h2>
-          {choice ? <><p>选择一个本局能力。时间已暂停。</p>
-            <button data-selected={choiceIndex === 0} onFocus={() => { choiceIndexRef.current=0; setChoiceIndex(0); }} onClick={() => chooseUpgrade("magnet")}><strong>照片磁铁</strong><span>附近的照片和泡泡会靠过来</span></button>
-            <button data-selected={choiceIndex === 1} onFocus={() => { choiceIndexRef.current=1; setChoiceIndex(1); }} onClick={() => chooseUpgrade("echo")}><strong>更清晰的昨天</strong><span>残影的补捡范围扩大</span></button>
-            <button data-selected={choiceIndex === 2} onFocus={() => { choiceIndexRef.current=2; setChoiceIndex(2); }} onClick={() => chooseUpgrade("shield")}><strong>彩色保护壳</strong><span>恢复颜色，获得 3 次保护</span></button></> : <button onClick={pauseGame}>继续旅程</button>}
+        {(choice || paused) && <section className="rush-choice" aria-label={choice ? tr("选择记忆能力", "Choose a memory ability") : tr("游戏已暂停", "Game paused")}>
+          <span>{choice ? tr("口袋里腾出了一点空间", "A little space opened in your pocket") : tr("记忆已暂停", "MEMORY PAUSED")}</span><h2>{choice ? tr("这次，带走什么？", "WHAT WILL YOU KEEP?") : tr("等你回来再出发", "RETURN WHEN READY")}</h2>
+          {choice ? <><p>{tr("选择一个本局能力。时间已暂停。", "Choose one ability for this run. Time is paused.")}</p>
+            <button data-selected={choiceIndex === 0} onFocus={() => { choiceIndexRef.current=0; setChoiceIndex(0); }} onClick={() => chooseUpgrade("magnet")}><strong>{tr("照片磁铁", "PHOTO MAGNET")}</strong><span>{tr("附近的照片和泡泡会靠过来", "Nearby photos and bubbles drift toward you")}</span></button>
+            <button data-selected={choiceIndex === 1} onFocus={() => { choiceIndexRef.current=1; setChoiceIndex(1); }} onClick={() => chooseUpgrade("echo")}><strong>{tr("更清晰的昨天", "CLEARER YESTERDAY")}</strong><span>{tr("残影的补捡范围扩大", "Echoes catch memories from farther away")}</span></button>
+            <button data-selected={choiceIndex === 2} onFocus={() => { choiceIndexRef.current=2; setChoiceIndex(2); }} onClick={() => chooseUpgrade("shield")}><strong>{tr("彩色保护壳", "COLOR SHELL")}</strong><span>{tr("恢复颜色，获得 3 次保护", "Restore color and gain three shields")}</span></button></> : <button onClick={pauseGame}>{tr("继续旅程", "RESUME JOURNEY")}</button>}
         </section>}
 
         {started && <button className="forget-dash" disabled={hud.memories < 1} onClick={dash}>
@@ -663,8 +712,8 @@ export default function MemoryRushGame() {
 
         {record && <section className="memory-result" aria-label="本局记忆旅程卡">
           <div className="result-kicker">MEMORY JOURNEY · RUN {String(record.run).padStart(2,"0")}</div>
-          <h2>{record.tendency}</h2>
-          <p>{record.caught >= 12 ? "12 张照片目标达成！这段夏天又清晰了一点。" : `带回了 ${record.caught} 张照片，再找 ${12-record.caught} 张就能达成收藏目标。`}</p>
+          <h2>{language === "zh" ? record.tendency : record.echoed >= 4 ? "ECHO COLLECTOR" : record.dashes >= 4 ? "ACTIVE FORGETTER" : record.bumps >= 3 ? "BUMP ARCHAEOLOGIST" : record.missed <= 2 ? "MEMORY KEEPER" : "DRIFT TRAVELER"}</h2>
+          <p>{record.caught >= 12 ? tr("12 张照片目标达成！这段夏天又清晰了一点。", "12-photo goal complete. This summer is a little clearer.") : tr(`带回了 ${record.caught} 张照片，再找 ${12-record.caught} 张就能达成收藏目标。`, `${record.caught} photos returned. Find ${12-record.caught} more to complete the collection.`)}</p>
           <div className="result-score"><span>SCORE</span><strong>{record.score}</strong><i>VERSION {record.version}</i></div>
           <dl>
             <div><dt>记住</dt><dd>{record.caught}</dd></div><div><dt>残影补捡</dt><dd>{record.echoed}</dd></div>
@@ -673,11 +722,10 @@ export default function MemoryRushGame() {
           </dl>
           <div className="result-note">本局入口：{sourceCopy[record.source ?? "phone"].label} · 个人最佳 {best} 分 · 夏日相册 {album.length}/6<br />{["第一张回忆", "满载而归", "过去的帮手", "轻装上路", "另一个夏天", "连成一段"].map(name => <span className="album-stamp" key={name} data-earned={album.includes(name)}>{album.includes(name) ? "✓ " : "○ "}{name}</span>)}<br />下个目标：{!album.includes("满载而归") ? "单局找回 12 张照片" : !album.includes("过去的帮手") ? "让残影补捡 3 张照片" : !album.includes("轻装上路") ? "使用 3 次遗忘冲刺" : !album.includes("另一个夏天") ? "穿过一次记忆裂隙" : "挑战 5 连击与个人最佳"}</div>
           <p role="status">{shareMessage}</p>
-          <div className="result-actions"><button onClick={saveCard}>保存记忆卡</button><button onClick={shareCard}>分享结果</button></div>
-          <button className="replay-memory" onClick={begin}>带着这段记忆再跑一次</button>
+          <div className="result-actions"><button onClick={saveCard}>{tr("保存记忆卡", "SAVE MEMORY CARD")}</button><button onClick={shareCard}>{tr("分享结果", "SHARE RESULT")}</button></div>
+          <button className="replay-memory" onClick={begin}>{tr("带着这段记忆再跑一次", "RUN AGAIN WITH THIS MEMORY")}</button>
         </section>}
       </section>
     </main>
   );
 }
-

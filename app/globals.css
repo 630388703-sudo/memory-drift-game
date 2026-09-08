@@ -291,6 +291,63 @@ body { font-family:"Arial Rounded MT Bold","PingFang SC","Microsoft YaHei",syste
   .stage-platform .game-footer,.stage-sound .game-footer,.stage-assemble .game-footer { bottom:1.3%; }
 }
 
+/* Exhibition idle state and compact HUD controls */
+.rush-settings {
+  top:8.1%; left:auto; right:3.2%; width:auto; max-width:72%;
+  display:flex; align-items:center; justify-content:flex-end; gap:1.1cqw; padding:0;
+}
+.rush-settings .settings-toggle,.rush-settings .pause-quick {
+  min-width:auto; min-height:4.6cqh; padding:.7cqh 2.2cqw;
+  font:900 clamp(10px,2.2cqw,14px)/1 ui-monospace,monospace;
+}
+.settings-toggle span { margin-left:.8cqw; font-size:1.15em; }
+.settings-popover {
+  position:absolute; top:calc(100% + 1cqh); right:0; width:min(56cqw,260px);
+  display:grid; gap:.75cqh; padding:1.2cqh 1.5cqw;
+  border:2px solid #223047; background:#fffdf2f5; box-shadow:7px 7px 0 #223047;
+  backdrop-filter:blur(10px);
+}
+.rush-settings .settings-popover button {
+  min-height:4.8cqh; display:flex; align-items:center; justify-content:space-between; gap:2cqw;
+  padding:.8cqh 2cqw; box-shadow:none; text-align:left;
+}
+.settings-popover button strong { color:#ef634e; }
+.device-pill { min-width:8.5cqw; text-align:center; }
+
+.dormant-screen {
+  position:absolute; z-index:50; inset:0; width:100%; height:100%; overflow:hidden;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1.25cqh;
+  padding:8%; border:0; color:#f8fbef; background:transparent; cursor:pointer;
+  font-family:ui-monospace,"Cascadia Mono",monospace; text-align:center;
+}
+.dormant-screen::before {
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background:repeating-linear-gradient(180deg,rgba(255,255,255,.025) 0 1px,transparent 1px 5px),
+    linear-gradient(90deg,transparent 0 17%,rgba(40,230,220,.07) 17% 17.4%,transparent 17.4% 82%,rgba(255,71,118,.07) 82% 82.5%,transparent 82.5%);
+}
+.dormant-code { position:absolute; top:5%; left:5%; color:#88e8e4; font-size:clamp(9px,1.9cqw,13px); letter-spacing:.18em; }
+.dormant-mark { position:relative; width:22cqw; aspect-ratio:1; display:grid; place-items:center; margin-bottom:1cqh; }
+.dormant-mark i { position:absolute; inset:0; border:2px solid rgba(129,235,231,.55); border-radius:50%; animation:dormantPulse 3.8s ease-out infinite; }
+.dormant-mark i:nth-child(2){ inset:18%; animation-delay:1.1s; border-color:rgba(255,105,134,.55) }
+.dormant-mark i:nth-child(3){ inset:38%; animation-delay:2.2s; border-color:#f8fbef; background:#f8fbef; box-shadow:-5px 0 #20e6d0,5px 0 #ff4776 }
+.dormant-screen strong { position:relative; font-size:clamp(20px,5.3cqw,36px); letter-spacing:.08em; }
+.dormant-screen small { position:relative; color:#c5d7da; font-size:clamp(9px,2cqw,13px); letter-spacing:.12em; }
+.dormant-screen em { position:absolute; bottom:5%; right:5%; padding:.6cqh 1.2cqw; border-left:4px solid #ff4776; color:#ff9eaf; font-size:clamp(8px,1.7cqw,12px); font-style:normal; letter-spacing:.12em; }
+.dormant-screen:focus-visible { outline:4px solid #7ce6df; outline-offset:-8px; }
+@keyframes dormantPulse { 0%{transform:scale(.72);opacity:0} 28%{opacity:.8} 100%{transform:scale(1.2);opacity:0} }
+
+@media (max-width:420px), (max-height:720px) {
+  .rush-hud { grid-template-columns:.75fr 1.7fr .75fr; padding-inline:3cqw; }
+  .rush-hud .rush-title { padding-inline:.8cqw; }
+  .rush-hud .rush-title span { font-size:8px; }
+  .rush-settings { top:7.6%; right:2.5%; max-width:86%; }
+  .rush-settings .settings-toggle,.rush-settings .pause-quick { min-height:40px; padding:5px 8px; }
+  .device-pill { padding:6px 8px; }
+  .combo-pill { top:12.5%; }
+}
+
+@media (prefers-reduced-motion:reduce) { .dormant-mark i { animation:none; } }
+
 /* Memory Rush vertical action prototype */
 .rush-page { min-height:100dvh; display:grid; place-items:center; overflow:hidden; background:#153f67; }
 .rush-game { position:relative; width:min(100vw,calc(100dvh * .5625)); height:min(100dvh,177.777vw); overflow:hidden; background:#f8d08d; box-shadow:0 0 0 1px rgba(255,255,255,.28),0 24px 70px rgba(4,35,65,.38); container-type:size; }
@@ -470,3 +527,10 @@ body { font-family:"Arial Rounded MT Bold","PingFang SC","Microsoft YaHei",syste
   .stage-sound .game-footer,.stage-assemble .game-footer { opacity:.42; }
 }
 
+/* Keep the rush controls out of the title and score zones. */
+.rush-game .rush-settings { top:8.1%; left:auto; right:3.2%; width:auto; max-width:72%; justify-content:flex-end; gap:1.1cqw; padding:0; }
+.rush-game .rush-settings .settings-toggle,.rush-game .rush-settings .pause-quick { min-height:4.6cqh; padding:.7cqh 2.2cqw; }
+@media (max-width:420px), (max-height:720px) {
+  .rush-game .rush-settings { top:7.6%; left:auto; right:2.5%; max-width:86%; gap:4px; }
+  .rush-game .rush-settings .settings-toggle,.rush-game .rush-settings .pause-quick { min-height:40px; padding:5px 8px; }
+}
