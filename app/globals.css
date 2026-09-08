@@ -345,6 +345,30 @@ body { font-family:"Arial Rounded MT Bold","PingFang SC","Microsoft YaHei",syste
 @media (min-width:700px) { .rush-page { padding:16px; } .rush-game { border-radius:22px; } }
 
 /* V5 stage-specific direct play */
+.rush-settings {position:absolute;z-index:25;top:12%;left:4%;right:4%;display:flex;gap:6px;justify-content:center}
+.rush-settings button {min-height:44px;padding:6px 10px;border:1px solid #ffffffaa;border-radius:18px;background:#fff6dded;color:#23475a;font-size:11px;cursor:pointer}
+.rush-journey {position:absolute;z-index:6;left:5%;right:5%;top:19%;display:flex;justify-content:space-between;flex-wrap:wrap;color:#174255;font-size:12px;font-weight:800}
+.rush-journey progress {width:100%;height:7px;margin-top:8px;accent-color:#ef7751}
+.rush-feedback {position:absolute;z-index:6;bottom:18%;left:5%;right:5%;padding:9px;text-align:center;background:#fff7dce8;border-radius:14px;color:#214a60;font-size:12px;pointer-events:none}
+.rush-intro {max-height:76%;overflow:auto;bottom:3%;gap:1cqh}
+.rush-intro h1 {font-size:clamp(24px,6cqw,36px)}
+.intro-photo {position:relative;justify-self:center;width:36cqw;height:26cqh;max-height:170px;overflow:hidden;transition:filter 1s ease,transform 1s ease}
+.intro-photo img {width:100%;height:100%;object-fit:contain}
+.intro-photo-1 {filter:grayscale(1);transform:rotate(-4deg)}
+.intro-photo-1 i {position:absolute;inset:10% 0;background:repeating-linear-gradient(90deg,transparent 0 19px,#16435955 19px 23px,#79dcd855 23px 25px);pointer-events:none}
+.intro-photo-2 {transform:rotate(4deg)}
+.rush-intro .rush-skip {background:transparent;box-shadow:none;color:#385d71;font-size:12px;margin:0;min-height:44px;padding:4px}
+.rush-choice {position:absolute;z-index:30;inset:27% 6% auto;padding:22px;background:#fff9eefa;border-radius:24px;color:#254656;box-shadow:0 20px 80px #21445966;display:grid;gap:12px}
+.rush-choice h2,.rush-choice p {margin:0}.rush-choice>span {color:#ba573e;font-size:12px}
+.rush-choice button {display:grid;text-align:left;gap:5px;min-height:64px;padding:14px;border:1px solid #8fbbd366;border-radius:15px;background:#e5f7f7;color:#234b60;cursor:pointer}
+.rush-choice button:nth-last-child(2){background:#fff0cc}.rush-choice button:last-child{background:#f2e8fc}
+.rush-choice button span {font-size:12px}
+.album-stamp {display:inline-block;padding:4px 6px;margin:3px;border-radius:6px;background:#dcd9cb;color:#6a6c69;font-size:10px}
+.album-stamp[data-earned=true]{background:#a5e5dc;color:#1d5856}
+.memory-result {z-index:35}.memory-result>p:empty{display:none}
+.rush-page button:focus-visible {outline:3px solid #126ca0;outline-offset:3px}
+.rush-page button:disabled{cursor:default}
+@media(max-height:700px){.intro-photo{height:17cqh}.rush-intro p{font-size:12px}.memory-result{inset:2% 4%;gap:7px}.memory-result h2{font-size:28px}.memory-result dl div{min-height:35px}}
 .interactive-canvas { cursor:crosshair; touch-action:none; }
 .stage-platform .interactive-canvas { cursor:n-resize; }
 
