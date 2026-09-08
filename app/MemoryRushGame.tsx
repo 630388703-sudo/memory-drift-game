@@ -95,7 +95,13 @@ export default function MemoryRushGame() {
   const [ready, setReady] = useState(false);
   const [started, setStarted] = useState(false);
   const [record, setRecord] = useState<MemoryRecord | null>(null);
-  const [previous, setPrevious] = useState<MemoryRecord | null>(null);
+  const [previous, setPrevious] = useState<MemoryRecord | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const saved = window.localStorage.getItem("memory-rush-record");
+      return saved ? JSON.parse(saved) : null;
+    } catch { return null; }
+  });
   const [feedback, setFeedback] = useState("过去的你会帮忙补捡");
   const [hud, setHud] = useState({ score: 0, combo: 0, memories: 0, version: "A" as "A" | "B" });
 
@@ -110,13 +116,6 @@ export default function MemoryRushGame() {
       setReady(true);
     }).catch(() => setReady(false));
     return () => { live = false; };
-  }, []);
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("memory-rush-record");
-      if (saved) setPrevious(JSON.parse(saved));
-    } catch { /* a private browser may block local storage */ }
   }, []);
 
   const begin = useCallback(() => {
