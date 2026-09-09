@@ -500,6 +500,18 @@ body { font-family:"Arial Rounded MT Bold","PingFang SC","Microsoft YaHei",syste
 .rush-intro .memory-source-grid button[data-selected=true] {border-color:#ef704f;background:linear-gradient(150deg,#fff6cc,#ffe2d4);transform:translateY(-.3cqh)}
 .memory-source-grid strong {font-size:clamp(12px,2.5cqw,16px)}
 .memory-source-grid span {color:#71879a;font-size:clamp(9px,1.8cqw,12px)}
+.recall-choice {display:grid;grid-template-columns:repeat(3,1fr);gap:1.5cqw;width:100%}
+.rush-intro .recall-choice button {min-height:10cqh;margin:0;border:2px solid #223047;background:#fffdf2;color:#223047;box-shadow:4px 4px 0 #223047}
+.rush-intro .recall-choice button[data-selected=true] {color:#fff;background:#ff7259;box-shadow:7px 7px 0 #58ced8;transform:translateY(-.4cqh) rotate(-1deg)}
+.recall-choice strong {display:block;font:900 clamp(28px,7cqw,48px)/.9 "Bodoni MT","Times New Roman",serif}
+.recall-choice span {font:800 clamp(9px,1.7cqw,12px)/1 ui-monospace,monospace}
+.intro-photo[data-contradiction=true] {position:relative;filter:saturate(1.22) contrast(1.05) drop-shadow(-7px 0 #35e2d5) drop-shadow(7px 0 #ff4776);animation:memoryContradiction .8s steps(2) infinite}
+.intro-photo[data-contradiction=true]::after {content:"SYSTEM MATCH / 100%";position:absolute;left:5%;right:5%;top:42%;padding:.45cqh 1cqw;color:#fff;background:#223047dd;font:900 9px ui-monospace,monospace;letter-spacing:.08em}
+.calibration-strip {display:grid;grid-template-columns:repeat(3,1fr);gap:1cqw;width:100%}
+.calibration-strip span {display:grid;place-items:center;gap:.5cqh;min-height:8cqh;border:2px solid #223047;background:#dff6f3;color:#223047;font:900 clamp(22px,5cqw,34px)/1 sans-serif;transform:rotate(-1deg)}
+.calibration-strip span:nth-child(2) {background:#fff0a8;transform:rotate(1deg)}.calibration-strip span:nth-child(3) {background:#f2e5ff}
+.calibration-strip b {font:900 clamp(9px,1.8cqw,12px)/1.1 ui-monospace,monospace}
+@keyframes memoryContradiction {50% {transform:translateX(5px) rotate(3deg);clip-path:polygon(0 0,100% 0,100% 46%,4% 49%,100% 53%,100% 100%,0 100%)}}
 .rush-intro .rush-skip {background:transparent;box-shadow:none;color:#385d71;font-size:12px;margin:0;min-height:44px;padding:4px}
 .rush-choice {position:absolute;z-index:30;inset:27% 6% auto;padding:22px;background:#fff9eefa;border-radius:24px;color:#254656;box-shadow:0 20px 80px #21445966;display:grid;gap:12px}
 .rush-choice h2,.rush-choice p {margin:0}.rush-choice>span {color:#ba573e;font-size:12px}
