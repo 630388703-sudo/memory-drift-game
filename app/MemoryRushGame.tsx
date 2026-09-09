@@ -22,7 +22,7 @@ declare global { interface Window { MemoryDriftInput?: HardwareControl } }
 type Item = { id: number; kind: ItemKind; x: number; y: number; speed: number; hit?: boolean };
 type Trail = { x: number; at: number };
 type RunStats = { caught: number; echoed: number; missed: number; bumps: number; dashes: number; rifts: number; maxCombo: number };
-type MemoryRecord = RunStats & { score: number; checks: number; version: "A" | "B"; tendency: string; run: number; source?: MemorySource };
+type MemoryRecord = RunStats & { score: number; checks: number; version: "A" | "B"; run: number; source?: MemorySource };
 type Runtime = {
   clock: number;
   paused: boolean;
@@ -78,20 +78,22 @@ const sourceCopy: Record<MemorySource, { label: string; title: string; text: str
   self: { label: "留给自己", title: "虚假记忆", text: "每次回想都会重新编辑它。确信，不一定等于真实。" },
 };
 
-const getTendency = (stats: RunStats) => {
-  if (stats.echoed >= 4) return "残影收藏家";
-  if (stats.dashes >= 4) return "主动遗忘者";
-  if (stats.bumps >= 3) return "跌撞考古员";
-  if (stats.missed <= 2) return "记忆守门人";
-  return "漂移旅行者";
+const getMemoryTitle = (record: MemoryRecord, language: "zh" | "en") => {
+  if (record.checks >= 8) return language === "zh" ? "反复确认者" : "THE RECHECKER";
+  if (record.echoed >= 3) return language === "zh" ? "残影合作者" : "ECHO COLLABORATOR";
+  if (record.dashes >= 2) return language === "zh" ? "主动遗忘者" : "VOLUNTARY FORGETTER";
+  if (record.missed > record.caught / 2) return language === "zh" ? "遗漏收藏家" : "COLLECTOR OF OMISSIONS";
+  return language === "zh" ? "记忆携带者" : "MEMORY CARRIER";
 };
-const getTendencyEn = (stats: RunStats) => {
-  if (stats.echoed >= 4) return "ECHO COLLECTOR";
-  if (stats.dashes >= 4) return "ACTIVE FORGETTER";
-  if (stats.bumps >= 3) return "BUMP ARCHAEOLOGIST";
-  if (stats.missed <= 2) return "MEMORY KEEPER";
-  return "DRIFT TRAVELER";
-};
+
+const getMemoryBadges = (record: MemoryRecord, language: "zh" | "en") => [
+  record.checks >= 5 && (language === "zh" ? "熟悉不等于真实" : "FAMILIAR ≠ TRUE"),
+  record.echoed >= 2 && (language === "zh" ? "被过去补回" : "RESTORED BY ECHO"),
+  record.missed >= 3 && (language === "zh" ? "为遗漏留位" : "ROOM FOR OMISSION"),
+  record.bumps === 0 && (language === "zh" ? "无碰撞读取" : "UNBROKEN READING"),
+  record.dashes > 0 && (language === "zh" ? "主动放下一段" : "CHOSE TO RELEASE"),
+  record.version === "B" && (language === "zh" ? "接受版本 B" : "ACCEPTED VERSION B"),
+].filter(Boolean).slice(0, 3) as string[];
 
 const feedbackEn = (text: string) => {
   if (text.startsWith("连续记住")) return text.replace("连续记住", "MEMORY CHAIN");
@@ -102,6 +104,7 @@ const feedbackEn = (text: string) => {
     "左右拖动接照片 · 轻点相框泡泡": "MOVE LEFT OR RIGHT · TAP FRAME BUBBLES",
     "你主动丢掉一张记忆，换来短暂加速": "ONE MEMORY RELEASED · TEMPORARY DASH",
     "带上新能力，追回剩下的夏天": "ABILITY EQUIPPED · CHASE THE REST OF SUMMER",
+    "记忆能力已生效：它也会改变最后留下的版本": "MEMORY ABILITY ACTIVE · IT WILL ALTER THE VERSION YOU LEAVE WITH",
     "残影替你接住了遗漏": "YOUR ECHO CAUGHT A MISSED PHOTO",
     "照片已装入口袋": "PHOTO STORED IN YOUR POCKET",
     "冲刺撞开了记忆柜": "DASH BROKE THROUGH THE MEMORY CART",
@@ -207,8 +210,6 @@ export default function MemoryRushGame() {
   const [quiet, setQuiet] = useState(false);
   const quietRef = useRef(false);
   const [loadError, setLoadError] = useState(false);
-  const [album, setAlbum] = useState<string[]>([]);
-  const [best, setBest] = useState(0);
   const [shareMessage, setShareMessage] = useState("");
   const audioRef = useRef<AudioContext | null>(null);
   const [sound, setSound] = useState(true);
@@ -269,11 +270,6 @@ export default function MemoryRushGame() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      try {
-        const data = JSON.parse(localStorage.getItem("memory-rush-album") || "{}");
-        setAlbum(Array.isArray(data.album) ? data.album.filter((v: unknown) => typeof v === "string") : []);
-        setBest(Number.isFinite(data.best) ? data.best : 0);
-      } catch { /* optional collection */ }
       const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       quietRef.current = reduced; setQuiet(reduced);
     }, 0);
@@ -296,16 +292,11 @@ export default function MemoryRushGame() {
     const r = runtimeRef.current;
     if (!r.started) return;
     r.started = false;
-    const next: MemoryRecord = { ...r.stats, score: r.score, checks: r.checks, version: r.version, tendency: getTendency(r.stats), run: (previous?.run ?? 0) + 1, source: r.source };
+    const next: MemoryRecord = { ...r.stats, score: r.score, checks: r.checks, version: r.version, run: (previous?.run ?? 0) + 1, source: r.source };
     try { localStorage.setItem("memory-rush-record", JSON.stringify(next)); } catch { /* optional persistence */ }
     setPrevious(next); setRecord(next); setStarted(false);
-    const earned = ["第一张回忆", ...(next.caught >= 12 ? ["满载而归"] : []), ...(next.echoed >= 3 ? ["过去的帮手"] : []), ...(next.dashes >= 3 ? ["轻装上路"] : []), ...(next.rifts >= 1 ? ["另一个夏天"] : []), ...(next.maxCombo >= 5 ? ["连成一段"] : [])];
-    const collection = [...new Set([...album, ...earned])];
-    const high = Math.max(best, next.score);
-    setAlbum(collection); setBest(high);
-    try { localStorage.setItem("memory-rush-album", JSON.stringify({ album: collection, best: high })); } catch { /* optional collection */ }
     setShareMessage("");
-  }, [previous, album, best]);
+  }, [previous]);
 
   const dash = useCallback(() => {
     const r = runtimeRef.current;
@@ -352,7 +343,7 @@ export default function MemoryRushGame() {
     const r = runtimeRef.current; r.upgrade = upgrade;
     if (upgrade === "shield") { r.shield = 3; r.drift = 0; }
     r.paused = false; setPaused(false); setChoice(false);
-    setFeedback("带上新能力，追回剩下的夏天"); chime(880);
+    setFeedback("记忆能力已生效：它也会改变最后留下的版本"); chime(880);
   }, [chime]);
 
   const advanceIntro = useCallback(() => {
@@ -673,17 +664,17 @@ export default function MemoryRushGame() {
     const c = card.getContext("2d")!; const g = c.createLinearGradient(0, 0, 1080, 1440);
     g.addColorStop(0, "#5ee0ff"); g.addColorStop(.48, "#fff0a8"); g.addColorStop(1, "#ff8c67"); c.fillStyle = g; c.fillRect(0, 0, 1080, 1440);
     c.fillStyle = "rgba(255,255,255,.84)"; c.roundRect(75, 80, 930, 1280, 52); c.fill(); c.fillStyle = "#173755";
-    c.font = "800 34px sans-serif"; c.fillText(`MEMORY JOURNEY · RUN ${String(record.run).padStart(2,"0")}`, 130, 160);
-    c.font = "900 76px sans-serif"; c.fillText(tr("忘了自己是什么", "WHAT WAS I AGAIN?"), 130, 280); c.font = "700 38px sans-serif"; c.fillStyle = "#ef704f"; c.fillText(language === "zh" ? record.tendency : getTendencyEn(record), 130, 360);
+    c.font = "800 34px sans-serif"; c.fillText(`RECONSTRUCTION RECORD · RUN ${String(record.run).padStart(2,"0")}`, 130, 160);
+    c.font = "900 76px sans-serif"; c.fillText(tr("忘了自己是什么", "WHAT WAS I AGAIN?"), 130, 280); c.font = "700 38px sans-serif"; c.fillStyle = "#ef704f"; c.fillText(tr("同一段记忆，此刻的版本", "ONE MEMORY · ITS CURRENT VERSION"), 130, 360);
     c.fillStyle = "#173755"; c.font = "800 42px sans-serif";
-    [["SCORE",record.score],[tr("记住","CAUGHT"),record.caught],[tr("残影补捡","ECHO CATCH"),record.echoed],[tr("遗漏","MISSED"),record.missed],[tr("碰撞","COLLISIONS"),record.bumps],[tr("主动遗忘","RELEASED"),record.dashes]].forEach(([label,value],i)=>c.fillText(`${label}  ${value}`,130,500+i*105));
-    c.font = "800 38px sans-serif"; c.fillText(`CURRENT VERSION  ${record.version}`,130,1190); c.font = "600 28px sans-serif"; c.fillText(tr("下一次奔跑会继承这一次留下的偏差。", "THE NEXT RUN WILL INHERIT THIS DRIFT."),130,1270);
+    [[tr("重复确认","RECHECKS"),record.checks ?? 0],[tr("保留","RETAINED"),record.caught],[tr("由残影补回","ECHO RESTORED"),record.echoed],[tr("遗漏","MISSED"),record.missed],[tr("碰撞","COLLISIONS"),record.bumps],[tr("主动放下","RELEASED"),record.dashes]].forEach(([label,value],i)=>c.fillText(`${label}  ${value}`,130,500+i*105));
+    c.font = "800 38px sans-serif"; c.fillText(`CURRENT VERSION  ${record.version}`,130,1190); c.font = "600 28px sans-serif"; c.fillText(tr("原始版本无法验证；下一次读取会继承本次偏差。", "ORIGINAL UNVERIFIABLE · THE NEXT READING INHERITS THIS DRIFT."),130,1270);
     const a = document.createElement("a"); a.download = `memory-journey-${record.run}.png`; a.href = card.toDataURL("image/png"); a.click();
-  }, [record, language, tr]);
+  }, [record, tr]);
 
   const shareCard = useCallback(async () => {
     if (!record) return;
-    const text = language === "zh" ? `我的记忆身份：${record.tendency}｜${record.score} 分｜Version ${record.version}` : `MY MEMORY IDENTITY: ${getTendencyEn(record)} | ${record.score} POINTS | VERSION ${record.version}`;
+    const text = language === "zh" ? `同一段记忆，此刻是 Version ${record.version}｜重复确认 ${record.checks ?? 0} 次｜原始版本无法验证` : `ONE MEMORY · CURRENT VERSION ${record.version} | ${record.checks ?? 0} RECHECKS | ORIGINAL UNVERIFIABLE`;
     try {
       if (navigator.share) await navigator.share({ title: tr("忘了自己是什么", "WHAT WAS I AGAIN?"), text, url: location.href });
       else { await navigator.clipboard.writeText(`${text} ${location.href}`); setShareMessage(tr("结算文字和网址已复制", "RESULT AND LINK COPIED")); }
@@ -758,26 +749,26 @@ export default function MemoryRushGame() {
           <div className="pickup-legend" aria-label={tr("可收集物提示", "Collectible guide")}><span>▣ {tr("照片", "PHOTO")}</span><span>▤ {tr("磁带", "TAPE")}</span><span>⌁ {tr("票根", "TICKET")}</span><span>◷ {tr("加时", "TIME")}</span><span className="danger">▥ {tr("坏像素", "BAD PIXEL")}</span></div></>}
 
         {awake && !started && !record && <div className="rush-intro">
-          <span>{intro === 0 ? tr("展览的数字后果 · 同一记忆将被重复读取", "DIGITAL CONSEQUENCE · ONE MEMORY, READ REPEATEDLY") : `MEMORY INPUT 0${intro} / 03`}</span>
+          <span>{intro === 0 ? tr("从保存到回想 · 同一段记忆正在被重新写入", "FROM STORAGE TO RECALL · ONE MEMORY IS BEING REWRITTEN") : `MEMORY INPUT 0${intro} / 03`}</span>
           <h1>{intro === 0 ? tr("忘了自己是什么", "WHAT WAS I AGAIN?") : intro === 1 ? tr("你把记忆放在哪里？", "WHERE DO YOU KEEP A MEMORY?") : intro === 2 ? (language === "zh" ? sourceCopy[memorySource].title : memorySource === "phone" ? "EXTENDED MEMORY" : memorySource === "search" ? "THE GOOGLE EFFECT" : "FALSE MEMORY") : tr("接住正在逃跑的记忆", "CATCH THE MEMORIES ESCAPING")}</h1>
           {intro !== 1 && <div className={`intro-photo intro-photo-${intro}`}><img src={resolveImageUrl(photoUrl)} alt={tr("通往夏日乐园的旧照片", "Old photograph of a road to the summer park")} /><i /></div>}
           {intro === 1 && <div className="memory-source-grid" role="group" aria-label={tr("选择本局记忆来源", "Choose this run's memory source")}>
             {(Object.keys(sourceCopy) as MemorySource[]).map((source) => <button key={source} data-selected={memorySource === source} onClick={() => { unlockAudio(); setMemorySource(source); chime(source === "phone" ? 620 : source === "search" ? 780 : 940, .12); }}><strong>{language === "zh" ? sourceCopy[source].label : source === "phone" ? "PHONE" : source === "search" ? "SEARCH" : "MYSELF"}</strong><span>{language === "zh" ? sourceCopy[source].title : source === "phone" ? "Extended Memory" : source === "search" ? "Google Effect" : "False Memory"}</span></button>)}
           </div>}
-          <p>{intro === 0 ? tr("前面的展览讨论了数字失忆、谷歌效应与平台如何反复召回过去。这里呈现它的后果：你越频繁确认同一段记忆，它越熟悉，也越可能偏离。停止触碰时，系统反而会暂时稳定。", "The exhibition traced digital amnesia, the Google effect, and platforms that repeatedly resurface the past. Here is the consequence: the more often you verify one memory, the more familiar—and less reliable—it becomes. Stop touching it, and the system briefly stabilizes.") : intro === 1 ? tr("照片、搜索与个人回想都是外置或重构记忆的入口。选择的不是难度，而是这次偏差从哪里开始。", "Photos, search and personal recall are different entrances into external or reconstructed memory. You are not choosing difficulty; you are choosing where this drift begins.") : intro === 2 ? tr(sourceCopy[memorySource].text + " 第一次读取看起来完整，但它已经不是未经观看的版本。", memorySource === "phone" ? "Your phone kept the time and place, but not how the moment felt. The first reading looks complete, yet it is already a viewed version." : memorySource === "search" ? "You remember that the answer can be found, so you remember where to look. The first reading already privileges access over recall." : "Every recollection edits the memory again. Certainty is not the same as truth. The first reading is already a reconstruction.") : tr("移动、再次查看、错过和折返都会留下可见后果。收集物是同一段记忆的证据；它们不会证明原本，只会增加叠加层。", "Moving, rechecking, missing and returning all leave visible consequences. Collectibles are evidence from the same memory; they do not prove an original, they only add another layer.")}</p>
+          <p>{intro === 0 ? tr("照片、搜索记录和平台提醒替我们保存过去，也悄悄改变了我们回想过去的方式。现在，把同一段记忆交给这台装置：每确认一次，它都会更熟悉，也会产生新的偏差；当你停下，它才会暂时稳定。", "Photos, search histories and platform reminders preserve the past for us while quietly changing how we recall it. Now give one memory to this machine: every verification makes it more familiar and introduces a new deviation; only when you stop does it briefly stabilize.") : intro === 1 ? tr("照片、搜索与个人回想都是外置或重构记忆的入口。选择的不是难度，而是这次偏差从哪里开始。", "Photos, search and personal recall are different entrances into external or reconstructed memory. You are not choosing difficulty; you are choosing where this drift begins.") : intro === 2 ? tr(sourceCopy[memorySource].text + " 第一次读取看起来完整，但它已经不是未经观看的版本。", memorySource === "phone" ? "Your phone kept the time and place, but not how the moment felt. The first reading looks complete, yet it is already a viewed version." : memorySource === "search" ? "You remember that the answer can be found, so you remember where to look. The first reading already privileges access over recall." : "Every recollection edits the memory again. Certainty is not the same as truth. The first reading is already a reconstruction.") : tr("移动、再次查看、错过和折返都会留下可见后果。收集物是同一段记忆的证据；它们不会证明原本，只会增加叠加层。", "Moving, rechecking, missing and returning all leave visible consequences. Collectibles are evidence from the same memory; they do not prove an original, they only add another layer.")}</p>
           {previous && intro === 0 && <div className="previous-memory"><b>{tr(`上次：VERSION ${previous.version}`, `LAST: VERSION ${previous.version}`)}</b><span>{tr(`读取 ${previous.caught} 次 · 原始版本未知`, `${previous.caught} READINGS · ORIGINAL UNKNOWN`)}</span></div>}
-          <button disabled={!ready} onClick={advanceIntro}>{loadError ? tr("素材加载失败，请刷新页面", "ASSET LOAD FAILED · REFRESH") : !ready ? tr("正在装载记忆…", "LOADING MEMORY…") : intro === 0 ? tr("读取展览留下的痕迹", "READ THE EXHIBITION TRACE") : intro === 1 ? tr("选择记忆入口", "SELECT MEMORY INPUT") : intro === 2 ? tr("进行第一次确认", "CONFIRM THE FIRST READING") : tr("进入同一段记忆", "ENTER THE SAME MEMORY")}</button>
+          <button disabled={!ready} onClick={advanceIntro}>{loadError ? tr("素材加载失败，请刷新页面", "ASSET LOAD FAILED · REFRESH") : !ready ? tr("正在装载记忆…", "LOADING MEMORY…") : intro === 0 ? tr("把这段记忆交给装置", "GIVE THIS MEMORY TO THE MACHINE") : intro === 1 ? tr("选择记忆入口", "SELECT MEMORY INPUT") : intro === 2 ? tr("进行第一次确认", "CONFIRM THE FIRST READING") : tr("进入同一段记忆", "ENTER THE SAME MEMORY")}</button>
           {loadError && <button onClick={() => location.reload()}>{tr("重新加载", "RELOAD")}</button>}
           <small>{intro === 3 ? (lastDevice === "gamepad" ? tr("摇杆移动 · A 短按确认 · B 长按锁定 · START 暂停", "STICK MOVE · A VERIFY · B LOCK · START PAUSE") : lastDevice === "keyboard" ? tr("方向键 / A D / J L 移动 · Z 确认 · X 锁定 · SHIFT 遗忘冲刺", "ARROWS / A D / J L MOVE · Z VERIFY · X LOCK · SHIFT FORGET DASH") : tr("拖动移动 · 点泡泡 · 短按确认 · 长按锁定", "DRAG TO MOVE · TAP BUBBLES · TAP VERIFY · HOLD TO LOCK")) : tr("点击、回车或街机按钮继续", "CLICK · ENTER · OR ARCADE BUTTON")}</small>
           {previous && <button className="rush-skip" disabled={!ready} onClick={begin}>{tr("跳过故事，直接出发", "SKIP STORY · START RUN")}</button>}
         </div>}
 
         {(choice || paused) && <section className="rush-choice" aria-label={choice ? tr("选择记忆能力", "Choose a memory ability") : tr("游戏已暂停", "Game paused")}>
-          <span>{choice ? tr("口袋里腾出了一点空间", "A little space opened in your pocket") : tr("记忆已暂停", "MEMORY PAUSED")}</span><h2>{choice ? tr("这次，带走什么？", "WHAT WILL YOU KEEP?") : tr("等你回来再出发", "RETURN WHEN READY")}</h2>
-          {choice ? <><p>{tr("选择一个本局能力。时间已暂停。", "Choose one ability for this run. Time is paused.")}</p>
-            <button data-selected={choiceIndex === 0} onFocus={() => { choiceIndexRef.current=0; setChoiceIndex(0); }} onClick={() => chooseUpgrade("magnet")}><strong>{tr("照片磁铁", "PHOTO MAGNET")}</strong><span>{tr("附近的照片和泡泡会靠过来", "Nearby photos and bubbles drift toward you")}</span></button>
-            <button data-selected={choiceIndex === 1} onFocus={() => { choiceIndexRef.current=1; setChoiceIndex(1); }} onClick={() => chooseUpgrade("echo")}><strong>{tr("更清晰的昨天", "CLEARER YESTERDAY")}</strong><span>{tr("残影的补捡范围扩大", "Echoes catch memories from farther away")}</span></button>
-            <button data-selected={choiceIndex === 2} onFocus={() => { choiceIndexRef.current=2; setChoiceIndex(2); }} onClick={() => chooseUpgrade("shield")}><strong>{tr("彩色保护壳", "COLOR SHELL")}</strong><span>{tr("恢复颜色，获得 3 次保护", "Restore color and gain three shields")}</span></button></> : <button onClick={pauseGame}>{tr("继续旅程", "RESUME JOURNEY")}</button>}
+          <span>{choice ? tr("记忆能力升级 · 三选一", "MEMORY ABILITY UPGRADE · CHOOSE ONE") : tr("记忆已暂停", "MEMORY PAUSED")}</span><h2>{choice ? tr("你希望系统怎样帮你记住？", "HOW SHOULD THE SYSTEM HELP YOU REMEMBER?") : tr("等你回来再继续", "RETURN WHEN READY")}</h2>
+          {choice ? <><p>{tr("能力会让接下来的游戏更爽，也会成为这段记忆被改写的原因。", "The ability makes the next passage more playful—and becomes a reason this memory is rewritten.")}</p>
+            <button data-selected={choiceIndex === 0} onFocus={() => { choiceIndexRef.current=0; setChoiceIndex(0); }} onClick={() => chooseUpgrade("magnet")}><strong>{tr("自动归档", "AUTO-ARCHIVE")}</strong><span>{tr("让附近的照片和泡泡主动靠近", "Nearby photos and bubbles move toward you")}</span></button>
+            <button data-selected={choiceIndex === 1} onFocus={() => { choiceIndexRef.current=1; setChoiceIndex(1); }} onClick={() => chooseUpgrade("echo")}><strong>{tr("允许补写", "ALLOW RECONSTRUCTION")}</strong><span>{tr("让过去的残影扩大补回范围", "Past echoes reconstruct from farther away")}</span></button>
+            <button data-selected={choiceIndex === 2} onFocus={() => { choiceIndexRef.current=2; setChoiceIndex(2); }} onClick={() => chooseUpgrade("shield")}><strong>{tr("暂缓干预", "PAUSE INTERVENTION")}</strong><span>{tr("暂时恢复颜色，并隔开三次噪点", "Restore color briefly and block three noise events")}</span></button></> : <button onClick={pauseGame}>{tr("继续读取", "RESUME READING")}</button>}
         </section>}
 
         {started && <button className="forget-dash" onPointerDown={(event) => { event.currentTarget.dataset.held = String(performance.now()); }} onPointerUp={(event) => { const began=Number(event.currentTarget.dataset.held || performance.now()); confirmMemory(performance.now()-began >= 500); delete event.currentTarget.dataset.held; }}>
@@ -788,14 +779,18 @@ export default function MemoryRushGame() {
           <div className="result-kicker">RECONSTRUCTION RECORD · RUN {String(record.run).padStart(2,"0")}</div>
           <h2>{tr("重构后的记忆", "RECONSTRUCTED MEMORY")}</h2>
           <p>{tr("你没有恢复它。读取、遗漏、碰撞与折返共同生成了当前版本。", "You did not restore it. Reading, missing, colliding and returning produced the current version together.")}</p>
-          <div className="result-score"><span>ORIGINAL MEMORY</span><strong>{tr("未知", "UNKNOWN")}</strong><i>VERSION {record.version}</i></div>
+          <div className="result-score"><span>{tr("记忆分数 · 衡量介入，不衡量真实", "MEMORY SCORE · MEASURES INTERVENTION, NOT TRUTH")}</span><strong>{String(record.score).padStart(5,"0")}</strong><i>VERSION {record.version}</i></div>
+          <div className="result-identity"><span>{tr("系统为你生成的临时身份", "A TEMPORARY IDENTITY GENERATED BY THE SYSTEM")}</span><strong>{getMemoryTitle(record, language)}</strong><small>{tr("下一次读取后，它可能改变。", "IT MAY CHANGE AFTER THE NEXT READING.")}</small></div>
+          <div className="result-badges" aria-label={tr("本次记忆章", "Memory badges from this reading")}>
+            {getMemoryBadges(record, language).map((badge, index) => <span key={badge}><i>{String(index + 1).padStart(2,"0")}</i>{badge}</span>)}
+          </div>
           <dl>
             <div><dt>{tr("记住", "CAUGHT")}</dt><dd>{record.caught}</dd></div><div><dt>{tr("残影补捡", "ECHO CATCH")}</dt><dd>{record.echoed}</dd></div>
             <div><dt>{tr("遗漏", "MISSED")}</dt><dd>{record.missed}</dd></div><div><dt>{tr("碰撞", "COLLISIONS")}</dt><dd>{record.bumps}</dd></div>
             <div><dt>{tr("主动遗忘", "RELEASED")}</dt><dd>{record.dashes}</dd></div><div><dt>{tr("重复确认", "RECHECKS")}</dt><dd>{record.checks ?? 0}</dd></div>
           </dl>
           <div className="result-note">{language === "zh" ? <>记忆入口：{sourceCopy[record.source ?? "phone"].label} · 当前版本：{record.version} · 原始版本：无法验证</> : <>MEMORY INPUT: {(record.source ?? "phone").toUpperCase()} · CURRENT VERSION: {record.version} · ORIGINAL: UNVERIFIABLE</>}<br />
-            {["第一张回忆", "满载而归", "过去的帮手", "轻装上路", "另一个夏天", "连成一段"].map((name,index) => <span className="album-stamp" key={name} data-earned={album.includes(name)}>{album.includes(name) ? "✓ " : "○ "}{language === "zh" ? name : ["FIRST MEMORY","FULL RETURN","PAST HELPER","TRAVEL LIGHT","ANOTHER SUMMER","ONE THREAD"][index]}</span>)}<br />
+            {tr(`本次留下：确认 ${record.checks ?? 0} 次，保留 ${record.caught} 段，遗漏 ${record.missed} 段，发生 ${record.bumps} 次碰撞。`, `THIS READING LEFT ${record.checks ?? 0} RECHECKS, ${record.caught} RETAINED FRAGMENTS, ${record.missed} OMISSIONS AND ${record.bumps} COLLISIONS.`)}<br />
             {tr("再次进入时，这些痕迹会成为下一次重构的条件。", "On re-entry, these traces become conditions for the next reconstruction.")}</div>
           <p role="status">{shareMessage}</p>
           <div className="result-actions"><button onClick={saveCard}>{tr("保存记忆卡", "SAVE MEMORY CARD")}</button><button onClick={shareCard}>{tr("分享结果", "SHARE RESULT")}</button></div>
