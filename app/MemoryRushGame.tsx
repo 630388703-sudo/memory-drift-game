@@ -193,6 +193,7 @@ export default function MemoryRushGame() {
   const [awake, setAwake] = useState(false);
   const awakeRef = useRef(false);
   const [intro, setIntro] = useState(0);
+  const [recallAnswer, setRecallAnswer] = useState(4);
   const [language, setLanguage] = useState<"zh" | "en">(() => {
     if (typeof window === "undefined") return "zh";
     return window.localStorage.getItem("memory-rush-language") === "en" ? "en" : "zh";
@@ -348,7 +349,7 @@ export default function MemoryRushGame() {
 
   const advanceIntro = useCallback(() => {
     unlockAudio(); chime(720, .1);
-    if (intro < 3) setIntro(intro + 1); else begin();
+    if (intro < 6) setIntro(intro + 1); else begin();
   }, [intro, begin, unlockAudio, chime]);
 
   const wake = useCallback(() => {
@@ -374,7 +375,15 @@ export default function MemoryRushGame() {
       if (!awakeRef.current) { event.preventDefault(); wake(); return; }
       if (["arrowleft","arrowright","arrowup"," "].includes(key)) event.preventDefault();
       if (deviceRef.current !== "keyboard") { deviceRef.current = "keyboard"; setLastDevice("keyboard"); }
-      if (!runtimeRef.current.started && !record && (key === "enter" || key === " ")) { advanceIntro(); return; }
+      if (!runtimeRef.current.started && !record) {
+        if (["arrowleft","a","j"].includes(key) && intro === 2) { setRecallAnswer(value => Math.max(3, value - 1)); return; }
+        if (["arrowright","d","l"].includes(key) && intro === 2) { setRecallAnswer(value => Math.min(5, value + 1)); return; }
+        if (["arrowleft","a","j","arrowright","d","l"].includes(key) && intro === 4) {
+          const sources: MemorySource[] = ["phone","search","self"];
+          setMemorySource(current => sources[(sources.indexOf(current) + (["arrowleft","a","j"].includes(key) ? 2 : 1)) % 3]); return;
+        }
+        if (key === "enter" || key === " ") { advanceIntro(); return; }
+      }
       if (!runtimeRef.current.started) return;
       if (choice) {
         if (["arrowleft","a","j"].includes(key)) { choiceIndexRef.current = (choiceIndexRef.current + 2) % 3; setChoiceIndex(choiceIndexRef.current); }
@@ -397,7 +406,7 @@ export default function MemoryRushGame() {
     };
     window.addEventListener("keydown", onKeyDown); window.addEventListener("keyup", onKeyUp);
     return () => { window.removeEventListener("keydown", onKeyDown); window.removeEventListener("keyup", onKeyUp); };
-  }, [dash, confirmMemory, advanceIntro, record, choice, chooseUpgrade, wake]);
+  }, [dash, confirmMemory, advanceIntro, record, choice, chooseUpgrade, wake, intro]);
 
   useEffect(() => {
     const markHardware = () => { if (deviceRef.current !== "gamepad") { deviceRef.current = "gamepad"; setLastDevice("gamepad"); } };
@@ -749,17 +758,21 @@ export default function MemoryRushGame() {
           <div className="pickup-legend" aria-label={tr("可收集物提示", "Collectible guide")}><span>▣ {tr("照片", "PHOTO")}</span><span>▤ {tr("磁带", "TAPE")}</span><span>⌁ {tr("票根", "TICKET")}</span><span>◷ {tr("加时", "TIME")}</span><span className="danger">▥ {tr("坏像素", "BAD PIXEL")}</span></div></>}
 
         {awake && !started && !record && <div className="rush-intro">
-          <span>{intro === 0 ? tr("从保存到回想 · 同一段记忆正在被重新写入", "FROM STORAGE TO RECALL · ONE MEMORY IS BEING REWRITTEN") : `MEMORY INPUT 0${intro} / 03`}</span>
-          <h1>{intro === 0 ? tr("忘了自己是什么", "WHAT WAS I AGAIN?") : intro === 1 ? tr("你把记忆放在哪里？", "WHERE DO YOU KEEP A MEMORY?") : intro === 2 ? (language === "zh" ? sourceCopy[memorySource].title : memorySource === "phone" ? "EXTENDED MEMORY" : memorySource === "search" ? "THE GOOGLE EFFECT" : "FALSE MEMORY") : tr("接住正在逃跑的记忆", "CATCH THE MEMORIES ESCAPING")}</h1>
-          {intro !== 1 && <div className={`intro-photo intro-photo-${intro}`}><img src={resolveImageUrl(photoUrl)} alt={tr("通往夏日乐园的旧照片", "Old photograph of a road to the summer park")} /><i /></div>}
-          {intro === 1 && <div className="memory-source-grid" role="group" aria-label={tr("选择本局记忆来源", "Choose this run's memory source")}>
+          <span>{intro === 0 ? tr("从保存到回想 · 同一段记忆正在被重新写入", "FROM STORAGE TO RECALL · ONE MEMORY IS BEING REWRITTEN") : `MEMORY PRELUDE 0${intro} / 06`}</span>
+          <h1>{intro === 0 ? tr("忘了自己是什么", "WHAT WAS I AGAIN?") : intro === 1 ? tr("先看一眼这段记忆", "LOOK AT THIS MEMORY") : intro === 2 ? tr("你刚才看见了几个人？", "HOW MANY PEOPLE DID YOU SEE?") : intro === 3 ? tr("系统说：与你记得的一致", "THE SYSTEM SAYS: IT MATCHES") : intro === 4 ? tr("你把记忆放在哪里？", "WHERE DO YOU KEEP A MEMORY?") : intro === 5 ? (language === "zh" ? sourceCopy[memorySource].title : memorySource === "phone" ? "EXTENDED MEMORY" : memorySource === "search" ? "THE GOOGLE EFFECT" : "FALSE MEMORY") : tr("学习如何干预记忆", "LEARN TO INTERVENE")}</h1>
+          {![2,4,6].includes(intro) && <div className={`intro-photo intro-photo-${intro}`} data-contradiction={intro === 3}><img src={resolveImageUrl(photoUrl)} alt={tr("通往夏日乐园的旧照片", "Old photograph of a road to the summer park")} /><i /></div>}
+          {intro === 2 && <div className="recall-choice" role="group" aria-label={tr("选择记得的人数", "Choose the number you remember")}>
+            {[3,4,5].map(value => <button key={value} data-selected={recallAnswer === value} onClick={() => { setRecallAnswer(value); chime(560 + value * 70, .09); }}><strong>{value}</strong><span>{tr("个人", "PEOPLE")}</span></button>)}
+          </div>}
+          {intro === 4 && <div className="memory-source-grid" role="group" aria-label={tr("选择本局记忆来源", "Choose this run's memory source")}>
             {(Object.keys(sourceCopy) as MemorySource[]).map((source) => <button key={source} data-selected={memorySource === source} onClick={() => { unlockAudio(); setMemorySource(source); chime(source === "phone" ? 620 : source === "search" ? 780 : 940, .12); }}><strong>{language === "zh" ? sourceCopy[source].label : source === "phone" ? "PHONE" : source === "search" ? "SEARCH" : "MYSELF"}</strong><span>{language === "zh" ? sourceCopy[source].title : source === "phone" ? "Extended Memory" : source === "search" ? "Google Effect" : "False Memory"}</span></button>)}
           </div>}
-          <p>{intro === 0 ? tr("照片、搜索记录和平台提醒替我们保存过去，也悄悄改变了我们回想过去的方式。现在，把同一段记忆交给这台装置：每确认一次，它都会更熟悉，也会产生新的偏差；当你停下，它才会暂时稳定。", "Photos, search histories and platform reminders preserve the past for us while quietly changing how we recall it. Now give one memory to this machine: every verification makes it more familiar and introduces a new deviation; only when you stop does it briefly stabilize.") : intro === 1 ? tr("照片、搜索与个人回想都是外置或重构记忆的入口。选择的不是难度，而是这次偏差从哪里开始。", "Photos, search and personal recall are different entrances into external or reconstructed memory. You are not choosing difficulty; you are choosing where this drift begins.") : intro === 2 ? tr(sourceCopy[memorySource].text + " 第一次读取看起来完整，但它已经不是未经观看的版本。", memorySource === "phone" ? "Your phone kept the time and place, but not how the moment felt. The first reading looks complete, yet it is already a viewed version." : memorySource === "search" ? "You remember that the answer can be found, so you remember where to look. The first reading already privileges access over recall." : "Every recollection edits the memory again. Certainty is not the same as truth. The first reading is already a reconstruction.") : tr("移动、再次查看、错过和折返都会留下可见后果。收集物是同一段记忆的证据；它们不会证明原本，只会增加叠加层。", "Moving, rechecking, missing and returning all leave visible consequences. Collectibles are evidence from the same memory; they do not prove an original, they only add another layer.")}</p>
+          {intro === 6 && <div className="calibration-strip"><span>↔<b>{tr("移动", "MOVE")}</b></span><span>●<b>{tr("短按确认", "TAP VERIFY")}</b></span><span>◉<b>{tr("长按锁定", "HOLD LOCK")}</b></span></div>}
+          <p>{intro === 0 ? tr("照片、搜索记录和平台提醒替我们保存过去，也悄悄改变了我们回想过去的方式。现在，把一段记忆交给装置。", "Photos, search histories and platform reminders preserve the past while quietly changing how we recall it. Now give one memory to the machine.") : intro === 1 ? tr("请看几秒。不要寻找答案，只记住你自然注意到的部分。", "Look for a few seconds. Do not hunt for an answer; simply notice what stays with you.") : intro === 2 ? tr("没有标准答案。你的选择会成为系统随后解释这张照片的依据。", "There is no correct answer. Your choice will become the system's basis for interpreting the image.") : intro === 3 ? tr(`你回答了 ${recallAnswer}。照片再次出现时，局部已经被替换，但系统仍把熟悉感称为“准确”。`, `YOU ANSWERED ${recallAnswer}. Parts were replaced when the photo returned, yet the system still calls familiarity “accuracy”.`) : intro === 4 ? tr("选择的不是难度，而是这次偏差从哪里开始。左右移动可以选择，确认键继续。", "You are not choosing difficulty, but where the drift begins. Move left or right to choose, then verify.") : intro === 5 ? tr(sourceCopy[memorySource].text + " 第一次读取看起来完整，但它已经是被观看过的版本。", memorySource === "phone" ? "Your phone kept the time and place, but not how the moment felt. The first reading is already a viewed version." : memorySource === "search" ? "You remember where the answer can be found. The first reading already privileges access over recall." : "Every recollection edits the memory. Certainty is not the same as truth.") : tr("移动会选择保留什么；短按会再次确认并增加熟悉感；长按试图锁定，却会制造更强的错位。停下来，画面才会暂时稳定。", "Movement chooses what is retained. A tap rechecks and increases familiarity. A hold tries to lock the memory, creating stronger misalignment. Stop, and the image briefly stabilizes.")}</p>
           {previous && intro === 0 && <div className="previous-memory"><b>{tr(`上次：VERSION ${previous.version}`, `LAST: VERSION ${previous.version}`)}</b><span>{tr(`读取 ${previous.caught} 次 · 原始版本未知`, `${previous.caught} READINGS · ORIGINAL UNKNOWN`)}</span></div>}
-          <button disabled={!ready} onClick={advanceIntro}>{loadError ? tr("素材加载失败，请刷新页面", "ASSET LOAD FAILED · REFRESH") : !ready ? tr("正在装载记忆…", "LOADING MEMORY…") : intro === 0 ? tr("把这段记忆交给装置", "GIVE THIS MEMORY TO THE MACHINE") : intro === 1 ? tr("选择记忆入口", "SELECT MEMORY INPUT") : intro === 2 ? tr("进行第一次确认", "CONFIRM THE FIRST READING") : tr("进入同一段记忆", "ENTER THE SAME MEMORY")}</button>
+          <button disabled={!ready} onClick={advanceIntro}>{loadError ? tr("素材加载失败，请刷新页面", "ASSET LOAD FAILED · REFRESH") : !ready ? tr("正在装载记忆…", "LOADING MEMORY…") : intro === 0 ? tr("把这段记忆交给装置", "GIVE THIS MEMORY TO THE MACHINE") : intro === 1 ? tr("我看过了", "I HAVE SEEN IT") : intro === 2 ? tr("提交我的回想", "SUBMIT MY RECALL") : intro === 3 ? tr("继续查看偏差", "CONTINUE INTO THE DRIFT") : intro === 4 ? tr("确认记忆入口", "CONFIRM MEMORY INPUT") : intro === 5 ? tr("进行第一次读取", "BEGIN THE FIRST READING") : tr("进入这段记忆", "ENTER THIS MEMORY")}</button>
           {loadError && <button onClick={() => location.reload()}>{tr("重新加载", "RELOAD")}</button>}
-          <small>{intro === 3 ? (lastDevice === "gamepad" ? tr("摇杆移动 · A 短按确认 · B 长按锁定 · START 暂停", "STICK MOVE · A VERIFY · B LOCK · START PAUSE") : lastDevice === "keyboard" ? tr("方向键 / A D / J L 移动 · Z 确认 · X 锁定 · SHIFT 遗忘冲刺", "ARROWS / A D / J L MOVE · Z VERIFY · X LOCK · SHIFT FORGET DASH") : tr("拖动移动 · 点泡泡 · 短按确认 · 长按锁定", "DRAG TO MOVE · TAP BUBBLES · TAP VERIFY · HOLD TO LOCK")) : tr("点击、回车或街机按钮继续", "CLICK · ENTER · OR ARCADE BUTTON")}</small>
+          <small>{intro === 6 ? (lastDevice === "gamepad" ? tr("摇杆移动 · A 短按确认 · B 长按锁定 · START 暂停", "STICK MOVE · A VERIFY · B LOCK · START PAUSE") : lastDevice === "keyboard" ? tr("方向键 / A D / J L 移动 · Z 确认 · X 锁定 · SHIFT 遗忘冲刺", "ARROWS / A D / J L MOVE · Z VERIFY · X LOCK · SHIFT FORGET DASH") : tr("拖动移动 · 点泡泡 · 短按确认 · 长按锁定", "DRAG TO MOVE · TAP BUBBLES · TAP VERIFY · HOLD TO LOCK")) : tr("点击、回车或街机按钮继续", "CLICK · ENTER · OR ARCADE BUTTON")}</small>
           {previous && <button className="rush-skip" disabled={!ready} onClick={begin}>{tr("跳过故事，直接出发", "SKIP STORY · START RUN")}</button>}
         </div>}
 
