@@ -15,6 +15,8 @@ const PLAYER_Y = 0.79;
 type MemoryVersion = "A" | "B" | "C";
 type ItemKind = "photo" | "cart";
 type DeviceKind = "touch" | "keyboard" | "gamepad";
+const GAME_SPEEDS = [0.8, 1, 1.25] as const;
+type GameSpeed = (typeof GAME_SPEEDS)[number];
 type HardwareControl = { wake: () => void; move: (axis: number) => void; press: (pressure?: number) => void; pause: () => void };
 declare global { interface Window { MemoryDriftInput?: HardwareControl } }
 type Item = { id: number; kind: ItemKind; x: number; y: number; speed: number; hit?: boolean };
@@ -190,6 +192,12 @@ export default function MemoryRushGame() {
   const choiceIndexRef = useRef(0);
   const [paused, setPaused] = useState(false);
   const [seconds, setSeconds] = useState(52);
+  const [gameSpeed, setGameSpeed] = useState<GameSpeed>(() => {
+    if (typeof window === "undefined") return 1;
+    const saved = Number(window.localStorage.getItem("memory-rush-speed"));
+    return GAME_SPEEDS.includes(saved as GameSpeed) ? saved as GameSpeed : 1;
+  });
+  const gameSpeedRef = useRef<GameSpeed>(gameSpeed);
   const [quiet, setQuiet] = useState(false);
   const quietRef = useRef(false);
   const [loadError, setLoadError] = useState(false);
@@ -418,7 +426,7 @@ export default function MemoryRushGame() {
       if (!canvas || !assets) { frame = requestAnimationFrame(tick); return; }
       const ctx = canvas.getContext("2d")!;
       const r = runtimeRef.current;
-      const dt = Math.min(0.05, (wallNow - previous) / 1000);
+      const dt = Math.min(0.05, (wallNow - previous) / 1000) * gameSpeedRef.current;
       previous = wallNow;
       if (r.started && !r.paused && !document.hidden) r.clock += dt * 1000;
       const now = r.clock;
@@ -463,7 +471,7 @@ export default function MemoryRushGame() {
         r.items.forEach((item) => {
           item.y += item.speed * dt;
           if (item.hit || item.y < PLAYER_Y - 0.07 || item.y > PLAYER_Y + 0.09) return;
-          const playerHit = Math.abs(item.x - r.x) < (item.kind === "cart" ? 0.115 : 0.08);
+          const playerHit = Math.abs(item.x - r.x) < (item.kind === "cart" ? 0.135 : 0.1);
           const echoHit = false;
           if (item.kind === "photo" && (playerHit || echoHit)) {
             item.hit = true;
@@ -531,7 +539,7 @@ export default function MemoryRushGame() {
         });
         echoes.reverse().forEach((x, index) => {
           ctx.save(); ctx.globalAlpha = index ? 0.25 : 0.14; ctx.filter = "hue-rotate(125deg) saturate(1.8) brightness(1.35)";
-          cropDraw(ctx, assets.player, [312, 99, 680, 1015], x * W, PLAYER_Y * H + 10, 155, 232);
+          cropDraw(ctx, assets.player, [312, 99, 680, 1015], x * W, PLAYER_Y * H + 10, 194, 290);
           ctx.restore();
         });
 
@@ -544,7 +552,7 @@ export default function MemoryRushGame() {
           ctx.restore();
         });
         const bob = Math.sin(now * 0.012) * 5;
-        cropDraw(ctx, assets.player, [312, 99, 680, 1015], r.x * W, PLAYER_Y * H + bob, 188, 280);
+        cropDraw(ctx, assets.player, [312, 99, 680, 1015], r.x * W, PLAYER_Y * H + bob, 242, 360);
       }
       ctx.restore();
       if (r.started && now < r.effectUntil) {
@@ -633,6 +641,14 @@ export default function MemoryRushGame() {
             <button aria-pressed={quiet} onClick={() => { quietRef.current = !quiet; setQuiet(!quiet); }}>{tr("故障强度", "GLITCH")}<strong>{quiet ? tr("柔和", "SOFT") : tr("完整", "FULL")}</strong></button>
             <button aria-pressed={sound} onClick={() => { const next = !soundRef.current; soundRef.current = next; setSound(next); if (next) unlockAudio(); else ambienceRef.current?.pause(); }}>{tr("声音", "SOUND")}<strong>{sound ? tr("开", "ON") : tr("关", "OFF")}</strong></button>
             <button onClick={() => { const next=language === "zh" ? "en" : "zh"; setLanguage(next); localStorage.setItem("memory-rush-language", next); }}>{tr("语言", "LANGUAGE")}<strong>{language === "zh" ? "EN" : "中文"}</strong></button>
+            <div className="speed-selector" role="group" aria-label={tr("体验速度", "Experience speed")}>
+              <span>{tr("倍速", "SPEED")}</span>
+              {GAME_SPEEDS.map((rate) => <button key={rate} type="button" aria-pressed={gameSpeed === rate} data-selected={gameSpeed === rate} onClick={() => {
+                gameSpeedRef.current = rate;
+                setGameSpeed(rate);
+                localStorage.setItem("memory-rush-speed", String(rate));
+              }}>{rate}×</button>)}
+            </div>
           </div>}
         </div>}
 
@@ -660,9 +676,9 @@ export default function MemoryRushGame() {
           <div className="loader-track" aria-hidden="true"><i /></div>
           <small>{tr("约 3 秒", "ABOUT 3 SECONDS")}</small>
         </section>}
-        {started && !choice && <aside className="reconstructed-preview"><span>{tr("系统补写的片段", "SYSTEM RECONSTRUCTION")}</span><div className="memory-figures">{Array.from({length: seconds > 34 ? 3 : 5},(_,index)=><img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{"--figure-scale":.8+(index%2)*.2} as CSSProperties}/>)}</div></aside>}
+        {started && !choice && <aside className="reconstructed-preview"><span>{tr("系统补写的片段", "SYSTEM RECONSTRUCTION")}</span><div className="memory-figures">{Array.from({length: seconds > 34 ? 3 : 5},(_,index)=><img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{"--figure-scale":1.05+(index%2)*.2} as CSSProperties}/>)}</div></aside>}
         {started && <><div className="combo-pill" data-active={hud.checks > 0}>{hud.checks > 0 ? `×${hud.checks} ${tr("重复使它更熟悉", "REPETITION FEELS FAMILIAR")}` : tr("再次查看同一段记忆", "RECHECK THE SAME MEMORY")}</div>
-          <div className="rush-journey"><span>{seconds > 42 ? tr("01 / 稳定读取", "01 / STABLE ARCHIVE") : seconds > 32 ? tr("02 / 轻微漂移", "02 / MEMORY DRIFT") : seconds > 20 ? tr("03 / 记忆损坏", "03 / CORRUPTED MEMORY") : seconds > 8 ? tr("04 / 漂移空间", "04 / MEMORY WORLD") : tr("05 / 多版本", "05 / MULTIPLE VERSION")}</span><strong>{tr(`保留 ${hud.memories} 段 · ${seconds}s`, `RETAINED ${hud.memories} · ${seconds}s`)}</strong><progress max={52} value={52-seconds} aria-label={tr("重构进度", "Reconstruction progress")} /></div>
+          <div className="rush-journey"><span>{seconds > 42 ? tr("01 / 稳定读取", "01 / STABLE ARCHIVE") : seconds > 32 ? tr("02 / 轻微漂移", "02 / MEMORY DRIFT") : seconds > 20 ? tr("03 / 记忆损坏", "03 / CORRUPTED MEMORY") : seconds > 8 ? tr("04 / 漂移空间", "04 / MEMORY WORLD") : tr("05 / 多版本", "05 / MULTIPLE VERSION")}</span><strong>{tr(`保留 ${hud.memories} 段 · ${seconds}s · ${gameSpeed}×`, `RETAINED ${hud.memories} · ${seconds}s · ${gameSpeed}×`)}</strong><progress max={52} value={52-seconds} aria-label={tr("重构进度", "Reconstruction progress")} /></div>
           <div className="run-purpose"><b>{tr("记住最初", "REMEMBER")}</b><span>{tr("左右移动收集照片，避开干扰。稍后再次回想人数。", "MOVE TO COLLECT PHOTOS AND AVOID INTERFERENCE. RECALL THE COUNT LATER.")}</span></div>
           <div className="rush-feedback" data-fault={feedback.includes("串线") || feedback.includes("压缩坏了")} role="status">{shownFeedback}</div>
           <div className="pickup-legend"><span>{tr("照片：留下一个片段", "PHOTO: RETAIN A FRAGMENT")}</span><span>{tr("干扰：短暂打断画面，不结束体验", "INTERFERENCE: BRIEF DISRUPTION, NO GAME OVER")}</span></div></>}
@@ -683,14 +699,14 @@ export default function MemoryRushGame() {
             <i />
           </div>}
           {intro === 1 && <div className="motive-loop" aria-label={tr("反复回看的循环", "The cycle of repeated checking")}>
-            <span><b>01</b>{tr("害怕忘记", "FEAR LOSS")}</span><i>→</i><span><b>02</b>{tr("保存与搜索", "SAVE & SEARCH")}</span><i>→</i><span><b>03</b>{tr("反复确认", "CHECK AGAIN")}</span><i>↺</i>
+            <span><b>01</b><em>{tr("害怕忘记", "FEAR LOSS")}</em><small>FEAR / LOSS</small></span><i aria-hidden="true">↘</i><span><b>02</b><em>{tr("保存与搜索", "SAVE & SEARCH")}</em><small>STORE / SEARCH</small></span><i aria-hidden="true">↗</i><span><b>03</b><em>{tr("反复确认", "CHECK AGAIN")}</em><small>VERIFY / REPEAT</small></span><i aria-hidden="true">↺</i>
           </div>}
           {intro === 2 && <div className="intro-photo intro-photo-1"><img src={resolveImageUrl(backgroundAUrl)} alt={tr("通往夏日乐园的旧照片", "Old photograph of a road to the summer park")} /><div className="memory-figures" aria-label={tr("照片里有四个人", "Four people are visible in the photograph")}>{[.82,1,.7,.9].map((scale,index) => <img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{"--figure-scale":scale} as CSSProperties} />)}</div><i /></div>}
           {intro === 3 && <div className="recall-choice" role="group" aria-label={tr("选择记得的人数", "Choose the number you remember")}>
             {[3,4,5].map(value => <button key={value} data-selected={recallAnswer === value} onClick={() => { setRecallAnswer(value); chime(560 + value * 70, .09); }}><strong>{value}</strong><span>{tr("个人", "PEOPLE")}</span></button>)}
           </div>}
           {intro === 4 && <div className="version-map" aria-label={tr("记忆版本变化", "Memory version changes")}>
-            <span data-version="A"><b>A</b>{tr("彩色原图", "FULL COLOR")}</span><i>→</i><span data-version="B"><b>B</b>{tr("全黑白", "MONOCHROME")}</span><i>→</i><span data-version="C"><b>C</b>{tr("紫蓝重构", "VIOLET REBUILD")}</span>
+            <span data-version="A"><small>01 / SOURCE</small><b>A</b><em>{tr("彩色原图", "FULL COLOR")}</em></span><i aria-hidden="true">→</i><span data-version="B"><small>02 / ERASE</small><b>B</b><em>{tr("全黑白", "MONOCHROME")}</em></span><i aria-hidden="true">→</i><span data-version="C"><small>03 / REWRITE</small><b>C</b><em>{tr("紫蓝重构", "VIOLET REBUILD")}</em></span>
           </div>}
           <p>{intro === 0 ? tr("你越确认一段记忆，它就越真实吗？靠近并交出一次判断，装置会把你的观看变成下一版记忆。", "DOES A MEMORY BECOME TRUER THE MORE YOU VERIFY IT? OFFER ONE JUDGMENT; THE MACHINE WILL TURN YOUR VIEWING INTO ITS NEXT VERSION.") : intro === 1 ? tr("害怕遗忘让我们不断保存、搜索和回看。但每一次提取都不是读取原件，而是在当下重新组织过去。", "FEAR OF FORGETTING MAKES US SAVE, SEARCH, AND REPLAY. BUT RECALL DOES NOT OPEN AN ORIGINAL FILE; IT REORGANIZES THE PAST IN THE PRESENT.") : intro === 2 ? tr("请看几秒。不要刻意数数，也不要寻找答案，只记住你自然注意到的部分。", "Look for a few seconds. Do not count deliberately or hunt for an answer; notice only what stays with you.") : intro === 3 ? tr("凭第一感觉作答。这个数字不会带来奖励或失败，它只会成为你的第一个记忆版本。", "ANSWER FROM FIRST IMPRESSION. THIS NUMBER CREATES NEITHER REWARD NOR FAILURE; IT BECOMES YOUR FIRST VERSION OF THE MEMORY.") : tr("左右移动只决定哪些照片被留下、哪些干扰被避开。同一个问题会再次出现；画面会从彩色突然变成黑白，再重构成紫蓝色。", "MOVEMENT ONLY DECIDES WHICH PHOTOS REMAIN AND WHICH INTERFERENCE IS AVOIDED. THE QUESTION WILL RETURN AS COLOR COLLAPSES INTO MONOCHROME, THEN REBUILDS IN VIOLET AND BLUE.")}</p>
           {previous && intro === 0 && <div className="previous-memory"><b>{tr(`上次：VERSION ${previous.version}`, `LAST: VERSION ${previous.version}`)}</b><span>{tr(`保留 ${previous.caught} 个片段 · 本次从原图开始`, `${previous.caught} FRAGMENTS · START AGAIN FROM THE FIRST IMAGE`)}</span></div>}
