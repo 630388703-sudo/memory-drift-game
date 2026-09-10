@@ -28,6 +28,7 @@ type Runtime = {
   paused: boolean;
   drift: number;
   effectUntil: number;
+  impactUntil: number;
   recallStage: number;
   recalls: number[];
   started: boolean;
@@ -53,7 +54,7 @@ type Runtime = {
 
 const emptyStats = (): RunStats => ({ caught: 0, missed: 0, bumps: 0 });
 const makeRuntime = (): Runtime => ({
-  clock: 0, paused: false, drift: 0, effectUntil: 0, recallStage: 0, recalls: [],
+  clock: 0, paused: false, drift: 0, effectUntil: 0, impactUntil: 0, recallStage: 0, recalls: [],
   started: false, x: 0.5, targetX: 0.5, items: [], nextId: 1, lastSpawn: 0,
   score: 0, combo: 0, checks: 0, memories: 0, version: "A", previousVersion: "A", versionFade: 0,
   shakeUntil: 0, startedAt: 0, lastInteraction: 0, idleNotified: false,
@@ -241,6 +242,7 @@ export default function MemoryRushGame() {
     } catch { return null; }
   });
   const [feedback, setFeedback] = useState("过去的你会帮忙补捡");
+  const [impactPulse, setImpactPulse] = useState<"a" | "b" | null>(null);
   const [hud, setHud] = useState({ score: 0, combo: 0, checks: 0, memories: 0, drift: 0, version: "A" as MemoryVersion });
   const shownFeedback = language === "zh" ? feedback : feedbackEn(feedback);
 
@@ -488,7 +490,8 @@ export default function MemoryRushGame() {
             item.hit = true;
             r.stats.bumps += 1;
             if (r.memories > 0) r.memories -= 1;
-            r.combo = 0; r.shakeUntil = now + 520; r.effectUntil = now + 1150; r.drift = Math.min(1, r.drift + .2);
+            r.combo = 0; r.shakeUntil = now + 760; r.effectUntil = now + 1250; r.impactUntil = now + 840; r.drift = Math.min(1, r.drift + .2);
+            setImpactPulse(value => value === "a" ? "b" : "a");
             setFeedback("碰撞：画面与声音同时断裂"); playImpact();
           }
         });
@@ -517,9 +520,17 @@ export default function MemoryRushGame() {
         }
       }
 
-      const shake = !quietRef.current && now < r.shakeUntil ? Math.sin(now * .03) * 7 * ((r.shakeUntil - now) / 280) : 0;
+      const shakeRemaining = !quietRef.current && now < r.shakeUntil ? Math.max(0, Math.min(1, (r.shakeUntil - now) / 760)) : 0;
+      const trauma = shakeRemaining * shakeRemaining;
+      const shakeX = trauma * (Math.sin(now * .091) * 27 + Math.sin(now * .037) * 11);
+      const shakeY = trauma * (Math.cos(now * .077) * 16 + Math.sin(now * .049) * 7);
+      const shakeRoll = trauma * Math.sin(now * .063) * .012;
+      const shakeScale = 1 + trauma * .024;
       ctx.save();
-      ctx.translate(shake, 0);
+      ctx.translate(W / 2 + shakeX, H / 2 + shakeY);
+      ctx.rotate(shakeRoll);
+      ctx.scale(shakeScale, shakeScale);
+      ctx.translate(-W / 2, -H / 2);
       drawMemoryBackground(ctx, assets, r.version);
       if (r.versionFade > 0) drawMemoryBackground(ctx, assets, r.previousVersion, r.versionFade);
       const shade = ctx.createLinearGradient(0, 0, 0, H);
@@ -574,6 +585,39 @@ export default function MemoryRushGame() {
         for (let strip = 0; strip < 15; strip++) { const x=(strip*83+Math.floor(now/90)*29)%W;ctx.fillStyle=signalColors[strip%signalColors.length];ctx.globalAlpha=strength*(.45+(strip%3)*.18);ctx.fillRect(x,230+(strip%5)*36,strip%4===0?4:2,1050-(strip%4)*90); }
         ctx.restore();
       }
+      if (r.started && !quietRef.current && now < r.impactUntil) {
+        ctx.save();
+        const remaining = Math.max(0, Math.min(1, (r.impactUntil - now) / 840));
+        const punch = remaining * remaining;
+        const flash = remaining > .82 ? (remaining - .82) / .18 : 0;
+        ctx.globalCompositeOperation = "screen";
+        ctx.globalAlpha = .16 + punch * .24;
+        ctx.filter = "hue-rotate(155deg) saturate(2.2) contrast(1.25)";
+        ctx.drawImage(canvas, -18 * punch, 0, W, H);
+        ctx.filter = "hue-rotate(-70deg) saturate(2.4) contrast(1.2)";
+        ctx.drawImage(canvas, 18 * punch, 0, W, H);
+        ctx.filter = "none";
+        ctx.globalCompositeOperation = "source-over";
+        for (let band = 0; band < 15; band++) {
+          const sy = 90 + ((band * 127 + Math.floor(now / 38) * 59) % 1690);
+          const bh = 7 + (band % 5) * 9;
+          const direction = band % 2 ? 1 : -1;
+          const offset = direction * (22 + (band % 4) * 17) * punch;
+          ctx.globalAlpha = .22 + punch * .42;
+          ctx.drawImage(canvas, 0, sy, W, bh, offset, sy, W, bh);
+          ctx.globalCompositeOperation = "screen";
+          ctx.fillStyle = band % 3 === 0 ? "#20e6d0" : band % 3 === 1 ? "#ff3f77" : "#4a7dff";
+          ctx.fillRect(offset, sy, W, band % 4 === 0 ? 4 : 2);
+          ctx.globalCompositeOperation = "source-over";
+        }
+        ctx.globalAlpha = .35 + punch * .45;
+        ctx.fillStyle = "#f7f2dd";
+        ctx.fillRect(0, PLAYER_Y * H - 3, W, 6 + punch * 10);
+        ctx.globalAlpha = flash * .5;
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, W, H);
+        ctx.restore();
+      }
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
@@ -617,7 +661,7 @@ export default function MemoryRushGame() {
 
   return (
     <main className="rush-page">
-      <section className="rush-game" data-lang={language} aria-label={tr("记忆与遗忘竖屏游戏", "Vertical game about memory and forgetting")}>
+      <section className="rush-game" data-lang={language} data-impact={impactPulse ?? undefined} aria-label={tr("记忆与遗忘竖屏游戏", "Vertical game about memory and forgetting")}>
         <canvas
           ref={canvasRef}
           width={W}
@@ -682,7 +726,7 @@ export default function MemoryRushGame() {
         {started && <><div className="combo-pill" data-active={hud.checks > 0}>{hud.checks > 0 ? `×${hud.checks} ${tr("重复使它更熟悉", "REPETITION FEELS FAMILIAR")}` : tr("再次查看同一段记忆", "RECHECK THE SAME MEMORY")}</div>
           <div className="rush-journey"><span>{seconds > 42 ? tr("01 / 稳定读取", "01 / STABLE ARCHIVE") : seconds > 32 ? tr("02 / 轻微漂移", "02 / MEMORY DRIFT") : seconds > 20 ? tr("03 / 记忆损坏", "03 / CORRUPTED MEMORY") : seconds > 8 ? tr("04 / 漂移空间", "04 / MEMORY WORLD") : tr("05 / 多版本", "05 / MULTIPLE VERSION")}</span><strong>{tr(`保留 ${hud.memories} 段 · ${seconds}s · ${gameSpeed}×`, `RETAINED ${hud.memories} · ${seconds}s · ${gameSpeed}×`)}</strong><progress max={52} value={52-seconds} aria-label={tr("重构进度", "Reconstruction progress")} /></div>
           <div className="run-purpose"><b>{tr("记住最初", "REMEMBER")}</b><span>{tr("左右移动收集照片，避开干扰。稍后再次回想人数。", "MOVE TO COLLECT PHOTOS AND AVOID INTERFERENCE. RECALL THE COUNT LATER.")}</span></div>
-          <div className="rush-feedback" data-fault={feedback.includes("串线") || feedback.includes("压缩坏了")} role="status">{shownFeedback}</div>
+          <div className="rush-feedback" data-fault={feedback.includes("串线") || feedback.includes("压缩坏了") || feedback.includes("碰撞")} role="status">{shownFeedback}</div>
           <div className="pickup-legend"><span>{tr("照片：留下一个片段", "PHOTO: RETAIN A FRAGMENT")}</span><span>{tr("干扰：短暂打断画面，不结束体验", "INTERFERENCE: BRIEF DISRUPTION, NO GAME OVER")}</span></div></>}
 
         {awake && !booting && !started && !record && <div key={intro} className="rush-intro" data-step={intro}>
