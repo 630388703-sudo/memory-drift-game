@@ -6,6 +6,7 @@ import backgroundBUrl from "../game/assets/grid-surreal-memory-b.webp";
 import playerUrl from "../game/assets/traveler-run-back.png";
 import photoUrl from "../game/assets/grid-memory-photo.webp";
 import cartUrl from "../game/assets/grid-memory-cart.webp";
+import bubbleUrl from "../game/assets/grid-memory-bubble.webp";
 import glitchOverlayUrl from "../game/assets/memory-glitch-overlay.webp";
 
 const W = 1080;
@@ -13,7 +14,7 @@ const H = 1920;
 const PLAYER_Y = 0.79;
 
 type MemoryVersion = "A" | "B" | "C";
-type ItemKind = "photo" | "cart";
+type ItemKind = "photo" | "cart" | "bubble";
 type DeviceKind = "touch" | "keyboard" | "gamepad";
 const GAME_SPEEDS = [0.8, 1, 1.25] as const;
 type GameSpeed = (typeof GAME_SPEEDS)[number];
@@ -45,6 +46,7 @@ type Runtime = {
   previousVersion: MemoryVersion;
   versionFade: number;
   shakeUntil: number;
+  shield: number;
   startedAt: number;
   lastInteraction: number;
   idleNotified: boolean;
@@ -57,7 +59,7 @@ const makeRuntime = (): Runtime => ({
   clock: 0, paused: false, drift: 0, effectUntil: 0, impactUntil: 0, recallStage: 0, recalls: [],
   started: false, x: 0.5, targetX: 0.5, items: [], nextId: 1, lastSpawn: 0,
   score: 0, combo: 0, checks: 0, memories: 0, version: "A", previousVersion: "A", versionFade: 0,
-  shakeUntil: 0, startedAt: 0, lastInteraction: 0, idleNotified: false,
+  shakeUntil: 0, shield: 0, startedAt: 0, lastInteraction: 0, idleNotified: false,
   stats: emptyStats(),
   trail: [],
 });
@@ -264,10 +266,10 @@ export default function MemoryRushGame() {
     let live = true;
     Promise.all([
       loadImage(backgroundAUrl), loadImage(backgroundBUrl), loadImage(playerUrl),
-      loadImage(photoUrl), loadImage(cartUrl), loadImage(glitchOverlayUrl),
-    ]).then(([backgroundA, backgroundB, player, photo, cart, glitchOverlay]) => {
+      loadImage(photoUrl), loadImage(cartUrl), loadImage(bubbleUrl), loadImage(glitchOverlayUrl),
+    ]).then(([backgroundA, backgroundB, player, photo, cart, bubble, glitchOverlay]) => {
       if (!live) return;
-      assetsRef.current = { backgroundA, backgroundB, player, photo, cart, glitchOverlay };
+      assetsRef.current = { backgroundA, backgroundB, player, photo, cart, bubble, glitchOverlay };
       setReady(true);
     }).catch(() => { if (live) setLoadError(true); });
     return () => { live = false; };
@@ -287,7 +289,7 @@ export default function MemoryRushGame() {
     fresh.recalls = [recallAnswer];
     fresh.started = true;
     fresh.lastSpawn = 0; fresh.startedAt = 0;
-    fresh.items = [{ id: fresh.nextId++, kind: "photo", x: .5, y: .6, speed: .12, size: 1.28 }, { id: fresh.nextId++, kind: "photo", x: .38, y: .3, speed: .12, size: .78 }];
+    fresh.items = [{ id: fresh.nextId++, kind: "photo", x: .5, y: .6, speed: .12, size: 1.28 }, { id: fresh.nextId++, kind: "bubble", x: .38, y: .3, speed: .12, size: 1 }];
     runtimeRef.current = fresh;
     setHud({ score: 0, combo: 0, checks: 0, memories: 0, drift: 0, version: "A" });
     setRecord(null); setStarted(true); setChoice(false); setPaused(false); setSeconds(52);
@@ -465,7 +467,7 @@ export default function MemoryRushGame() {
           const lanes = [0.3, 0.42, 0.58, 0.7];
           const lane = lanes[Math.floor(Math.random() * lanes.length)];
           const roll = Math.random();
-          const kind: ItemKind = now < 6000 || roll < .78 ? "photo" : "cart";
+          const kind: ItemKind = now < 3200 || roll < .64 ? "photo" : roll < .82 ? "bubble" : "cart";
           const photoSizes = [.72, .96, 1.28];
           const size = kind === "photo" ? photoSizes[Math.floor(Math.random() * photoSizes.length)] : 1;
           r.items.push({ id: r.nextId++, kind, x: lane, y: 0.08, speed: 0.23, size });
@@ -486,6 +488,21 @@ export default function MemoryRushGame() {
             r.drift = Math.min(1, r.drift + .055); chime(620 + Math.min(r.combo, 8) * 55);
             if (r.stats.caught % 4 === 0) r.effectUntil = now + 750;
             setFeedback(echoHit ? "残影替你接住了遗漏" : r.combo > 2 ? `连续记住 ×${r.combo}` : "照片已装入口袋");
+          } else if (item.kind === "bubble" && playerHit) {
+            item.hit = true;
+            r.shield = Math.min(3, r.shield + 1);
+            r.combo += 1;
+            r.memories += 1;
+            r.score += 120 * Math.min(8, r.combo);
+            r.stats.caught += 1;
+            r.drift = Math.max(0, r.drift - .18);
+            r.effectUntil = now + 520;
+            setFeedback("相框泡泡：照片 +1，颜色回来了"); chime(980, .2);
+          } else if (item.kind === "cart" && playerHit && r.shield > 0) {
+            item.hit = true;
+            r.shield -= 1;
+            r.effectUntil = now + 460;
+            setFeedback("记忆泡泡替你挡住一次碰撞"); chime(760, .16);
           } else if (item.kind === "cart" && playerHit) {
             item.hit = true;
             r.stats.bumps += 1;
@@ -562,8 +579,24 @@ export default function MemoryRushGame() {
           const scale = 0.46 + item.y * 0.72;
           if (item.kind === "photo") drawContained(ctx, assets.photo, item.x * W, item.y * H, 148 * scale * item.size, 164 * scale * item.size);
           if (item.kind === "cart") drawContained(ctx, assets.cart, item.x * W, item.y * H, 250 * scale, 275 * scale);
+          if (item.kind === "bubble") {
+            const pulse = 1 + Math.sin(now * .008 + item.id) * .045;
+            ctx.globalCompositeOperation = "screen";
+            ctx.globalAlpha = .88;
+            ctx.shadowColor = "#58e8ff";
+            ctx.shadowBlur = 24 * scale;
+            drawContained(ctx, assets.bubble, item.x * W, item.y * H, 214 * scale * pulse, 214 * scale * pulse);
+          }
           ctx.restore();
         });
+        if (r.shield > 0) {
+          const pulse = 1 + Math.sin(now * .008) * .025;
+          ctx.save();
+          ctx.globalCompositeOperation = "screen";
+          ctx.globalAlpha = .55 + r.shield * .09;
+          ctx.drawImage(assets.bubble, r.x * W - 198 * pulse, PLAYER_Y * H - 232 * pulse, 396 * pulse, 396 * pulse);
+          ctx.restore();
+        }
         const bob = Math.sin(now * 0.012) * 5;
         cropDraw(ctx, assets.player, [312, 99, 680, 1015], r.x * W, PLAYER_Y * H + bob, 242, 360);
       }
@@ -727,7 +760,7 @@ export default function MemoryRushGame() {
           <div className="rush-journey"><span>{seconds > 42 ? tr("01 / 稳定读取", "01 / STABLE ARCHIVE") : seconds > 32 ? tr("02 / 轻微漂移", "02 / MEMORY DRIFT") : seconds > 20 ? tr("03 / 记忆损坏", "03 / CORRUPTED MEMORY") : seconds > 8 ? tr("04 / 漂移空间", "04 / MEMORY WORLD") : tr("05 / 多版本", "05 / MULTIPLE VERSION")}</span><strong>{tr(`保留 ${hud.memories} 段 · ${seconds}s · ${gameSpeed}×`, `RETAINED ${hud.memories} · ${seconds}s · ${gameSpeed}×`)}</strong><progress max={52} value={52-seconds} aria-label={tr("重构进度", "Reconstruction progress")} /></div>
           <div className="run-purpose"><b>{tr("记住最初", "REMEMBER")}</b><span>{tr("左右移动收集照片，避开干扰。稍后再次回想人数。", "MOVE TO COLLECT PHOTOS AND AVOID INTERFERENCE. RECALL THE COUNT LATER.")}</span></div>
           <div className="rush-feedback" data-fault={feedback.includes("串线") || feedback.includes("压缩坏了") || feedback.includes("碰撞")} role="status">{shownFeedback}</div>
-          <div className="pickup-legend"><span>{tr("照片：留下一个片段", "PHOTO: RETAIN A FRAGMENT")}</span><span>{tr("干扰：短暂打断画面，不结束体验", "INTERFERENCE: BRIEF DISRUPTION, NO GAME OVER")}</span></div></>}
+          <div className="pickup-legend"><span>{tr("照片：留下一个片段", "PHOTO: RETAIN A FRAGMENT")}</span><span>{tr("泡泡：保留片段并抵挡一次干扰", "BUBBLE: RETAIN A FRAGMENT AND BLOCK ONE HIT")}</span><span>{tr("干扰：短暂打断画面，不结束体验", "INTERFERENCE: BRIEF DISRUPTION, NO GAME OVER")}</span></div></>}
 
         {awake && !booting && !started && !record && <div key={intro} className="rush-intro" data-step={intro}>
           <span>{intro === 0
