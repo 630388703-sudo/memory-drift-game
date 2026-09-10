@@ -19,7 +19,7 @@ const GAME_SPEEDS = [0.8, 1, 1.25] as const;
 type GameSpeed = (typeof GAME_SPEEDS)[number];
 type HardwareControl = { wake: () => void; move: (axis: number) => void; press: (pressure?: number) => void; pause: () => void };
 declare global { interface Window { MemoryDriftInput?: HardwareControl } }
-type Item = { id: number; kind: ItemKind; x: number; y: number; speed: number; hit?: boolean };
+type Item = { id: number; kind: ItemKind; x: number; y: number; speed: number; size: number; hit?: boolean };
 type Trail = { x: number; at: number };
 type RunStats = { caught: number; missed: number; bumps: number };
 type MemoryRecord = RunStats & { score: number; checks: number; version: MemoryVersion; run: number; recalls?: number[] };
@@ -285,7 +285,7 @@ export default function MemoryRushGame() {
     fresh.recalls = [recallAnswer];
     fresh.started = true;
     fresh.lastSpawn = 0; fresh.startedAt = 0;
-    fresh.items = [{ id: fresh.nextId++, kind: "photo", x: .5, y: .6, speed: .12 }, { id: fresh.nextId++, kind: "photo", x: .38, y: .3, speed: .12 }];
+    fresh.items = [{ id: fresh.nextId++, kind: "photo", x: .5, y: .6, speed: .12, size: 1.28 }, { id: fresh.nextId++, kind: "photo", x: .38, y: .3, speed: .12, size: .78 }];
     runtimeRef.current = fresh;
     setHud({ score: 0, combo: 0, checks: 0, memories: 0, drift: 0, version: "A" });
     setRecord(null); setStarted(true); setChoice(false); setPaused(false); setSeconds(52);
@@ -464,14 +464,16 @@ export default function MemoryRushGame() {
           const lane = lanes[Math.floor(Math.random() * lanes.length)];
           const roll = Math.random();
           const kind: ItemKind = now < 6000 || roll < .78 ? "photo" : "cart";
-          r.items.push({ id: r.nextId++, kind, x: lane, y: 0.08, speed: 0.23 });
+          const photoSizes = [.72, .96, 1.28];
+          const size = kind === "photo" ? photoSizes[Math.floor(Math.random() * photoSizes.length)] : 1;
+          r.items.push({ id: r.nextId++, kind, x: lane, y: 0.08, speed: 0.23, size });
           r.lastSpawn = now;
         }
 
         r.items.forEach((item) => {
           item.y += item.speed * dt;
           if (item.hit || item.y < PLAYER_Y - 0.07 || item.y > PLAYER_Y + 0.09) return;
-          const playerHit = Math.abs(item.x - r.x) < (item.kind === "cart" ? 0.135 : 0.1);
+          const playerHit = Math.abs(item.x - r.x) < (item.kind === "cart" ? 0.135 : 0.08 + item.size * 0.035);
           const echoHit = false;
           if (item.kind === "photo" && (playerHit || echoHit)) {
             item.hit = true;
@@ -547,7 +549,7 @@ export default function MemoryRushGame() {
           ctx.save();
           if (item.kind === "photo" && (item.id % 3 === 0 || r.drift > .65)) ctx.filter = `grayscale(${Math.min(1, r.drift * 1.6)})`;
           const scale = 0.46 + item.y * 0.72;
-          if (item.kind === "photo") drawContained(ctx, assets.photo, item.x * W, item.y * H, 148 * scale, 164 * scale);
+          if (item.kind === "photo") drawContained(ctx, assets.photo, item.x * W, item.y * H, 148 * scale * item.size, 164 * scale * item.size);
           if (item.kind === "cart") drawContained(ctx, assets.cart, item.x * W, item.y * H, 250 * scale, 275 * scale);
           ctx.restore();
         });
@@ -683,7 +685,7 @@ export default function MemoryRushGame() {
           <div className="rush-feedback" data-fault={feedback.includes("串线") || feedback.includes("压缩坏了")} role="status">{shownFeedback}</div>
           <div className="pickup-legend"><span>{tr("照片：留下一个片段", "PHOTO: RETAIN A FRAGMENT")}</span><span>{tr("干扰：短暂打断画面，不结束体验", "INTERFERENCE: BRIEF DISRUPTION, NO GAME OVER")}</span></div></>}
 
-        {awake && !booting && !started && !record && <div className="rush-intro" data-step={intro}>
+        {awake && !booting && !started && !record && <div key={intro} className="rush-intro" data-step={intro}>
           <span>{intro === 0
             ? tr("从保存到回想 · 同一段记忆正在被重新写入", "FROM STORAGE TO RECALL · ONE MEMORY IS BEING REWRITTEN")
             : tr(`进入记忆 0${intro + 1} / 05`, `MEMORY ENTRY 0${intro + 1} / 05`)}</span>
