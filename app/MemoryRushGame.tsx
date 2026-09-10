@@ -668,7 +668,9 @@ export default function MemoryRushGame() {
           <div className="pickup-legend"><span>{tr("照片：留下一个片段", "PHOTO: RETAIN A FRAGMENT")}</span><span>{tr("干扰：短暂打断画面，不结束体验", "INTERFERENCE: BRIEF DISRUPTION, NO GAME OVER")}</span></div></>}
 
         {awake && !booting && !started && !record && <div className="rush-intro" data-step={intro}>
-          <span>{tr(`进入记忆 0${intro + 1} / 05`, `MEMORY ENTRY 0${intro + 1} / 05`)}</span>
+          <span>{intro === 0
+            ? tr("从保存到回想 · 同一段记忆正在被重新写入", "FROM STORAGE TO RECALL · ONE MEMORY IS BEING REWRITTEN")
+            : tr(`进入记忆 0${intro + 1} / 05`, `MEMORY ENTRY 0${intro + 1} / 05`)}</span>
           <nav className="experience-route" aria-label={tr("体验流程", "Experience route")}>
             {[tr("靠近", "APPROACH"),tr("观看", "OBSERVE"),tr("回想", "RECALL"),tr("穿行", "JOURNEY"),tr("对照", "COMPARE")].map((label,index) => {
               const active = intro < 2 ? 0 : intro === 2 ? 1 : intro === 3 ? 2 : 3;
@@ -676,8 +678,9 @@ export default function MemoryRushGame() {
             })}
           </nav>
           <h1>{intro === 0 ? tr("忘了自己是什么", "WHAT WAS I AGAIN?") : intro === 1 ? tr("我们为什么反复回看？", "WHY DO WE KEEP LOOKING BACK?") : intro === 2 ? tr("先看一眼这段记忆", "LOOK AT THIS MEMORY") : intro === 3 ? tr("你刚才看见了几个人？", "HOW MANY PEOPLE DID YOU SEE?") : tr("接下来，记忆会反过来看你", "NEXT, THE MEMORY WILL WATCH YOU")}</h1>
-          {intro === 0 && <div className="intro-manifesto" aria-label={tr("体验主题", "Experience themes")}>
-            <strong>{tr("保存 ≠ 记住", "STORAGE ≠ MEMORY")}</strong><strong>{tr("熟悉 ≠ 准确", "FAMILIAR ≠ TRUE")}</strong><strong>{tr("遗忘 ≠ 失败", "FORGETTING ≠ FAILURE")}</strong>
+          {intro === 0 && <div className="intro-photo intro-photo-0">
+            <img src={resolveImageUrl(photoUrl)} alt={tr("被装置保存并重新书写的记忆图像", "A MEMORY IMAGE STORED AND REWRITTEN BY THE MACHINE")} />
+            <i />
           </div>}
           {intro === 1 && <div className="motive-loop" aria-label={tr("反复回看的循环", "The cycle of repeated checking")}>
             <span><b>01</b>{tr("害怕忘记", "FEAR LOSS")}</span><i>→</i><span><b>02</b>{tr("保存与搜索", "SAVE & SEARCH")}</span><i>→</i><span><b>03</b>{tr("反复确认", "CHECK AGAIN")}</span><i>↺</i>
@@ -689,9 +692,9 @@ export default function MemoryRushGame() {
           {intro === 4 && <div className="version-map" aria-label={tr("记忆版本变化", "Memory version changes")}>
             <span data-version="A"><b>A</b>{tr("彩色原图", "FULL COLOR")}</span><i>→</i><span data-version="B"><b>B</b>{tr("全黑白", "MONOCHROME")}</span><i>→</i><span data-version="C"><b>C</b>{tr("紫蓝重构", "VIOLET REBUILD")}</span>
           </div>}
-          <p>{intro === 0 ? tr("你将进入同一段记忆三次。装置不会判断你对不对，只会记录：反复回想之后，你还相信哪一个版本？", "YOU WILL ENTER THE SAME MEMORY THREE TIMES. THE MACHINE WILL NOT JUDGE YOU; IT WILL RECORD WHICH VERSION YOU TRUST AFTER REPEATED RECALL.") : intro === 1 ? tr("害怕遗忘让我们不断保存、搜索和回看。但每一次提取都不是读取原件，而是在当下重新组织过去。", "FEAR OF FORGETTING MAKES US SAVE, SEARCH, AND REPLAY. BUT RECALL DOES NOT OPEN AN ORIGINAL FILE; IT REORGANIZES THE PAST IN THE PRESENT.") : intro === 2 ? tr("请看几秒。不要刻意数数，也不要寻找答案，只记住你自然注意到的部分。", "Look for a few seconds. Do not count deliberately or hunt for an answer; notice only what stays with you.") : intro === 3 ? tr("凭第一感觉作答。这个数字不会带来奖励或失败，它只会成为你的第一个记忆版本。", "ANSWER FROM FIRST IMPRESSION. THIS NUMBER CREATES NEITHER REWARD NOR FAILURE; IT BECOMES YOUR FIRST VERSION OF THE MEMORY.") : tr("左右移动只决定哪些照片被留下、哪些干扰被避开。同一个问题会再次出现；画面会从彩色突然变成黑白，再重构成紫蓝色。", "MOVEMENT ONLY DECIDES WHICH PHOTOS REMAIN AND WHICH INTERFERENCE IS AVOIDED. THE QUESTION WILL RETURN AS COLOR COLLAPSES INTO MONOCHROME, THEN REBUILDS IN VIOLET AND BLUE.")}</p>
+          <p>{intro === 0 ? tr("你越确认一段记忆，它就越真实吗？靠近并交出一次判断，装置会把你的观看变成下一版记忆。", "DOES A MEMORY BECOME TRUER THE MORE YOU VERIFY IT? OFFER ONE JUDGMENT; THE MACHINE WILL TURN YOUR VIEWING INTO ITS NEXT VERSION.") : intro === 1 ? tr("害怕遗忘让我们不断保存、搜索和回看。但每一次提取都不是读取原件，而是在当下重新组织过去。", "FEAR OF FORGETTING MAKES US SAVE, SEARCH, AND REPLAY. BUT RECALL DOES NOT OPEN AN ORIGINAL FILE; IT REORGANIZES THE PAST IN THE PRESENT.") : intro === 2 ? tr("请看几秒。不要刻意数数，也不要寻找答案，只记住你自然注意到的部分。", "Look for a few seconds. Do not count deliberately or hunt for an answer; notice only what stays with you.") : intro === 3 ? tr("凭第一感觉作答。这个数字不会带来奖励或失败，它只会成为你的第一个记忆版本。", "ANSWER FROM FIRST IMPRESSION. THIS NUMBER CREATES NEITHER REWARD NOR FAILURE; IT BECOMES YOUR FIRST VERSION OF THE MEMORY.") : tr("左右移动只决定哪些照片被留下、哪些干扰被避开。同一个问题会再次出现；画面会从彩色突然变成黑白，再重构成紫蓝色。", "MOVEMENT ONLY DECIDES WHICH PHOTOS REMAIN AND WHICH INTERFERENCE IS AVOIDED. THE QUESTION WILL RETURN AS COLOR COLLAPSES INTO MONOCHROME, THEN REBUILDS IN VIOLET AND BLUE.")}</p>
           {previous && intro === 0 && <div className="previous-memory"><b>{tr(`上次：VERSION ${previous.version}`, `LAST: VERSION ${previous.version}`)}</b><span>{tr(`保留 ${previous.caught} 个片段 · 本次从原图开始`, `${previous.caught} FRAGMENTS · START AGAIN FROM THE FIRST IMAGE`)}</span></div>}
-          <button disabled={!ready} onClick={advanceIntro}>{loadError ? tr("素材加载失败，请刷新页面", "ASSET LOAD FAILED · REFRESH") : !ready ? tr("正在装载记忆…", "LOADING MEMORY…") : intro === 0 ? tr("从这里开始", "BEGIN HERE") : intro === 1 ? tr("让我看一段记忆", "SHOW ME A MEMORY") : intro === 2 ? tr("我看过了", "I HAVE SEEN IT") : intro === 3 ? tr("保留这个回答", "KEEP THIS ANSWER") : tr("进入被改写的记忆", "ENTER THE REWRITTEN MEMORY")}</button>
+          <button disabled={!ready} onClick={advanceIntro}>{loadError ? tr("素材加载失败，请刷新页面", "ASSET LOAD FAILED · REFRESH") : !ready ? tr("正在装载记忆…", "LOADING MEMORY…") : intro === 0 ? tr("把这段记忆交给装置", "GIVE THIS MEMORY TO THE MACHINE") : intro === 1 ? tr("让我看一段记忆", "SHOW ME A MEMORY") : intro === 2 ? tr("我看过了", "I HAVE SEEN IT") : intro === 3 ? tr("保留这个回答", "KEEP THIS ANSWER") : tr("进入被改写的记忆", "ENTER THE REWRITTEN MEMORY")}</button>
           {loadError && <button onClick={() => location.reload()}>{tr("重新加载", "RELOAD")}</button>}
           <small>{tr("点击、回车或街机按钮继续", "CLICK · ENTER · OR ARCADE BUTTON")}</small>
           {previous && intro === 0 && <button className="rush-skip" disabled={!ready} onClick={restartObservation}>{tr("直接观察原图", "GO TO THE FIRST IMAGE")}</button>}
@@ -727,3 +730,4 @@ export default function MemoryRushGame() {
     </main>
   );
 }
+
