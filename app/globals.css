@@ -1059,3 +1059,34 @@ body { font-family:"Arial Rounded MT Bold","PingFang SC","Microsoft YaHei",syste
   .memory-result,.memory-result::before,.memory-result>*,.memory-result button::before,.result-process span,.result-traces div { animation:none!important; }
 }
 
+/* V13 — collisions rupture the visual model, then settle quickly. */
+.rush-game[data-impact="a"] { animation:impactShellA .62s cubic-bezier(.18,.78,.22,1) both; }
+.rush-game[data-impact="b"] { animation:impactShellB .62s cubic-bezier(.18,.78,.22,1) both; }
+.rush-feedback[data-fault="true"] { animation:impactNotice .11s steps(2,end) 6; }
+@keyframes impactShellA {
+  0% { transform:translate(0,0) rotate(0); filter:none; }
+  8% { transform:translate(-1.35cqw,.55cqh) rotate(-.35deg) scale(1.012); filter:contrast(1.24) saturate(1.38); }
+  17% { transform:translate(1.05cqw,-.8cqh) rotate(.28deg) scale(.997); }
+  29% { transform:translate(-.7cqw,.38cqh) rotate(-.18deg); filter:contrast(1.12) saturate(1.18); }
+  44% { transform:translate(.42cqw,-.22cqh) rotate(.09deg); }
+  68% { transform:translate(-.16cqw,.08cqh); filter:none; }
+  100% { transform:none; filter:none; }
+}
+@keyframes impactShellB {
+  0% { transform:translate(0,0) rotate(0); filter:none; }
+  8% { transform:translate(1.35cqw,-.55cqh) rotate(.35deg) scale(1.012); filter:contrast(1.24) saturate(1.38); }
+  17% { transform:translate(-1.05cqw,.8cqh) rotate(-.28deg) scale(.997); }
+  29% { transform:translate(.7cqw,-.38cqh) rotate(.18deg); filter:contrast(1.12) saturate(1.18); }
+  44% { transform:translate(-.42cqw,.22cqh) rotate(-.09deg); }
+  68% { transform:translate(.16cqw,-.08cqh); filter:none; }
+  100% { transform:none; filter:none; }
+}
+@keyframes impactNotice {
+  0% { transform:translateX(-7px); background:#151922; box-shadow:-9px 0 #20e6d0,9px 0 #ff3f77; }
+  50% { transform:translateX(9px); background:#3a1321; box-shadow:-5px 0 #4a7dff,5px 0 #fff16c; }
+  100% { transform:translateX(-2px); }
+}
+@media (prefers-reduced-motion:reduce) {
+  .rush-game[data-impact],.rush-feedback[data-fault="true"] { animation:none!important; }
+}
+
