@@ -5,7 +5,7 @@ export default defineConfig({
   root: "standalone",
   base: process.env.GITHUB_ACTIONS ? "/memory-drift-game/" : "/",
   plugins: [react()],
-  publicDir: false,
+  publicDir: "../public",
   build: { outDir: "../gh-pages", emptyOutDir: true, sourcemap: false },
 });
 
