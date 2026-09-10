@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./layout-v14.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://memory-drift-game.dsydsy0920900940.chatgpt.site"),
