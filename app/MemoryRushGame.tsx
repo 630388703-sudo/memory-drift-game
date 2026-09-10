@@ -238,7 +238,7 @@ export default function MemoryRushGame() {
 
   useEffect(() => {
     document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
-    document.title = language === "zh" ? "记忆代谢｜交互实验" : "MEMORY METABOLISM | INTERACTIVE EXPERIMENT";
+    document.title = language === "zh" ? "忘了自己是什么｜交互实验" : "WHAT WAS I AGAIN? | INTERACTIVE EXPERIMENT";
   }, [language]);
 
   useEffect(() => {
@@ -327,11 +327,11 @@ export default function MemoryRushGame() {
 
   const advanceIntro = useCallback(() => {
     unlockAudio(); chime(720, .1);
-    if (intro === 0) setIntro(1); else if (intro === 1) setIntro(2); else begin();
+    if (intro < 4) setIntro(intro + 1); else begin();
   }, [intro, begin, unlockAudio, chime]);
 
   const restartObservation = useCallback(() => {
-    setRecord(null); setIntro(1); setRecallAnswer(4); setShareMessage("");
+    setRecord(null); setIntro(2); setRecallAnswer(4); setShareMessage("");
   }, []);
 
   const wake = useCallback(() => {
@@ -363,8 +363,8 @@ export default function MemoryRushGame() {
       if (["arrowleft","arrowright","arrowup"," "].includes(key)) event.preventDefault();
       if (deviceRef.current !== "keyboard") { deviceRef.current = "keyboard"; setLastDevice("keyboard"); }
       if (!runtimeRef.current.started && !record) {
-        if (["arrowleft","a","j"].includes(key) && intro === 2) { setRecallAnswer(value => Math.max(3, value - 1)); return; }
-        if (["arrowright","d","l"].includes(key) && intro === 2) { setRecallAnswer(value => Math.min(5, value + 1)); return; }
+        if (["arrowleft","a","j"].includes(key) && intro === 3) { setRecallAnswer(value => Math.max(3, value - 1)); return; }
+        if (["arrowright","d","l"].includes(key) && intro === 3) { setRecallAnswer(value => Math.min(5, value + 1)); return; }
         if (key === "enter" || key === " ") { advanceIntro(); return; }
       }
       if (record && ["enter", " ", "z", "x"].includes(key) && !event.repeat) { restartObservation(); return; }
@@ -395,7 +395,7 @@ export default function MemoryRushGame() {
     const markHardware = () => { if (deviceRef.current !== "gamepad") { deviceRef.current = "gamepad"; setLastDevice("gamepad"); } };
     const control: HardwareControl = {
       wake: () => { markHardware(); wake(); },
-      move: (axis) => { markHardware(); const direction=Math.sign(axis); if (choice && direction) { choiceIndexRef.current=Math.max(0,Math.min(2,choiceIndexRef.current+direction)); setChoiceIndex(choiceIndexRef.current); return; } if (!runtimeRef.current.started && intro===2 && direction) { setRecallAnswer(value=>Math.max(3,Math.min(5,value+direction))); return; } const r=runtimeRef.current; r.targetX=Math.max(.22,Math.min(.78,r.targetX+Math.max(-1,Math.min(1,axis))*.075)); r.lastInteraction=r.clock; r.idleNotified=false; },
+      move: (axis) => { markHardware(); const direction=Math.sign(axis); if (choice && direction) { choiceIndexRef.current=Math.max(0,Math.min(2,choiceIndexRef.current+direction)); setChoiceIndex(choiceIndexRef.current); return; } if (!runtimeRef.current.started && intro===3 && direction) { setRecallAnswer(value=>Math.max(3,Math.min(5,value+direction))); return; } const r=runtimeRef.current; r.targetX=Math.max(.22,Math.min(.78,r.targetX+Math.max(-1,Math.min(1,axis))*.075)); r.lastInteraction=r.clock; r.idleNotified=false; },
       press: () => { markHardware(); if (!awakeRef.current) wake(); else if (bootingRef.current) return; else if (choice) chooseRecall([3,4,5][choiceIndexRef.current]); else if (runtimeRef.current.started) return; else if (record) restartObservation(); else advanceIntro(); },
       pause: () => { markHardware(); const r=runtimeRef.current; if (r.started && !choice) { r.paused=!r.paused; setPaused(r.paused); } },
     };
@@ -434,7 +434,7 @@ export default function MemoryRushGame() {
         const actionPressed = shortPressed || lockPressed;
         const startPressed = Boolean(pad.buttons[9]?.pressed);
         if ((stick || actionPressed || startPressed) && deviceRef.current !== "gamepad") { deviceRef.current = "gamepad"; setLastDevice("gamepad"); }
-        if (!r.started && intro===2 && stick && !inputRef.current.gamepadHorizontal) setRecallAnswer(value=>Math.max(3,Math.min(5,value+Math.sign(stick))));
+        if (!r.started && intro===3 && stick && !inputRef.current.gamepadHorizontal) setRecallAnswer(value=>Math.max(3,Math.min(5,value+Math.sign(stick))));
         if (choice && stick && !inputRef.current.gamepadHorizontal) { choiceIndexRef.current = (choiceIndexRef.current + (stick > 0 ? 1 : 2)) % 3; setChoiceIndex(choiceIndexRef.current); chime(680, .07); }
         if (actionPressed && !inputRef.current.gamepadDash) { if (!awakeRef.current) wake(); else if (bootingRef.current) { /* wait for signal loading */ } else if (choice) chooseRecall([3,4,5][choiceIndexRef.current]); else if (r.started) { /* movement is the only in-run control */ } else if (record) restartObservation(); else advanceIntro(); }
         if (startPressed && !inputRef.current.gamepadStart) { if (!awakeRef.current) wake(); else if (choice) { /* keep the choice pause */ } else if (r.started) { r.paused = !r.paused; setPaused(r.paused); } else if (record) restartObservation(); else advanceIntro(); }
@@ -621,7 +621,7 @@ export default function MemoryRushGame() {
 
         {awake && !booting && <header className="rush-hud">
           <div><span>{tr("叠加层", "LAYERS")}</span><strong>{hud.memories}</strong></div>
-          <div className="rush-title"><span>MEMORY METABOLISM</span><strong>VERSION {hud.version}</strong></div>
+          <div className="rush-title"><span>WHAT WAS I AGAIN?</span><strong>VERSION {hud.version}</strong></div>
           <div><span>{tr("重复确认", "RECHECKS")}</span><strong>{String(hud.checks).padStart(2, "0")}</strong></div>
         </header>}
 
@@ -667,22 +667,31 @@ export default function MemoryRushGame() {
           <div className="rush-feedback" data-fault={feedback.includes("串线") || feedback.includes("压缩坏了")} role="status">{shownFeedback}</div>
           <div className="pickup-legend"><span>{tr("照片：留下一个片段", "PHOTO: RETAIN A FRAGMENT")}</span><span>{tr("干扰：短暂打断画面，不结束体验", "INTERFERENCE: BRIEF DISRUPTION, NO GAME OVER")}</span></div></>}
 
-        {awake && !booting && !started && !record && <div className="rush-intro">
-          <span>{intro === 0 ? tr("从保存到回想 · 同一段记忆正在被重新写入", "FROM STORAGE TO RECALL · ONE MEMORY IS BEING REWRITTEN") : tr(`观察实验 0${intro} / 02`, `OBSERVATION 0${intro} / 02`)}</span>
+        {awake && !booting && !started && !record && <div className="rush-intro" data-step={intro}>
+          <span>{tr(`进入记忆 0${intro + 1} / 05`, `MEMORY ENTRY 0${intro + 1} / 05`)}</span>
           <nav className="experience-route" aria-label={tr("体验流程", "Experience route")}>
             {[tr("靠近", "APPROACH"),tr("观看", "OBSERVE"),tr("回想", "RECALL"),tr("穿行", "JOURNEY"),tr("对照", "COMPARE")].map((label,index) => {
-              const active = intro === 0 ? 0 : intro === 1 ? 1 : 2;
+              const active = intro < 2 ? 0 : intro === 2 ? 1 : intro === 3 ? 2 : 3;
               return <i key={label} data-active={index <= active}><b>0{index + 1}</b>{label}</i>;
             })}
           </nav>
-          <h1>{intro === 0 ? tr("记忆代谢", "MEMORY METABOLISM") : intro === 1 ? tr("先看一眼这段记忆", "LOOK AT THIS MEMORY") : tr("你刚才看见了几个人？", "HOW MANY PEOPLE DID YOU SEE?")}</h1>
-          {intro === 1 && <div className="intro-photo intro-photo-1"><img src={resolveImageUrl(backgroundAUrl)} alt={tr("通往夏日乐园的旧照片", "Old photograph of a road to the summer park")} /><div className="memory-figures" aria-label={tr("照片里有四个人", "Four people are visible in the photograph")}>{[.82,1,.7,.9].map((scale,index) => <img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{"--figure-scale":scale} as CSSProperties} />)}</div><i /></div>}
-          {intro === 2 && <div className="recall-choice" role="group" aria-label={tr("选择记得的人数", "Choose the number you remember")}>
+          <h1>{intro === 0 ? tr("忘了自己是什么", "WHAT WAS I AGAIN?") : intro === 1 ? tr("我们为什么反复回看？", "WHY DO WE KEEP LOOKING BACK?") : intro === 2 ? tr("先看一眼这段记忆", "LOOK AT THIS MEMORY") : intro === 3 ? tr("你刚才看见了几个人？", "HOW MANY PEOPLE DID YOU SEE?") : tr("接下来，记忆会反过来看你", "NEXT, THE MEMORY WILL WATCH YOU")}</h1>
+          {intro === 0 && <div className="intro-manifesto" aria-label={tr("体验主题", "Experience themes")}>
+            <strong>{tr("保存 ≠ 记住", "STORAGE ≠ MEMORY")}</strong><strong>{tr("熟悉 ≠ 准确", "FAMILIAR ≠ TRUE")}</strong><strong>{tr("遗忘 ≠ 失败", "FORGETTING ≠ FAILURE")}</strong>
+          </div>}
+          {intro === 1 && <div className="motive-loop" aria-label={tr("反复回看的循环", "The cycle of repeated checking")}>
+            <span><b>01</b>{tr("害怕忘记", "FEAR LOSS")}</span><i>→</i><span><b>02</b>{tr("保存与搜索", "SAVE & SEARCH")}</span><i>→</i><span><b>03</b>{tr("反复确认", "CHECK AGAIN")}</span><i>↺</i>
+          </div>}
+          {intro === 2 && <div className="intro-photo intro-photo-1"><img src={resolveImageUrl(backgroundAUrl)} alt={tr("通往夏日乐园的旧照片", "Old photograph of a road to the summer park")} /><div className="memory-figures" aria-label={tr("照片里有四个人", "Four people are visible in the photograph")}>{[.82,1,.7,.9].map((scale,index) => <img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{"--figure-scale":scale} as CSSProperties} />)}</div><i /></div>}
+          {intro === 3 && <div className="recall-choice" role="group" aria-label={tr("选择记得的人数", "Choose the number you remember")}>
             {[3,4,5].map(value => <button key={value} data-selected={recallAnswer === value} onClick={() => { setRecallAnswer(value); chime(560 + value * 70, .09); }}><strong>{value}</strong><span>{tr("个人", "PEOPLE")}</span></button>)}
           </div>}
-          <p>{intro === 0 ? tr("人害怕遗忘，于是不断保存、搜索、回看。但每一次确认，也可能把回忆改写成更熟悉的版本。", "WE FEAR FORGETTING, SO WE SAVE, SEARCH, AND REPLAY. YET EACH ACT OF VERIFICATION MAY REWRITE A MEMORY INTO A MORE FAMILIAR VERSION.") : intro === 1 ? tr("请看几秒。不要寻找答案，只记住你自然注意到的部分。", "Look for a few seconds. Do not hunt for an answer; simply notice what stays with you.") : tr("记住你的判断。接下来左右移动收集照片、避开干扰；同一个问题会再次出现，而世界会从彩色变为黑白，再重构为紫蓝色。", "Keep your answer in mind. Move to collect photos and avoid interference. The same question will return as the world turns from color to black-and-white, then reconstructs itself in violet and blue.")}</p>
+          {intro === 4 && <div className="version-map" aria-label={tr("记忆版本变化", "Memory version changes")}>
+            <span data-version="A"><b>A</b>{tr("彩色原图", "FULL COLOR")}</span><i>→</i><span data-version="B"><b>B</b>{tr("全黑白", "MONOCHROME")}</span><i>→</i><span data-version="C"><b>C</b>{tr("紫蓝重构", "VIOLET REBUILD")}</span>
+          </div>}
+          <p>{intro === 0 ? tr("你将进入同一段记忆三次。装置不会判断你对不对，只会记录：反复回想之后，你还相信哪一个版本？", "YOU WILL ENTER THE SAME MEMORY THREE TIMES. THE MACHINE WILL NOT JUDGE YOU; IT WILL RECORD WHICH VERSION YOU TRUST AFTER REPEATED RECALL.") : intro === 1 ? tr("害怕遗忘让我们不断保存、搜索和回看。但每一次提取都不是读取原件，而是在当下重新组织过去。", "FEAR OF FORGETTING MAKES US SAVE, SEARCH, AND REPLAY. BUT RECALL DOES NOT OPEN AN ORIGINAL FILE; IT REORGANIZES THE PAST IN THE PRESENT.") : intro === 2 ? tr("请看几秒。不要刻意数数，也不要寻找答案，只记住你自然注意到的部分。", "Look for a few seconds. Do not count deliberately or hunt for an answer; notice only what stays with you.") : intro === 3 ? tr("凭第一感觉作答。这个数字不会带来奖励或失败，它只会成为你的第一个记忆版本。", "ANSWER FROM FIRST IMPRESSION. THIS NUMBER CREATES NEITHER REWARD NOR FAILURE; IT BECOMES YOUR FIRST VERSION OF THE MEMORY.") : tr("左右移动只决定哪些照片被留下、哪些干扰被避开。同一个问题会再次出现；画面会从彩色突然变成黑白，再重构成紫蓝色。", "MOVEMENT ONLY DECIDES WHICH PHOTOS REMAIN AND WHICH INTERFERENCE IS AVOIDED. THE QUESTION WILL RETURN AS COLOR COLLAPSES INTO MONOCHROME, THEN REBUILDS IN VIOLET AND BLUE.")}</p>
           {previous && intro === 0 && <div className="previous-memory"><b>{tr(`上次：VERSION ${previous.version}`, `LAST: VERSION ${previous.version}`)}</b><span>{tr(`保留 ${previous.caught} 个片段 · 本次从原图开始`, `${previous.caught} FRAGMENTS · START AGAIN FROM THE FIRST IMAGE`)}</span></div>}
-          <button disabled={!ready} onClick={advanceIntro}>{loadError ? tr("素材加载失败，请刷新页面", "ASSET LOAD FAILED · REFRESH") : !ready ? tr("正在装载记忆…", "LOADING MEMORY…") : intro === 0 ? tr("进入记忆实验", "ENTER THE MEMORY EXPERIMENT") : intro === 1 ? tr("我看过了", "I HAVE SEEN IT") : tr("记下回答，进入旅程", "RECORD ANSWER · BEGIN")}</button>
+          <button disabled={!ready} onClick={advanceIntro}>{loadError ? tr("素材加载失败，请刷新页面", "ASSET LOAD FAILED · REFRESH") : !ready ? tr("正在装载记忆…", "LOADING MEMORY…") : intro === 0 ? tr("从这里开始", "BEGIN HERE") : intro === 1 ? tr("让我看一段记忆", "SHOW ME A MEMORY") : intro === 2 ? tr("我看过了", "I HAVE SEEN IT") : intro === 3 ? tr("保留这个回答", "KEEP THIS ANSWER") : tr("进入被改写的记忆", "ENTER THE REWRITTEN MEMORY")}</button>
           {loadError && <button onClick={() => location.reload()}>{tr("重新加载", "RELOAD")}</button>}
           <small>{tr("点击、回车或街机按钮继续", "CLICK · ENTER · OR ARCADE BUTTON")}</small>
           {previous && intro === 0 && <button className="rush-skip" disabled={!ready} onClick={restartObservation}>{tr("直接观察原图", "GO TO THE FIRST IMAGE")}</button>}
