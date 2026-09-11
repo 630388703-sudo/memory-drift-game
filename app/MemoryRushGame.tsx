@@ -12,10 +12,13 @@ import glitchOverlayUrl from "../game/assets/memory-glitch-overlay.webp";
 const W = 1080;
 const H = 1920;
 const PLAYER_Y = 0.79;
+const RUN_DURATION_MS = 36000;
+const RECALL_AT_MS = [10000, 23000] as const;
 
 type MemoryVersion = "A" | "B" | "C";
 type ItemKind = "photo" | "cart" | "bubble";
 type DeviceKind = "touch" | "keyboard" | "gamepad";
+type CheckpointPhase = "count" | "detail";
 const GAME_SPEEDS = [0.8, 1, 1.25] as const;
 type GameSpeed = (typeof GAME_SPEEDS)[number];
 type HardwareControl = { wake: () => void; move: (axis: number) => void; press: (pressure?: number) => void; pause: () => void };
@@ -23,7 +26,7 @@ declare global { interface Window { MemoryDriftInput?: HardwareControl } }
 type Item = { id: number; kind: ItemKind; x: number; y: number; speed: number; size: number; hit?: boolean };
 type Trail = { x: number; at: number };
 type RunStats = { caught: number; missed: number; bumps: number };
-type MemoryRecord = RunStats & { score: number; checks: number; version: MemoryVersion; run: number; recalls?: number[] };
+type MemoryRecord = RunStats & { score: number; checks: number; version: MemoryVersion; run: number; recalls?: number[]; details?: string[] };
 type Runtime = {
   clock: number;
   paused: boolean;
@@ -32,6 +35,7 @@ type Runtime = {
   impactUntil: number;
   recallStage: number;
   recalls: number[];
+  details: string[];
   started: boolean;
   x: number;
   targetX: number;
@@ -56,7 +60,7 @@ type Runtime = {
 
 const emptyStats = (): RunStats => ({ caught: 0, missed: 0, bumps: 0 });
 const makeRuntime = (): Runtime => ({
-  clock: 0, paused: false, drift: 0, effectUntil: 0, impactUntil: 0, recallStage: 0, recalls: [],
+  clock: 0, paused: false, drift: 0, effectUntil: 0, impactUntil: 0, recallStage: 0, recalls: [], details: [],
   started: false, x: 0.5, targetX: 0.5, items: [], nextId: 1, lastSpawn: 0,
   score: 0, combo: 0, checks: 0, memories: 0, version: "A", previousVersion: "A", versionFade: 0,
   shakeUntil: 0, shield: 0, startedAt: 0, lastInteraction: 0, idleNotified: false,
@@ -68,6 +72,8 @@ const feedbackEn = (text: string) => {
   if (text.startsWith("连续记住")) return text.replace("连续记住", "MEMORY CHAIN");
   if (text.startsWith("第 ")) return text.replace("次确认：熟悉感正在增加", " CHECKS · FAMILIARITY IS INCREASING").replace("第 ", "");
   if (text.startsWith("进入 VERSION")) return text.replace("进入", "ENTERED").replace("场景记忆已重排", "SCENE MEMORY REORDERED");
+  if (text.startsWith("人数判断已记录")) return "COUNT RECORDED · NOW RECALL ONE VISUAL DETAIL";
+  if (text.startsWith("回答已写入")) return text.replace("回答已写入 · 世界切换为", "ANSWER WRITTEN · WORLD SWITCHED TO");
   const table: Record<string, string> = {
     "左右移动收集照片 · 避开干扰 · 稍后回想": "MOVE TO COLLECT PHOTOS · AVOID INTERFERENCE · RECALL LATER",
     "回想已记录 · 继续寻找照片": "RECALL RECORDED · CONTINUE FINDING PHOTOS",
@@ -97,6 +103,11 @@ const feedbackEn = (text: string) => {
   return table[text] ?? text;
 };
 
+const checkpointOptions = (phase: CheckpointPhase, stage: number): Array<number | string> => {
+  if (phase === "count") return [3, 4, 5];
+  return stage === 1 ? ["left", "center", "right"] : ["blue", "white", "pink"];
+};
+
 const resolveImageUrl = (source: unknown) => typeof source === "string"
   ? source
   : typeof source === "object" && source !== null && "src" in source
@@ -121,7 +132,6 @@ function cropDraw(
 ) {
   ctx.drawImage(image, crop[0], crop[1], crop[2], crop[3], x - width / 2, y - height / 2, width, height);
 }
-
 
 function drawContained(ctx: CanvasRenderingContext2D, image: HTMLImageElement, x: number, y: number, maxWidth: number, maxHeight: number) {
   const ratio = Math.min(maxWidth / image.naturalWidth, maxHeight / image.naturalHeight);
@@ -191,10 +201,12 @@ export default function MemoryRushGame() {
   const [lastDevice, setLastDevice] = useState<DeviceKind>("touch");
   const deviceRef = useRef<DeviceKind>("touch");
   const [choice, setChoice] = useState(false);
+  const [choicePhase, setChoicePhase] = useState<CheckpointPhase>("count");
+  const [choiceStage, setChoiceStage] = useState(0);
   const [choiceIndex, setChoiceIndex] = useState(0);
   const choiceIndexRef = useRef(0);
   const [paused, setPaused] = useState(false);
-  const [seconds, setSeconds] = useState(52);
+  const [seconds, setSeconds] = useState(RUN_DURATION_MS / 1000);
   const [gameSpeed, setGameSpeed] = useState<GameSpeed>(() => {
     if (typeof window === "undefined") return 1;
     const saved = Number(window.localStorage.getItem("memory-rush-speed"));
@@ -245,6 +257,8 @@ export default function MemoryRushGame() {
   });
   const [feedback, setFeedback] = useState("过去的你会帮忙补捡");
   const [impactPulse, setImpactPulse] = useState<"a" | "b" | null>(null);
+  const [versionPulse, setVersionPulse] = useState<MemoryVersion | null>(null);
+  const versionTimerRef = useRef(0);
   const [hud, setHud] = useState({ score: 0, combo: 0, checks: 0, memories: 0, drift: 0, version: "A" as MemoryVersion });
   const shownFeedback = language === "zh" ? feedback : feedbackEn(feedback);
 
@@ -259,7 +273,7 @@ export default function MemoryRushGame() {
     ambience.loop = true; ambience.preload = "auto"; ambience.volume = .14;
     impact.preload = "auto"; impact.volume = 1;
     ambienceRef.current = ambience; impactRef.current = impact;
-    return () => { ambience.pause(); impact.pause(); ambienceRef.current = null; impactRef.current = null; window.clearTimeout(bootTimerRef.current); };
+    return () => { ambience.pause(); impact.pause(); ambienceRef.current = null; impactRef.current = null; window.clearTimeout(bootTimerRef.current); window.clearTimeout(versionTimerRef.current); };
   }, []);
 
   useEffect(() => {
@@ -292,7 +306,8 @@ export default function MemoryRushGame() {
     fresh.items = [{ id: fresh.nextId++, kind: "photo", x: .5, y: .6, speed: .12, size: 1.28 }, { id: fresh.nextId++, kind: "bubble", x: .38, y: .3, speed: .12, size: 1 }];
     runtimeRef.current = fresh;
     setHud({ score: 0, combo: 0, checks: 0, memories: 0, drift: 0, version: "A" });
-    setRecord(null); setStarted(true); setChoice(false); setPaused(false); setSeconds(52);
+    window.clearTimeout(versionTimerRef.current);
+    setRecord(null); setStarted(true); setChoice(false); setChoicePhase("count"); setChoiceStage(0); setPaused(false); setVersionPulse(null); setSeconds(RUN_DURATION_MS / 1000);
     setFeedback("左右移动收集照片 · 避开干扰 · 稍后回想");
   }, [recallAnswer, unlockAudio]);
 
@@ -300,7 +315,7 @@ export default function MemoryRushGame() {
     const r = runtimeRef.current;
     if (!r.started) return;
     r.started = false;
-    const next: MemoryRecord = { ...r.stats, score: r.score, checks: r.checks, version: r.version, run: (previous?.run ?? 0) + 1, recalls: [...r.recalls] };
+    const next: MemoryRecord = { ...r.stats, score: r.score, checks: r.checks, version: r.version, run: (previous?.run ?? 0) + 1, recalls: [...r.recalls], details: [...r.details] };
     try { localStorage.setItem("memory-rush-record", JSON.stringify(next)); } catch { /* optional persistence */ }
     setPrevious(next); setRecord(next); setStarted(false);
     setShareMessage("");
@@ -322,20 +337,35 @@ export default function MemoryRushGame() {
     if (deviceRef.current !== "touch") { deviceRef.current = "touch"; setLastDevice("touch"); }
   }, []);
 
-  const chooseRecall = useCallback((answer: number) => {
+  const chooseCheckpointOption = useCallback((answer: number | string) => {
     const r = runtimeRef.current;
-    if (!r.started || !r.paused || r.recalls.length !== r.recallStage) return;
-    r.recalls.push(answer);
+    if (!r.started || !r.paused) return;
+    if (choicePhase === "count") {
+      if (typeof answer !== "number" || r.recalls.length !== r.recallStage) return;
+      r.recalls.push(answer);
+      choiceIndexRef.current = 1;
+      setChoiceIndex(1);
+      setChoicePhase("detail");
+      setFeedback("人数判断已记录 · 再确认一个画面细节");
+      chime(720, .12);
+      return;
+    }
+    if (typeof answer !== "string") return;
+    r.details.push(answer);
     r.checks += 1;
     r.previousVersion = r.version;
-    r.version = r.recallStage === 1 ? "B" : "C";
+    const nextVersion: MemoryVersion = r.recallStage === 1 ? "B" : "C";
+    r.version = nextVersion;
     r.versionFade = 1;
     r.drift = Math.min(1, r.drift + .15);
-    r.effectUntil = r.clock + 900;
-    r.paused = false; setPaused(false); setChoice(false);
-    setFeedback("回想已记录 · 继续寻找照片");
+    r.effectUntil = r.clock + 1650;
+    r.paused = false; setPaused(false); setChoice(false); setChoicePhase("count");
+    setVersionPulse(nextVersion);
+    window.clearTimeout(versionTimerRef.current);
+    versionTimerRef.current = window.setTimeout(() => setVersionPulse(null), 1900);
+    setFeedback(`回答已写入 · 世界切换为 VERSION ${nextVersion}`);
     chime(880);
-  }, [chime]);
+  }, [choicePhase, chime]);
 
   const advanceIntro = useCallback(() => {
     unlockAudio(); chime(720, .1);
@@ -343,7 +373,7 @@ export default function MemoryRushGame() {
   }, [intro, begin, unlockAudio, chime]);
 
   const restartObservation = useCallback(() => {
-    setRecord(null); setIntro(2); setRecallAnswer(4); setShareMessage("");
+    setRecord(null); setIntro(1); setRecallAnswer(4); setShareMessage("");
   }, []);
 
   const wake = useCallback(() => {
@@ -375,8 +405,8 @@ export default function MemoryRushGame() {
       if (["arrowleft","arrowright","arrowup"," "].includes(key)) event.preventDefault();
       if (deviceRef.current !== "keyboard") { deviceRef.current = "keyboard"; setLastDevice("keyboard"); }
       if (!runtimeRef.current.started && !record) {
-        if (["arrowleft","a","j"].includes(key) && intro === 3) { setRecallAnswer(value => Math.max(3, value - 1)); return; }
-        if (["arrowright","d","l"].includes(key) && intro === 3) { setRecallAnswer(value => Math.min(5, value + 1)); return; }
+        if (["arrowleft","a","j"].includes(key) && intro === 2) { setRecallAnswer(value => Math.max(3, value - 1)); return; }
+        if (["arrowright","d","l"].includes(key) && intro === 2) { setRecallAnswer(value => Math.min(5, value + 1)); return; }
         if (key === "enter" || key === " ") { advanceIntro(); return; }
       }
       if (record && ["enter", " ", "z", "x"].includes(key) && !event.repeat) { restartObservation(); return; }
@@ -384,7 +414,7 @@ export default function MemoryRushGame() {
       if (choice) {
         if (["arrowleft","a","j"].includes(key)) { choiceIndexRef.current = (choiceIndexRef.current + 2) % 3; setChoiceIndex(choiceIndexRef.current); }
         else if (["arrowright","d","l"].includes(key)) { choiceIndexRef.current = (choiceIndexRef.current + 1) % 3; setChoiceIndex(choiceIndexRef.current); }
-        else if ([" ","enter","z","x"].includes(key)) chooseRecall([3,4,5][choiceIndexRef.current]);
+        else if ([" ","enter","z","x"].includes(key)) chooseCheckpointOption(checkpointOptions(choicePhase, runtimeRef.current.recallStage)[choiceIndexRef.current]);
         return;
       }
       if (key === "p" || key === "escape") { const r = runtimeRef.current; if (!choice) { r.paused = !r.paused; setPaused(r.paused); } return; }
@@ -401,21 +431,21 @@ export default function MemoryRushGame() {
     };
     window.addEventListener("keydown", onKeyDown); window.addEventListener("keyup", onKeyUp);
     return () => { window.removeEventListener("keydown", onKeyDown); window.removeEventListener("keyup", onKeyUp); };
-  }, [advanceIntro, record, choice, chooseRecall, wake, intro, restartObservation]);
+  }, [advanceIntro, record, choice, choicePhase, chooseCheckpointOption, wake, intro, restartObservation]);
 
   useEffect(() => {
     const markHardware = () => { if (deviceRef.current !== "gamepad") { deviceRef.current = "gamepad"; setLastDevice("gamepad"); } };
     const control: HardwareControl = {
       wake: () => { markHardware(); wake(); },
-      move: (axis) => { markHardware(); const direction=Math.sign(axis); if (choice && direction) { choiceIndexRef.current=Math.max(0,Math.min(2,choiceIndexRef.current+direction)); setChoiceIndex(choiceIndexRef.current); return; } if (!runtimeRef.current.started && intro===3 && direction) { setRecallAnswer(value=>Math.max(3,Math.min(5,value+direction))); return; } const r=runtimeRef.current; r.targetX=Math.max(.22,Math.min(.78,r.targetX+Math.max(-1,Math.min(1,axis))*.075)); r.lastInteraction=r.clock; r.idleNotified=false; },
-      press: () => { markHardware(); if (!awakeRef.current) wake(); else if (bootingRef.current) return; else if (choice) chooseRecall([3,4,5][choiceIndexRef.current]); else if (runtimeRef.current.started) return; else if (record) restartObservation(); else advanceIntro(); },
+      move: (axis) => { markHardware(); const direction=Math.sign(axis); if (choice && direction) { choiceIndexRef.current=Math.max(0,Math.min(2,choiceIndexRef.current+direction)); setChoiceIndex(choiceIndexRef.current); return; } if (!runtimeRef.current.started && intro===2 && direction) { setRecallAnswer(value=>Math.max(3,Math.min(5,value+direction))); return; } const r=runtimeRef.current; r.targetX=Math.max(.22,Math.min(.78,r.targetX+Math.max(-1,Math.min(1,axis))*.075)); r.lastInteraction=r.clock; r.idleNotified=false; },
+      press: () => { markHardware(); if (!awakeRef.current) wake(); else if (bootingRef.current) return; else if (choice) chooseCheckpointOption(checkpointOptions(choicePhase, runtimeRef.current.recallStage)[choiceIndexRef.current]); else if (runtimeRef.current.started) return; else if (record) restartObservation(); else advanceIntro(); },
       pause: () => { markHardware(); const r=runtimeRef.current; if (r.started && !choice) { r.paused=!r.paused; setPaused(r.paused); } },
     };
     window.MemoryDriftInput = control;
     const onHardware = (event: Event) => { const detail=(event as CustomEvent<{action:string;value?:number}>).detail; if (!detail) return; if (detail.action==="wake") control.wake(); if (detail.action==="move") control.move(detail.value ?? 0); if (detail.action==="press") control.press(detail.value); if (detail.action==="pause") control.pause(); };
     window.addEventListener("memory-control", onHardware);
     return () => { window.removeEventListener("memory-control", onHardware); delete window.MemoryDriftInput; };
-  }, [advanceIntro, choice, chooseRecall, record, wake, intro, restartObservation]);
+  }, [advanceIntro, choice, choicePhase, chooseCheckpointOption, record, wake, intro, restartObservation]);
 
   useEffect(() => {
     let frame = 0;
@@ -446,9 +476,9 @@ export default function MemoryRushGame() {
         const actionPressed = shortPressed || lockPressed;
         const startPressed = Boolean(pad.buttons[9]?.pressed);
         if ((stick || actionPressed || startPressed) && deviceRef.current !== "gamepad") { deviceRef.current = "gamepad"; setLastDevice("gamepad"); }
-        if (!r.started && intro===3 && stick && !inputRef.current.gamepadHorizontal) setRecallAnswer(value=>Math.max(3,Math.min(5,value+Math.sign(stick))));
+        if (!r.started && intro===2 && stick && !inputRef.current.gamepadHorizontal) setRecallAnswer(value=>Math.max(3,Math.min(5,value+Math.sign(stick))));
         if (choice && stick && !inputRef.current.gamepadHorizontal) { choiceIndexRef.current = (choiceIndexRef.current + (stick > 0 ? 1 : 2)) % 3; setChoiceIndex(choiceIndexRef.current); chime(680, .07); }
-        if (actionPressed && !inputRef.current.gamepadDash) { if (!awakeRef.current) wake(); else if (bootingRef.current) { /* wait for signal loading */ } else if (choice) chooseRecall([3,4,5][choiceIndexRef.current]); else if (r.started) { /* movement is the only in-run control */ } else if (record) restartObservation(); else advanceIntro(); }
+        if (actionPressed && !inputRef.current.gamepadDash) { if (!awakeRef.current) wake(); else if (bootingRef.current) { /* wait for signal loading */ } else if (choice) chooseCheckpointOption(checkpointOptions(choicePhase, r.recallStage)[choiceIndexRef.current]); else if (r.started) { /* movement is the only in-run control */ } else if (record) restartObservation(); else advanceIntro(); }
         if (startPressed && !inputRef.current.gamepadStart) { if (!awakeRef.current) wake(); else if (choice) { /* keep the choice pause */ } else if (r.started) { r.paused = !r.paused; setPaused(r.paused); } else if (record) restartObservation(); else advanceIntro(); }
         inputRef.current.gamepadDash = actionPressed; inputRef.current.gamepadStart = startPressed; inputRef.current.gamepadHorizontal = stick ? Math.sign(stick) : 0;
       }
@@ -519,17 +549,17 @@ export default function MemoryRushGame() {
           }
         });
         r.items = r.items.filter((item) => !item.hit && item.y < 1.08);
-        r.versionFade = Math.max(0, r.versionFade - dt * 3.2);
+        r.versionFade = Math.max(0, r.versionFade - dt * .58);
         if (now - r.lastInteraction > 1100) {
           r.drift = Math.max(0, r.drift - dt * .16);
           r.effectUntil = Math.min(r.effectUntil, now + 120);
           if (!r.idleNotified && r.drift > .04) { r.idleNotified = true; setFeedback("停止触碰：画面正在重新稳定"); }
         }
 
-        if (r.recallStage < 2 && now >= (r.recallStage + 1) * 18000) { r.recallStage += 1; r.paused = true; choiceIndexRef.current = 1; setChoiceIndex(1); setChoice(true); }
-        setSeconds((old) => { const value = Math.max(0, Math.ceil((52000 - now) / 1000)); return old === value ? old : value; });
+        if (r.recallStage < RECALL_AT_MS.length && now >= RECALL_AT_MS[r.recallStage]) { r.recallStage += 1; r.paused = true; choiceIndexRef.current = 1; setChoiceIndex(1); setChoicePhase("count"); setChoiceStage(r.recallStage); setChoice(true); }
+        setSeconds((old) => { const value = Math.max(0, Math.ceil((RUN_DURATION_MS - now) / 1000)); return old === value ? old : value; });
 
-        if (now - r.startedAt >= 52000) finishRun();
+        if (now - r.startedAt >= RUN_DURATION_MS) finishRun();
 
         if (now - hudAt > 90) {
           hudAt = now;
@@ -601,6 +631,15 @@ export default function MemoryRushGame() {
         cropDraw(ctx, assets.player, [312, 99, 680, 1015], r.x * W, PLAYER_Y * H + bob, 242, 360);
       }
       ctx.restore();
+      if (r.started && r.version === "B" && r.versionFade <= .02) {
+        ctx.save();
+        ctx.filter = "grayscale(1) contrast(1.34) brightness(.72)";
+        ctx.drawImage(canvas, 0, 0, W, H);
+        ctx.filter = "none";
+        ctx.fillStyle = "rgba(4,7,11,.2)";
+        ctx.fillRect(0, 0, W, H);
+        ctx.restore();
+      }
       if (r.started && now < r.effectUntil) {
         ctx.save();
         const fade = Math.min(1, (r.effectUntil - now) / 500);
@@ -655,7 +694,7 @@ export default function MemoryRushGame() {
     };
     frame = requestAnimationFrame(tick);
     return () => { active = false; cancelAnimationFrame(frame); };
-  }, [finishRun, chime, playImpact, advanceIntro, record, choice, chooseRecall, wake, intro, restartObservation]);
+  }, [finishRun, chime, playImpact, advanceIntro, record, choice, choicePhase, chooseCheckpointOption, wake, intro, restartObservation]);
 
   const saveCard = useCallback(() => {
     if (!record) return;
@@ -755,12 +794,18 @@ export default function MemoryRushGame() {
           <div className="loader-track" aria-hidden="true"><i /></div>
           <small>{tr("约 3 秒", "ABOUT 3 SECONDS")}</small>
         </section>}
-        {started && !choice && <aside className="reconstructed-preview"><span>{tr("系统补写的片段", "SYSTEM RECONSTRUCTION")}</span><div className="memory-figures">{Array.from({length: seconds > 34 ? 3 : 5},(_,index)=><img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{"--figure-scale":1.05+(index%2)*.2} as CSSProperties}/>)}</div></aside>}
+        {started && !choice && <aside className="reconstructed-preview"><span>{tr(`系统此刻相信：${hud.version === "A" ? 4 : hud.version === "B" ? 5 : 3} 人`, `SYSTEM CURRENTLY BELIEVES: ${hud.version === "A" ? 4 : hud.version === "B" ? 5 : 3} PEOPLE`)}</span><div className="memory-figures">{Array.from({length: hud.version === "A" ? 4 : hud.version === "B" ? 5 : 3},(_,index)=><img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{"--figure-scale":1.05+(index%2)*.2} as CSSProperties}/>)}</div></aside>}
         {started && <><div className="combo-pill" data-active={hud.checks > 0}>{hud.checks > 0 ? `×${hud.checks} ${tr("重复使它更熟悉", "REPETITION FEELS FAMILIAR")}` : tr("再次查看同一段记忆", "RECHECK THE SAME MEMORY")}</div>
-          <div className="rush-journey"><span>{seconds > 42 ? tr("01 / 稳定读取", "01 / STABLE ARCHIVE") : seconds > 32 ? tr("02 / 轻微漂移", "02 / MEMORY DRIFT") : seconds > 20 ? tr("03 / 记忆损坏", "03 / CORRUPTED MEMORY") : seconds > 8 ? tr("04 / 漂移空间", "04 / MEMORY WORLD") : tr("05 / 多版本", "05 / MULTIPLE VERSION")}</span><strong>{tr(`保留 ${hud.memories} 段 · ${seconds}s · ${gameSpeed}×`, `RETAINED ${hud.memories} · ${seconds}s · ${gameSpeed}×`)}</strong><progress max={52} value={52-seconds} aria-label={tr("重构进度", "Reconstruction progress")} /></div>
-          <div className="run-purpose"><b>{tr("记住最初", "REMEMBER")}</b><span>{tr("左右移动收集照片，避开干扰。稍后再次回想人数。", "MOVE TO COLLECT PHOTOS AND AVOID INTERFERENCE. RECALL THE COUNT LATER.")}</span></div>
+          <div className="rush-journey"><span>{hud.version === "A" ? tr("01 / 彩色原图", "01 / COLOR SOURCE") : hud.version === "B" ? tr("02 / 全景黑白", "02 / FULL MONOCHROME") : tr("03 / 紫蓝重构", "03 / VIOLET REWRITE")}</span><strong>{tr(`保留 ${hud.memories} 段 · ${seconds}s · ${gameSpeed}×`, `RETAINED ${hud.memories} · ${seconds}s · ${gameSpeed}×`)}</strong><progress max={RUN_DURATION_MS / 1000} value={RUN_DURATION_MS / 1000-seconds} aria-label={tr("重构进度", "Reconstruction progress")} /></div>
+          <div className="run-purpose"><b>{hud.version === "A" ? tr("第10秒回想", "RECALL AT 10S") : hud.version === "B" ? tr("第23秒回想", "RECALL AT 23S") : tr("正在形成结论", "FORMING A RESULT")}</b><span>{tr("移动只负责收集与避开；每次回答都会立刻改写颜色、人物和下一版画面。", "MOVEMENT ONLY COLLECTS OR AVOIDS; EACH ANSWER IMMEDIATELY REWRITES COLOR, PEOPLE, AND THE NEXT VERSION.")}</span></div>
           <div className="rush-feedback" data-fault={feedback.includes("串线") || feedback.includes("压缩坏了") || feedback.includes("碰撞")} role="status">{shownFeedback}</div>
           <div className="pickup-legend"><span>{tr("照片：留下一个片段", "PHOTO: RETAIN A FRAGMENT")}</span><span>{tr("泡泡：保留片段并抵挡一次干扰", "BUBBLE: RETAIN A FRAGMENT AND BLOCK ONE HIT")}</span><span>{tr("干扰：短暂打断画面，不结束体验", "INTERFERENCE: BRIEF DISRUPTION, NO GAME OVER")}</span></div></>}
+
+        {versionPulse && <div className="version-transition" data-version={versionPulse} role="status" aria-live="assertive">
+          <span>{versionPulse === "B" ? tr("你的第二次回想已被装置采用", "YOUR SECOND RECALL HAS BEEN ACCEPTED") : tr("你的第三次回想已被装置采用", "YOUR THIRD RECALL HAS BEEN ACCEPTED")}</span>
+          <strong>VERSION {versionPulse}</strong>
+          <p>{versionPulse === "B" ? tr("颜色被整体移除 · 人数被系统补写为 5", "ALL COLOR REMOVED · SYSTEM REWRITES THE COUNT AS 5") : tr("画面重构为紫蓝色 · 人数被系统改写为 3", "WORLD REBUILT IN VIOLET · SYSTEM REWRITES THE COUNT AS 3")}</p>
+        </div>}
 
         {awake && !booting && !started && !record && <div key={intro} className="rush-intro" data-step={intro}>
           <span>{intro === 0
@@ -768,38 +813,45 @@ export default function MemoryRushGame() {
             : tr(`进入记忆 0${intro + 1} / 05`, `MEMORY ENTRY 0${intro + 1} / 05`)}</span>
           <nav className="experience-route" aria-label={tr("体验流程", "Experience route")}>
             {[tr("靠近", "APPROACH"),tr("观看", "OBSERVE"),tr("回想", "RECALL"),tr("穿行", "JOURNEY"),tr("对照", "COMPARE")].map((label,index) => {
-              const active = intro < 2 ? 0 : intro === 2 ? 1 : intro === 3 ? 2 : 3;
+              const active = intro === 0 ? 0 : intro === 1 ? 1 : intro < 4 ? 2 : 3;
               return <i key={label} data-active={index <= active}><b>0{index + 1}</b>{label}</i>;
             })}
           </nav>
-          <h1>{intro === 0 ? tr("忘了自己是什么", "WHAT WAS I AGAIN?") : intro === 1 ? tr("我们为什么反复回看？", "WHY DO WE KEEP LOOKING BACK?") : intro === 2 ? tr("先看一眼这段记忆", "LOOK AT THIS MEMORY") : intro === 3 ? tr("你刚才看见了几个人？", "HOW MANY PEOPLE DID YOU SEE?") : tr("接下来，记忆会反过来看你", "NEXT, THE MEMORY WILL WATCH YOU")}</h1>
+          <h1>{intro === 0 ? tr("忘了自己是什么", "WHAT WAS I AGAIN?") : intro === 1 ? tr("先看一眼这段记忆", "LOOK AT THIS MEMORY") : intro === 2 ? tr("你刚才看见了几个人？", "HOW MANY PEOPLE DID YOU SEE?") : intro === 3 ? tr(`你先记住了 ${recallAnswer} 人`, `YOU FIRST REMEMBERED ${recallAnswer} PEOPLE`) : tr("接下来，每次回答都会改写世界", "NEXT, EVERY ANSWER WILL REWRITE THE WORLD")}</h1>
           {intro === 0 && <div className="intro-photo intro-photo-0">
             <img src={resolveImageUrl(photoUrl)} alt={tr("被装置保存并重新书写的记忆图像", "A MEMORY IMAGE STORED AND REWRITTEN BY THE MACHINE")} />
             <i />
           </div>}
-          {intro === 1 && <div className="motive-loop" aria-label={tr("反复回看的循环", "The cycle of repeated checking")}>
+          {intro === 3 && <div className="motive-loop" aria-label={tr("反复回看的循环", "The cycle of repeated checking")}>
             <span><b>01</b><em>{tr("害怕忘记", "FEAR LOSS")}</em><small>FEAR / LOSS</small></span><i aria-hidden="true">↘</i><span><b>02</b><em>{tr("保存与搜索", "SAVE & SEARCH")}</em><small>STORE / SEARCH</small></span><i aria-hidden="true">↗</i><span><b>03</b><em>{tr("反复确认", "CHECK AGAIN")}</em><small>VERIFY / REPEAT</small></span><i aria-hidden="true">↺</i>
           </div>}
-          {intro === 2 && <div className="intro-photo intro-photo-1"><img src={resolveImageUrl(backgroundAUrl)} alt={tr("最初呈现的记忆场景", "The memory scene shown at the start")} /><div className="memory-figures" aria-label={tr("照片里有四个人", "Four people are visible in the photograph")}>{[.82,1,.7,.9].map((scale,index) => <img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{"--figure-scale":scale} as CSSProperties} />)}</div><i /></div>}
-          {intro === 3 && <div className="recall-choice" role="group" aria-label={tr("选择记得的人数", "Choose the number you remember")}>
+          {intro === 1 && <div className="intro-photo intro-photo-1"><img src={resolveImageUrl(backgroundAUrl)} alt={tr("最初呈现的记忆场景", "The memory scene shown at the start")} /><div className="memory-figures" aria-label={tr("照片里有四个人", "Four people are visible in the photograph")}>{[.82,1,.7,.9].map((scale,index) => <img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{"--figure-scale":scale} as CSSProperties} />)}</div><i /></div>}
+          {intro === 2 && <div className="recall-choice" role="group" aria-label={tr("选择记得的人数", "Choose the number you remember")}>
             {[3,4,5].map(value => <button key={value} data-selected={recallAnswer === value} onClick={() => { setRecallAnswer(value); chime(560 + value * 70, .09); }}><strong>{value}</strong><span>{tr("个人", "PEOPLE")}</span></button>)}
           </div>}
           {intro === 4 && <div className="version-map" aria-label={tr("记忆版本变化", "Memory version changes")}>
             <span data-version="A"><small>01 / SOURCE</small><b>A</b><em>{tr("彩色原图", "FULL COLOR")}</em></span><i aria-hidden="true">→</i><span data-version="B"><small>02 / ERASE</small><b>B</b><em>{tr("全黑白", "MONOCHROME")}</em></span><i aria-hidden="true">→</i><span data-version="C"><small>03 / REWRITE</small><b>C</b><em>{tr("紫蓝重构", "VIOLET REBUILD")}</em></span>
           </div>}
-          <p>{intro === 0 ? tr("你越确认一段记忆，它就越真实吗？靠近并交出一次判断，装置会把你的观看变成下一版记忆。", "DOES A MEMORY BECOME TRUER THE MORE YOU VERIFY IT? OFFER ONE JUDGMENT; THE MACHINE WILL TURN YOUR VIEWING INTO ITS NEXT VERSION.") : intro === 1 ? tr("害怕遗忘让我们不断保存、搜索和回看。但每一次提取都不是读取原件，而是在当下重新组织过去。", "FEAR OF FORGETTING MAKES US SAVE, SEARCH, AND REPLAY. BUT RECALL DOES NOT OPEN AN ORIGINAL FILE; IT REORGANIZES THE PAST IN THE PRESENT.") : intro === 2 ? tr("请看几秒。不要刻意数数，也不要寻找答案，只记住你自然注意到的部分。", "Look for a few seconds. Do not count deliberately or hunt for an answer; notice only what stays with you.") : intro === 3 ? tr("凭第一感觉作答。这个数字不会带来奖励或失败，它只会成为你的第一个记忆版本。", "ANSWER FROM FIRST IMPRESSION. THIS NUMBER CREATES NEITHER REWARD NOR FAILURE; IT BECOMES YOUR FIRST VERSION OF THE MEMORY.") : tr("左右移动只决定哪些照片被留下、哪些干扰被避开。同一个问题会再次出现；画面会从彩色突然变成黑白，再重构成紫蓝色。", "MOVEMENT ONLY DECIDES WHICH PHOTOS REMAIN AND WHICH INTERFERENCE IS AVOIDED. THE QUESTION WILL RETURN AS COLOR COLLAPSES INTO MONOCHROME, THEN REBUILDS IN VIOLET AND BLUE.")}</p>
+          <p>{intro === 0 ? tr("人们因为害怕遗忘而不断保存、搜索与回看。但保存下来的图像，未必等于你真正记住的经历。", "WE SAVE, SEARCH, AND REPLAY BECAUSE WE FEAR FORGETTING. BUT A STORED IMAGE IS NOT THE SAME AS A REMEMBERED EXPERIENCE.") : intro === 1 ? tr("只看几秒。不要刻意数数，也不要寻找标准答案，只记住你自然注意到的部分。", "LOOK FOR A FEW SECONDS. DO NOT COUNT DELIBERATELY OR HUNT FOR A CORRECT ANSWER; NOTICE WHAT STAYS WITH YOU.") : intro === 2 ? tr("凭第一感觉作答。装置暂时不揭晓原图，只把这个数字保存为你的第一个记忆版本。", "ANSWER FROM FIRST IMPRESSION. THE MACHINE WILL NOT REVEAL THE SOURCE YET; IT SAVES THIS NUMBER AS YOUR FIRST MEMORY VERSION.") : intro === 3 ? tr(`你选择了 ${recallAnswer} 人。害怕记错会推动我们再次确认，而每次确认又会增加熟悉感。接下来，同一个人数问题还会出现两次，并穿插两个画面细节。`, `YOU CHOSE ${recallAnswer}. FEAR OF BEING WRONG DRIVES ANOTHER CHECK; EACH CHECK ADDS FAMILIARITY. THE COUNT WILL RETURN TWICE, WITH TWO VISUAL DETAILS BETWEEN VERSIONS.`) : tr("穿行缩短为约 36 秒：10 秒后第一次回想，画面立刻全黑白；23 秒后第二次回想，世界重构成紫蓝色。移动只负责收集照片和避开干扰。", "THE JOURNEY NOW LASTS ABOUT 36 SECONDS: RECALL AT 10 SECONDS TURNS THE WHOLE WORLD MONOCHROME; RECALL AT 23 SECONDS REBUILDS IT IN VIOLET. MOVEMENT ONLY COLLECTS PHOTOS AND AVOIDS INTERFERENCE.")}</p>
           {previous && intro === 0 && <div className="previous-memory"><b>{tr(`上次：VERSION ${previous.version}`, `LAST: VERSION ${previous.version}`)}</b><span>{tr(`保留 ${previous.caught} 个片段 · 本次从原图开始`, `${previous.caught} FRAGMENTS · START AGAIN FROM THE FIRST IMAGE`)}</span></div>}
-          <button disabled={!ready} onClick={advanceIntro}>{loadError ? tr("素材加载失败，请刷新页面", "ASSET LOAD FAILED · REFRESH") : !ready ? tr("正在装载记忆…", "LOADING MEMORY…") : intro === 0 ? tr("把这段记忆交给装置", "GIVE THIS MEMORY TO THE MACHINE") : intro === 1 ? tr("让我看一段记忆", "SHOW ME A MEMORY") : intro === 2 ? tr("我看过了", "I HAVE SEEN IT") : intro === 3 ? tr("保留这个回答", "KEEP THIS ANSWER") : tr("进入被改写的记忆", "ENTER THE REWRITTEN MEMORY")}</button>
+          <button disabled={!ready} onClick={advanceIntro}>{loadError ? tr("素材加载失败，请刷新页面", "ASSET LOAD FAILED · REFRESH") : !ready ? tr("正在装载记忆…", "LOADING MEMORY…") : intro === 0 ? tr("先看一段记忆", "SHOW ME A MEMORY") : intro === 1 ? tr("我看过了", "I HAVE SEEN IT") : intro === 2 ? tr("保留这个回答", "KEEP THIS ANSWER") : intro === 3 ? tr("看看记忆如何被反复确认", "SEE HOW MEMORY IS RECHECKED") : tr("进入被改写的记忆", "ENTER THE REWRITTEN MEMORY")}</button>
           {loadError && <button onClick={() => location.reload()}>{tr("重新加载", "RELOAD")}</button>}
           <small>{tr("点击、回车或街机按钮继续", "CLICK · ENTER · OR ARCADE BUTTON")}</small>
           {previous && intro === 0 && <button className="rush-skip" disabled={!ready} onClick={restartObservation}>{tr("直接观察原图", "GO TO THE FIRST IMAGE")}</button>}
         </div>}
 
-        {(choice || paused) && <section className="rush-choice" aria-label={tr("回想停顿", "Recall checkpoint")}>
-          <span>{tr("暂时停下 · 回想最初的画面", "PAUSE · RECALL THE FIRST IMAGE")}</span>
-          <h2>{choice ? tr("最开始，是几个人？", "HOW MANY PEOPLE WERE THERE AT THE START?") : tr("记忆已暂停", "MEMORY PAUSED")}</h2>
-          {choice ? <><p>{tr("回答后继续。这里没有加分或扣分，只记录你的记忆怎样变化。", "Continue after answering. No points are awarded or deducted; only changes in your recall are recorded.")}</p>
-          {[3,4,5].map((value,index)=><button key={value} data-selected={choiceIndex === index} onFocus={()=>{choiceIndexRef.current=index;setChoiceIndex(index);}} onClick={()=>chooseRecall(value)}><strong>{value}</strong><span>{tr("个人", "PEOPLE")}</span></button>)}</> : <button onClick={pauseGame}>{tr("继续", "RESUME")}</button>}
+        {(choice || paused) && <section className="rush-choice" data-phase={choicePhase} aria-label={tr("回想停顿", "Recall checkpoint")}>
+          <span>{choice ? tr(`第 ${choiceStage} 次回想 · ${choicePhase === "count" ? "1 / 2 人数" : "2 / 2 细节"}`, `RECALL ${choiceStage} · ${choicePhase === "count" ? "1 / 2 COUNT" : "2 / 2 DETAIL"}`) : tr("暂时停下", "PAUSED")}</span>
+          <h2>{choice ? choicePhase === "count"
+            ? tr("最开始，是几个人？", "HOW MANY PEOPLE WERE THERE AT THE START?")
+            : choiceStage === 1
+              ? tr("旋转木马在画面的哪一侧？", "WHICH SIDE HELD THE CAROUSEL?")
+              : tr("原图中的天空窗口，更接近哪种颜色？", "WHAT COLOR WAS THE SKY WINDOW IN THE SOURCE?")
+            : tr("记忆已暂停", "MEMORY PAUSED")}</h2>
+          {choice ? <><p>{choicePhase === "count"
+            ? tr("先回答核心人数，再补写一个画面细节。没有加分或扣分；你的回答会触发下一版。", "ANSWER THE CORE COUNT, THEN ONE VISUAL DETAIL. NO SCORE IS GIVEN; YOUR ANSWERS TRIGGER THE NEXT VERSION.")
+            : tr("选择后立即继续，画面的颜色与系统补写人数会同时改变。", "CHOOSE TO CONTINUE; COLOR AND THE SYSTEM-WRITTEN COUNT WILL CHANGE TOGETHER.")}</p>
+          {checkpointOptions(choicePhase, choiceStage).map((value,index)=><button key={value} data-selected={choiceIndex === index} onFocus={()=>{choiceIndexRef.current=index;setChoiceIndex(index);}} onClick={()=>chooseCheckpointOption(value)}><strong>{typeof value === "number" ? value : value === "left" ? tr("左侧", "LEFT") : value === "center" ? tr("中央", "CENTER") : value === "right" ? tr("右侧", "RIGHT") : value === "blue" ? tr("蓝色", "BLUE") : value === "white" ? tr("白色", "WHITE") : tr("粉色", "PINK")}</strong><span>{typeof value === "number" ? tr("个人", "PEOPLE") : tr("凭第一印象", "FIRST IMPRESSION")}</span></button>)}</> : <button onClick={pauseGame}>{tr("继续", "RESUME")}</button>}
         </section>}
 
         {record && <section className="memory-result" aria-label={tr("记忆重构结语", "Memory reconstruction epilogue")}>
@@ -811,6 +863,10 @@ export default function MemoryRushGame() {
             <span><b>01</b>{tr("进入装置", "ENTERED")}</span><i>→</i><span><b>02</b>{tr(`${record.checks ?? 0} 次确认`, `${record.checks ?? 0} RECHECKS`)}</span><i>→</i><span><b>03</b>{tr(`版本 ${record.version}`, `VERSION ${record.version}`)}</span>
           </div>
           <div className="recall-evidence"><div className="intro-photo intro-photo-1"><img src={resolveImageUrl(backgroundAUrl)} alt={tr("最初呈现的场景", "The scene shown at the start")} /><div className="memory-figures">{[.82,1,.7,.9].map((scale,index)=><img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{"--figure-scale":scale} as CSSProperties}/>)}</div></div><strong>{tr("最初画面：4 人", "FIRST IMAGE: 4 PEOPLE")}</strong><p>{tr("你的三次回想", "YOUR THREE RECALLS")}: {(record.recalls ?? []).join(" → ")}</p><p>{(record.recalls ?? []).some(n=>n!==4) ? tr("你的回答与最初画面出现了差异。熟悉的感觉，是否让你更确信？", "Your answers differed from the first image. Did familiarity make you more certain?") : tr("这一次，你记住了人数。记忆也会保持稳定；这不意味着其他细节从未改变。", "This time you retained the count. Memory can remain stable; other details may still have changed.")}</p></div>
+          <div className="detail-evidence">
+            <span><b>{tr("细节 01", "DETAIL 01")}</b>{tr("旋转木马原本在右侧", "CAROUSEL SOURCE: RIGHT")}<em>{tr("你的回想", "YOUR RECALL")}: {(record.details?.[0] === "left" ? tr("左侧", "LEFT") : record.details?.[0] === "center" ? tr("中央", "CENTER") : tr("右侧", "RIGHT"))}</em></span>
+            <span><b>{tr("细节 02", "DETAIL 02")}</b>{tr("天空窗口原本是蓝色", "SKY WINDOW SOURCE: BLUE")}<em>{tr("你的回想", "YOUR RECALL")}: {(record.details?.[1] === "white" ? tr("白色", "WHITE") : record.details?.[1] === "pink" ? tr("粉色", "PINK") : tr("蓝色", "BLUE"))}</em></span>
+          </div>
           <blockquote>{tr("当技术替我们保存每一个版本，它是在帮助我们记住，还是让我们逐渐失去遗忘的能力？", "WHEN TECHNOLOGY KEEPS EVERY VERSION FOR US, DOES IT HELP US REMEMBER—OR TEACH US HOW NOT TO FORGET?")}</blockquote>
           <dl className="result-traces">
             <div><dt>{tr("保留", "RETAINED")}</dt><dd>{record.caught}</dd></div><div><dt>{tr("遗漏", "OMITTED")}</dt><dd>{record.missed}</dd></div>
@@ -825,4 +881,3 @@ export default function MemoryRushGame() {
     </main>
   );
 }
-
