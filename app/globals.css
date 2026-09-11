@@ -1090,3 +1090,45 @@ body { font-family:"Arial Rounded MT Bold","PingFang SC","Microsoft YaHei",syste
   .rush-game[data-impact],.rush-feedback[data-fault="true"] { animation:none!important; }
 }
 
+/* V14 — reserve separate vertical bands for transient feedback and the rules. */
+.rush-game .rush-feedback {
+  bottom:17.2%;
+  min-height:3.6cqh;
+  line-height:1.25;
+}
+.rush-game .pickup-legend {
+  left:5%;
+  right:5%;
+  bottom:9.2%;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+}
+.rush-game .pickup-legend span {
+  min-width:0;
+  min-height:4.2cqh;
+  padding:.45cqh 1cqw;
+  line-height:1.25;
+  overflow-wrap:anywhere;
+}
+@media (max-width:420px), (max-height:720px) {
+  .rush-game .rush-feedback { bottom:18%; }
+  .rush-game .pickup-legend { left:4%; right:4%; bottom:8.8%; }
+  .rush-game .pickup-legend span { min-height:4.5cqh; font-size:clamp(6px,1.15cqw,8px); }
+}
+
+/* V15 — controls must remain operable above recall and result overlays. */
+.rush-game .rush-settings {
+  z-index:80;
+}
+.rush-game .settings-popover {
+  z-index:81;
+  max-height:min(56cqh,430px);
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  scrollbar-width:thin;
+}
+@media (max-width:420px), (max-height:720px) {
+  .rush-game .settings-popover {
+    max-height:48cqh;
+  }
+}
+

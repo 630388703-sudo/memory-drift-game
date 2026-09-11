@@ -122,6 +122,7 @@ function cropDraw(
   ctx.drawImage(image, crop[0], crop[1], crop[2], crop[3], x - width / 2, y - height / 2, width, height);
 }
 
+
 function drawContained(ctx: CanvasRenderingContext2D, image: HTMLImageElement, x: number, y: number, maxWidth: number, maxHeight: number) {
   const ratio = Math.min(maxWidth / image.naturalWidth, maxHeight / image.naturalHeight);
   const width = image.naturalWidth * ratio;
@@ -255,8 +256,8 @@ export default function MemoryRushGame() {
   useEffect(() => {
     const ambience = new Audio(new URL("audio/nostalgic-memories.mp3", document.baseURI).href);
     const impact = new Audio(new URL("audio/impact-thud.mp3", document.baseURI).href);
-    ambience.loop = true; ambience.preload = "auto"; ambience.volume = .2;
-    impact.preload = "auto"; impact.volume = .95;
+    ambience.loop = true; ambience.preload = "auto"; ambience.volume = .14;
+    impact.preload = "auto"; impact.volume = 1;
     ambienceRef.current = ambience; impactRef.current = impact;
     return () => { ambience.pause(); impact.pause(); ambienceRef.current = null; impactRef.current = null; window.clearTimeout(bootTimerRef.current); };
   }, []);
