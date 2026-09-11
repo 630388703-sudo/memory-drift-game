@@ -14,6 +14,9 @@ const H = 1920;
 const PLAYER_Y = 0.79;
 const RUN_DURATION_MS = 36000;
 const RECALL_AT_MS = [10000, 23000] as const;
+const SAVE_SLOT_COUNT = 5;
+const HOLD_TO_PROTECT_MS = 700;
+const PROTECTION_MS = 4200;
 
 type MemoryVersion = "A" | "B" | "C";
 type ItemKind = "photo" | "cart" | "bubble";
@@ -21,12 +24,12 @@ type DeviceKind = "touch" | "keyboard" | "gamepad";
 type CheckpointPhase = "count" | "detail";
 const GAME_SPEEDS = [0.8, 1, 1.25] as const;
 type GameSpeed = (typeof GAME_SPEEDS)[number];
-type HardwareControl = { wake: () => void; move: (axis: number) => void; press: (pressure?: number) => void; pause: () => void };
+type HardwareControl = { wake: () => void; move: (axis: number) => void; press: (pressure?: number) => void; release?: () => void; pause: () => void };
 declare global { interface Window { MemoryDriftInput?: HardwareControl } }
 type Item = { id: number; kind: ItemKind; x: number; y: number; speed: number; size: number; hit?: boolean };
 type Trail = { x: number; at: number };
 type RunStats = { caught: number; missed: number; bumps: number };
-type MemoryRecord = RunStats & { score: number; checks: number; version: MemoryVersion; run: number; recalls?: number[]; details?: string[] };
+type MemoryRecord = RunStats & { score: number; checks: number; version: MemoryVersion; run: number; recalls?: number[]; details?: string[]; retained?: number; overwritten?: number; protections?: number };
 type Runtime = {
   clock: number;
   paused: boolean;
@@ -51,6 +54,12 @@ type Runtime = {
   versionFade: number;
   shakeUntil: number;
   shield: number;
+  overwritten: number;
+  protections: number;
+  holdActive: boolean;
+  holdStartedAt: number;
+  holdTriggered: boolean;
+  protectUntil: number;
   startedAt: number;
   lastInteraction: number;
   idleNotified: boolean;
@@ -63,7 +72,8 @@ const makeRuntime = (): Runtime => ({
   clock: 0, paused: false, drift: 0, effectUntil: 0, impactUntil: 0, recallStage: 0, recalls: [], details: [],
   started: false, x: 0.5, targetX: 0.5, items: [], nextId: 1, lastSpawn: 0,
   score: 0, combo: 0, checks: 0, memories: 0, version: "A", previousVersion: "A", versionFade: 0,
-  shakeUntil: 0, shield: 0, startedAt: 0, lastInteraction: 0, idleNotified: false,
+  shakeUntil: 0, shield: 0, overwritten: 0, protections: 0, holdActive: false, holdStartedAt: 0, holdTriggered: false, protectUntil: 0,
+  startedAt: 0, lastInteraction: 0, idleNotified: false,
   stats: emptyStats(),
   trail: [],
 });
@@ -76,6 +86,13 @@ const feedbackEn = (text: string) => {
   if (text.startsWith("回答已写入")) return text.replace("回答已写入 · 世界切换为", "ANSWER WRITTEN · WORLD SWITCHED TO");
   const table: Record<string, string> = {
     "左右移动收集照片 · 避开干扰 · 稍后回想": "MOVE TO COLLECT PHOTOS · AVOID INTERFERENCE · RECALL LATER",
+    "保存槽已满：最新片段覆盖了最早片段": "STORAGE FULL · THE NEWEST FRAGMENT OVERWROTE THE OLDEST",
+    "长按完成：一个片段暂时不会被改写": "HOLD COMPLETE · ONE FRAGMENT IS TEMPORARILY LOCKED",
+    "还没有锁定：请继续按住": "NOT LOCKED YET · KEEP HOLDING",
+    "先保存一个片段，才能进行保护": "STORE A FRAGMENT BEFORE PROTECTING IT",
+    "保护锁抵消了一次泡泡改写": "MEMORY LOCK BLOCKED ONE BUBBLE REWRITE",
+    "保护锁抵消了一次强干扰": "MEMORY LOCK BLOCKED ONE HARD INTERRUPTION",
+    "泡泡混入了熟悉的假片段": "A FAMILIAR-LOOKING FALSE FRAGMENT ENTERED THE MEMORY",
     "回想已记录 · 继续寻找照片": "RECALL RECORDED · CONTINUE FINDING PHOTOS",
     "一个片段离开了画面": "A FRAGMENT LEFT THE FRAME",
     "过去的你会帮忙补捡": "YOUR PAST ECHO WILL CATCH MISSED PHOTOS",
@@ -259,7 +276,7 @@ export default function MemoryRushGame() {
   const [impactPulse, setImpactPulse] = useState<"a" | "b" | null>(null);
   const [versionPulse, setVersionPulse] = useState<MemoryVersion | null>(null);
   const versionTimerRef = useRef(0);
-  const [hud, setHud] = useState({ score: 0, combo: 0, checks: 0, memories: 0, drift: 0, version: "A" as MemoryVersion });
+  const [hud, setHud] = useState({ score: 0, combo: 0, checks: 0, memories: 0, drift: 0, version: "A" as MemoryVersion, overwritten: 0, protections: 0, hold: 0, protected: false });
   const shownFeedback = language === "zh" ? feedback : feedbackEn(feedback);
 
   useEffect(() => {
@@ -305,7 +322,7 @@ export default function MemoryRushGame() {
     fresh.lastSpawn = 0; fresh.startedAt = 0;
     fresh.items = [{ id: fresh.nextId++, kind: "photo", x: .5, y: .6, speed: .12, size: 1.28 }, { id: fresh.nextId++, kind: "bubble", x: .38, y: .3, speed: .12, size: 1 }];
     runtimeRef.current = fresh;
-    setHud({ score: 0, combo: 0, checks: 0, memories: 0, drift: 0, version: "A" });
+    setHud({ score: 0, combo: 0, checks: 0, memories: 0, drift: 0, version: "A", overwritten: 0, protections: 0, hold: 0, protected: false });
     window.clearTimeout(versionTimerRef.current);
     setRecord(null); setStarted(true); setChoice(false); setChoicePhase("count"); setChoiceStage(0); setPaused(false); setVersionPulse(null); setSeconds(RUN_DURATION_MS / 1000);
     setFeedback("左右移动收集照片 · 避开干扰 · 稍后回想");
@@ -315,7 +332,7 @@ export default function MemoryRushGame() {
     const r = runtimeRef.current;
     if (!r.started) return;
     r.started = false;
-    const next: MemoryRecord = { ...r.stats, score: r.score, checks: r.checks, version: r.version, run: (previous?.run ?? 0) + 1, recalls: [...r.recalls], details: [...r.details] };
+    const next: MemoryRecord = { ...r.stats, score: r.score, checks: r.checks, version: r.version, run: (previous?.run ?? 0) + 1, recalls: [...r.recalls], details: [...r.details], retained: r.memories, overwritten: r.overwritten, protections: r.protections };
     try { localStorage.setItem("memory-rush-record", JSON.stringify(next)); } catch { /* optional persistence */ }
     setPrevious(next); setRecord(next); setStarted(false);
     setShareMessage("");
@@ -336,6 +353,43 @@ export default function MemoryRushGame() {
     runtimeRef.current.idleNotified = false;
     if (deviceRef.current !== "touch") { deviceRef.current = "touch"; setLastDevice("touch"); }
   }, []);
+
+  const beginProtectHold = useCallback((pressure = 0) => {
+    const r = runtimeRef.current;
+    if (!r.started || r.paused || r.holdActive) return;
+    if (r.memories < 1) {
+      setFeedback("先保存一个片段，才能进行保护");
+      chime(210, .12, true);
+      return;
+    }
+    r.holdActive = true;
+    r.holdTriggered = false;
+    r.holdStartedAt = r.clock - (pressure >= .72 ? HOLD_TO_PROTECT_MS : 0);
+    r.lastInteraction = r.clock;
+  }, [chime]);
+
+  const endProtectHold = useCallback(() => {
+    const r = runtimeRef.current;
+    if (r.holdActive && !r.holdTriggered && r.clock - r.holdStartedAt < HOLD_TO_PROTECT_MS) {
+      setFeedback("还没有锁定：请继续按住");
+      chime(260, .08, true);
+    }
+    r.holdActive = false;
+    r.holdTriggered = false;
+  }, [chime]);
+
+  const engageProtection = useCallback(() => {
+    const r = runtimeRef.current;
+    if (!r.started || r.paused || r.holdTriggered || r.memories < 1) return;
+    r.holdTriggered = true;
+    r.holdActive = false;
+    r.shield = 1;
+    r.protections += 1;
+    r.protectUntil = r.clock + PROTECTION_MS;
+    r.effectUntil = r.clock + 560;
+    setFeedback("长按完成：一个片段暂时不会被改写");
+    chime(1040, .24);
+  }, [chime]);
 
   const chooseCheckpointOption = useCallback((answer: number | string) => {
     const r = runtimeRef.current;
@@ -419,7 +473,7 @@ export default function MemoryRushGame() {
       }
       if (key === "p" || key === "escape") { const r = runtimeRef.current; if (!choice) { r.paused = !r.paused; setPaused(r.paused); } return; }
       if (runtimeRef.current.paused) return;
-      if (key === " " || key === "arrowup" || key === "z" || key === "enter" || key === "x") return;
+      if ([" ","arrowup","z","enter","x"].includes(key)) { if (!event.repeat) beginProtectHold(); return; }
       if (key === "shift") return;
       if (key === "arrowleft" || key === "a" || key === "j") { inputRef.current.left = true; runtimeRef.current.targetX -= .055; runtimeRef.current.lastInteraction = runtimeRef.current.clock; runtimeRef.current.idleNotified = false; }
       if (key === "arrowright" || key === "d" || key === "l") { inputRef.current.right = true; runtimeRef.current.targetX += .055; runtimeRef.current.lastInteraction = runtimeRef.current.clock; runtimeRef.current.idleNotified = false; }
@@ -428,24 +482,26 @@ export default function MemoryRushGame() {
       const key = event.key.toLowerCase();
       if (key === "arrowleft" || key === "a" || key === "j") inputRef.current.left = false;
       if (key === "arrowright" || key === "d" || key === "l") inputRef.current.right = false;
+      if ([" ","arrowup","z","enter","x"].includes(key)) endProtectHold();
     };
     window.addEventListener("keydown", onKeyDown); window.addEventListener("keyup", onKeyUp);
     return () => { window.removeEventListener("keydown", onKeyDown); window.removeEventListener("keyup", onKeyUp); };
-  }, [advanceIntro, record, choice, choicePhase, chooseCheckpointOption, wake, intro, restartObservation]);
+  }, [advanceIntro, record, choice, choicePhase, chooseCheckpointOption, wake, intro, restartObservation, beginProtectHold, endProtectHold]);
 
   useEffect(() => {
     const markHardware = () => { if (deviceRef.current !== "gamepad") { deviceRef.current = "gamepad"; setLastDevice("gamepad"); } };
     const control: HardwareControl = {
       wake: () => { markHardware(); wake(); },
       move: (axis) => { markHardware(); const direction=Math.sign(axis); if (choice && direction) { choiceIndexRef.current=Math.max(0,Math.min(2,choiceIndexRef.current+direction)); setChoiceIndex(choiceIndexRef.current); return; } if (!runtimeRef.current.started && intro===2 && direction) { setRecallAnswer(value=>Math.max(3,Math.min(5,value+direction))); return; } const r=runtimeRef.current; r.targetX=Math.max(.22,Math.min(.78,r.targetX+Math.max(-1,Math.min(1,axis))*.075)); r.lastInteraction=r.clock; r.idleNotified=false; },
-      press: () => { markHardware(); if (!awakeRef.current) wake(); else if (bootingRef.current) return; else if (choice) chooseCheckpointOption(checkpointOptions(choicePhase, runtimeRef.current.recallStage)[choiceIndexRef.current]); else if (runtimeRef.current.started) return; else if (record) restartObservation(); else advanceIntro(); },
+      press: (pressure = 0) => { markHardware(); if (!awakeRef.current) wake(); else if (bootingRef.current) return; else if (choice) chooseCheckpointOption(checkpointOptions(choicePhase, runtimeRef.current.recallStage)[choiceIndexRef.current]); else if (runtimeRef.current.started) beginProtectHold(pressure); else if (record) restartObservation(); else advanceIntro(); },
+      release: () => { markHardware(); endProtectHold(); },
       pause: () => { markHardware(); const r=runtimeRef.current; if (r.started && !choice) { r.paused=!r.paused; setPaused(r.paused); } },
     };
     window.MemoryDriftInput = control;
-    const onHardware = (event: Event) => { const detail=(event as CustomEvent<{action:string;value?:number}>).detail; if (!detail) return; if (detail.action==="wake") control.wake(); if (detail.action==="move") control.move(detail.value ?? 0); if (detail.action==="press") control.press(detail.value); if (detail.action==="pause") control.pause(); };
+    const onHardware = (event: Event) => { const detail=(event as CustomEvent<{action:string;value?:number}>).detail; if (!detail) return; if (detail.action==="wake") control.wake(); if (detail.action==="move") control.move(detail.value ?? 0); if (detail.action==="press") control.press(detail.value); if (detail.action==="release") control.release?.(); if (detail.action==="pause") control.pause(); };
     window.addEventListener("memory-control", onHardware);
     return () => { window.removeEventListener("memory-control", onHardware); delete window.MemoryDriftInput; };
-  }, [advanceIntro, choice, choicePhase, chooseCheckpointOption, record, wake, intro, restartObservation]);
+  }, [advanceIntro, choice, choicePhase, chooseCheckpointOption, record, wake, intro, restartObservation, beginProtectHold, endProtectHold]);
 
   useEffect(() => {
     let frame = 0;
@@ -478,12 +534,15 @@ export default function MemoryRushGame() {
         if ((stick || actionPressed || startPressed) && deviceRef.current !== "gamepad") { deviceRef.current = "gamepad"; setLastDevice("gamepad"); }
         if (!r.started && intro===2 && stick && !inputRef.current.gamepadHorizontal) setRecallAnswer(value=>Math.max(3,Math.min(5,value+Math.sign(stick))));
         if (choice && stick && !inputRef.current.gamepadHorizontal) { choiceIndexRef.current = (choiceIndexRef.current + (stick > 0 ? 1 : 2)) % 3; setChoiceIndex(choiceIndexRef.current); chime(680, .07); }
-        if (actionPressed && !inputRef.current.gamepadDash) { if (!awakeRef.current) wake(); else if (bootingRef.current) { /* wait for signal loading */ } else if (choice) chooseCheckpointOption(checkpointOptions(choicePhase, r.recallStage)[choiceIndexRef.current]); else if (r.started) { /* movement is the only in-run control */ } else if (record) restartObservation(); else advanceIntro(); }
+        if (actionPressed && !inputRef.current.gamepadDash) { if (!awakeRef.current) wake(); else if (bootingRef.current) { /* wait for signal loading */ } else if (choice) chooseCheckpointOption(checkpointOptions(choicePhase, r.recallStage)[choiceIndexRef.current]); else if (r.started) beginProtectHold(); else if (record) restartObservation(); else advanceIntro(); }
+        if (!actionPressed && inputRef.current.gamepadDash && r.started) endProtectHold();
         if (startPressed && !inputRef.current.gamepadStart) { if (!awakeRef.current) wake(); else if (choice) { /* keep the choice pause */ } else if (r.started) { r.paused = !r.paused; setPaused(r.paused); } else if (record) restartObservation(); else advanceIntro(); }
         inputRef.current.gamepadDash = actionPressed; inputRef.current.gamepadStart = startPressed; inputRef.current.gamepadHorizontal = stick ? Math.sign(stick) : 0;
       }
 
       if (r.started && !r.paused && !document.hidden) {
+        if (r.holdActive && !r.holdTriggered && now - r.holdStartedAt >= HOLD_TO_PROTECT_MS) engageProtection();
+        if (r.shield > 0 && r.protectUntil > 0 && now >= r.protectUntil) { r.shield = 0; r.protectUntil = 0; }
         const digital = (inputRef.current.right ? 1 : 0) - (inputRef.current.left ? 1 : 0);
         const moveAxis = Math.abs(stick) > Math.abs(digital) ? stick : digital;
         if (moveAxis) { r.targetX += moveAxis * dt * .72; r.lastInteraction = now; r.idleNotified = false; }
@@ -497,7 +556,9 @@ export default function MemoryRushGame() {
           const lanes = [0.3, 0.42, 0.58, 0.7];
           const lane = lanes[Math.floor(Math.random() * lanes.length)];
           const roll = Math.random();
-          const kind: ItemKind = now < 3200 || roll < .64 ? "photo" : roll < .82 ? "bubble" : "cart";
+          const photoChance = r.version === "A" ? .7 : r.version === "B" ? .52 : .46;
+          const bubbleChance = r.version === "A" ? .12 : r.version === "B" ? .3 : .38;
+          const kind: ItemKind = now < 3200 || roll < photoChance ? "photo" : roll < photoChance + bubbleChance ? "bubble" : "cart";
           const photoSizes = [.72, .96, 1.28];
           const size = kind === "photo" ? photoSizes[Math.floor(Math.random() * photoSizes.length)] : 1;
           r.items.push({ id: r.nextId++, kind, x: lane, y: 0.08, speed: 0.23, size });
@@ -512,27 +573,34 @@ export default function MemoryRushGame() {
           if (item.kind === "photo" && (playerHit || echoHit)) {
             item.hit = true;
             r.combo += 1;
-            r.memories += 1;
+            const storageWasFull = r.memories >= SAVE_SLOT_COUNT;
+            if (storageWasFull) r.overwritten += 1;
+            else r.memories += 1;
             r.score += (echoHit ? 80 : 100) * Math.min(8, r.combo);
             r.stats.caught += 1;
-            r.drift = Math.min(1, r.drift + .055); chime(620 + Math.min(r.combo, 8) * 55);
+            r.drift = Math.min(1, r.drift + (storageWasFull ? .11 : .055)); chime(620 + Math.min(r.combo, 8) * 55);
             if (r.stats.caught % 4 === 0) r.effectUntil = now + 750;
-            setFeedback(echoHit ? "残影替你接住了遗漏" : r.combo > 2 ? `连续记住 ×${r.combo}` : "照片已装入口袋");
+            setFeedback(storageWasFull ? "保存槽已满：最新片段覆盖了最早片段" : echoHit ? "残影替你接住了遗漏" : r.combo > 2 ? `连续记住 ×${r.combo}` : "照片已装入口袋");
+          } else if (item.kind === "bubble" && playerHit && r.shield > 0) {
+            item.hit = true;
+            r.shield = 0;
+            r.protectUntil = 0;
+            r.effectUntil = now + 460;
+            setFeedback("保护锁抵消了一次泡泡改写"); chime(840, .18);
           } else if (item.kind === "bubble" && playerHit) {
             item.hit = true;
-            r.shield = Math.min(3, r.shield + 1);
-            r.combo += 1;
-            r.memories += 1;
-            r.score += 120 * Math.min(8, r.combo);
-            r.stats.caught += 1;
-            r.drift = Math.max(0, r.drift - .18);
-            r.effectUntil = now + 520;
-            setFeedback("相框泡泡：照片 +1，颜色回来了"); chime(980, .2);
+            r.overwritten += 1;
+            r.stats.bumps += 1;
+            r.combo = 0;
+            r.shakeUntil = now + 430; r.effectUntil = now + 980; r.impactUntil = now + 480; r.drift = Math.min(1, r.drift + .14);
+            setImpactPulse(value => value === "a" ? "b" : "a");
+            setFeedback("泡泡混入了熟悉的假片段"); chime(130, .28, true);
           } else if (item.kind === "cart" && playerHit && r.shield > 0) {
             item.hit = true;
-            r.shield -= 1;
+            r.shield = 0;
+            r.protectUntil = 0;
             r.effectUntil = now + 460;
-            setFeedback("记忆泡泡替你挡住一次碰撞"); chime(760, .16);
+            setFeedback("保护锁抵消了一次强干扰"); chime(760, .16);
           } else if (item.kind === "cart" && playerHit) {
             item.hit = true;
             r.stats.bumps += 1;
@@ -563,7 +631,7 @@ export default function MemoryRushGame() {
 
         if (now - hudAt > 90) {
           hudAt = now;
-          setHud({ score: r.score, combo: r.combo, checks: r.checks, memories: r.memories, drift: r.drift, version: r.version });
+          setHud({ score: r.score, combo: r.combo, checks: r.checks, memories: r.memories, drift: r.drift, version: r.version, overwritten: r.overwritten, protections: r.protections, hold: r.holdActive ? Math.min(1, (now - r.holdStartedAt) / HOLD_TO_PROTECT_MS) : 0, protected: r.shield > 0 && now < r.protectUntil });
         }
       }
 
@@ -694,7 +762,7 @@ export default function MemoryRushGame() {
     };
     frame = requestAnimationFrame(tick);
     return () => { active = false; cancelAnimationFrame(frame); };
-  }, [finishRun, chime, playImpact, advanceIntro, record, choice, choicePhase, chooseCheckpointOption, wake, intro, restartObservation]);
+  }, [finishRun, chime, playImpact, advanceIntro, record, choice, choicePhase, chooseCheckpointOption, wake, intro, restartObservation, beginProtectHold, endProtectHold, engageProtection]);
 
   const saveCard = useCallback(() => {
     if (!record) return;
@@ -746,7 +814,7 @@ export default function MemoryRushGame() {
         />
 
         {awake && !booting && <header className="rush-hud">
-          <div><span>{tr("叠加层", "LAYERS")}</span><strong>{hud.memories}</strong></div>
+          <div><span>{tr("保存槽", "STORAGE")}</span><strong>{hud.memories}/{SAVE_SLOT_COUNT}</strong></div>
           <div className="rush-title"><span>WHAT WAS I AGAIN?</span><strong>VERSION {hud.version}</strong></div>
           <div><span>{tr("重复确认", "RECHECKS")}</span><strong>{String(hud.checks).padStart(2, "0")}</strong></div>
         </header>}
@@ -797,9 +865,21 @@ export default function MemoryRushGame() {
         {started && !choice && <aside className="reconstructed-preview"><span>{tr(`系统此刻相信：${hud.version === "A" ? 4 : hud.version === "B" ? 5 : 3} 人`, `SYSTEM CURRENTLY BELIEVES: ${hud.version === "A" ? 4 : hud.version === "B" ? 5 : 3} PEOPLE`)}</span><div className="memory-figures">{Array.from({length: hud.version === "A" ? 4 : hud.version === "B" ? 5 : 3},(_,index)=><img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{"--figure-scale":1.05+(index%2)*.2} as CSSProperties}/>)}</div></aside>}
         {started && <><div className="combo-pill" data-active={hud.checks > 0}>{hud.checks > 0 ? `×${hud.checks} ${tr("重复使它更熟悉", "REPETITION FEELS FAMILIAR")}` : tr("再次查看同一段记忆", "RECHECK THE SAME MEMORY")}</div>
           <div className="rush-journey"><span>{hud.version === "A" ? tr("01 / 彩色原图", "01 / COLOR SOURCE") : hud.version === "B" ? tr("02 / 全景黑白", "02 / FULL MONOCHROME") : tr("03 / 紫蓝重构", "03 / VIOLET REWRITE")}</span><strong>{tr(`保留 ${hud.memories} 段 · ${seconds}s · ${gameSpeed}×`, `RETAINED ${hud.memories} · ${seconds}s · ${gameSpeed}×`)}</strong><progress max={RUN_DURATION_MS / 1000} value={RUN_DURATION_MS / 1000-seconds} aria-label={tr("重构进度", "Reconstruction progress")} /></div>
-          <div className="run-purpose"><b>{hud.version === "A" ? tr("第10秒回想", "RECALL AT 10S") : hud.version === "B" ? tr("第23秒回想", "RECALL AT 23S") : tr("正在形成结论", "FORMING A RESULT")}</b><span>{tr("移动只负责收集与避开；每次回答都会立刻改写颜色、人物和下一版画面。", "MOVEMENT ONLY COLLECTS OR AVOIDS; EACH ANSWER IMMEDIATELY REWRITES COLOR, PEOPLE, AND THE NEXT VERSION.")}</span></div>
-          <div className="rush-feedback" data-fault={feedback.includes("串线") || feedback.includes("压缩坏了") || feedback.includes("碰撞")} role="status">{shownFeedback}</div>
-          <div className="pickup-legend"><span>{tr("照片：留下一个片段", "PHOTO: RETAIN A FRAGMENT")}</span><span>{tr("泡泡：保留片段并抵挡一次干扰", "BUBBLE: RETAIN A FRAGMENT AND BLOCK ONE HIT")}</span><span>{tr("干扰：短暂打断画面，不结束体验", "INTERFERENCE: BRIEF DISRUPTION, NO GAME OVER")}</span></div></>}
+          <div className="run-purpose"><b>{hud.version === "A" ? tr("保存 / 5 格", "STORE / 5 SLOTS") : hud.version === "B" ? tr("复盘 / 假片段", "RECHECK / FALSE TRACES") : tr("放手 / 保护", "RELEASE / PROTECT")}</b><span>{hud.version === "A" ? tr("接住照片；存满后，新片段会覆盖最早的记忆。", "CATCH PHOTOS; WHEN FULL, NEW FRAGMENTS OVERWRITE THE OLDEST.") : hud.version === "B" ? tr("继续寻找照片，避开混入熟悉感的泡泡。", "KEEP FINDING PHOTOS; AVOID BUBBLES THAT FEEL FAMILIAR.") : tr("决定继续保存，或长按装置暂时保护一个片段。", "KEEP SAVING, OR HOLD THE CONTROL TO LOCK ONE FRAGMENT.")}</span></div>
+          <div className="memory-storage" data-overwritten={hud.overwritten > 0} data-protected={hud.protected}>
+            <header><b>{tr("有限保存槽", "LIMITED STORAGE")}</b><span>{tr(`覆盖 ${hud.overwritten} 次`, `${hud.overwritten} OVERWRITES`)}</span></header>
+            <div>{Array.from({ length: SAVE_SLOT_COUNT }, (_, index) => <i key={index} data-filled={index < hud.memories} data-locked={hud.protected && index === 0}>{hud.protected && index === 0 ? "▣" : String(index + 1).padStart(2,"0")}</i>)}</div>
+          </div>
+          <div className="rush-feedback" data-fault={feedback.includes("串线") || feedback.includes("压缩坏了") || feedback.includes("碰撞") || feedback.includes("假片段") || feedback.includes("覆盖了")} role="status">{shownFeedback}</div>
+          <div className="pickup-legend"><span>{tr("照片：保存；满 5 格后覆盖", "PHOTO: SAVE; OVERWRITE AFTER 5")}</span><span>{tr("泡泡：混入熟悉的假片段", "BUBBLE: INSERT A FAMILIAR FALSE TRACE")}</span><span>{tr("干扰：打断并冲淡一段记忆", "INTERFERENCE: DISRUPT AND FADE A TRACE")}</span></div>
+          <button className="protect-memory" type="button" disabled={choice || paused || hud.memories < 1} data-holding={hud.hold > 0} data-protected={hud.protected} aria-pressed={hud.protected} style={{"--hold":`${hud.hold * 100}%`} as CSSProperties}
+            onPointerDown={(event)=>{ event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); beginProtectHold(); }}
+            onPointerUp={endProtectHold} onPointerCancel={endProtectHold} onPointerLeave={endProtectHold}
+            onKeyDown={(event)=>{ if (["Enter"," "].includes(event.key) && !event.repeat) beginProtectHold(); }}
+            onKeyUp={(event)=>{ if (["Enter"," "].includes(event.key)) endProtectHold(); }}
+            onClick={(event)=>{ if (event.detail === 0) beginProtectHold(.8); }}>
+            <small>{hud.protected ? tr("片段已锁定", "TRACE LOCKED") : tr("长按 0.7 秒", "HOLD 0.7 SEC")}</small><strong>{hud.protected ? tr("正在保护", "PROTECTED") : tr("保护一个片段", "PROTECT ONE TRACE")}</strong><i aria-hidden="true" />
+          </button></>}
 
         {versionPulse && <div className="version-transition" data-version={versionPulse} role="status" aria-live="assertive">
           <span>{versionPulse === "B" ? tr("你的第二次回想已被装置采用", "YOUR SECOND RECALL HAS BEEN ACCEPTED") : tr("你的第三次回想已被装置采用", "YOUR THIRD RECALL HAS BEEN ACCEPTED")}</span>
@@ -830,10 +910,10 @@ export default function MemoryRushGame() {
             {[3,4,5].map(value => <button key={value} data-selected={recallAnswer === value} onClick={() => { setRecallAnswer(value); chime(560 + value * 70, .09); }}><strong>{value}</strong><span>{tr("个人", "PEOPLE")}</span></button>)}
           </div>}
           {intro === 4 && <div className="version-map" aria-label={tr("记忆版本变化", "Memory version changes")}>
-            <span data-version="A"><small>01 / SOURCE</small><b>A</b><em>{tr("彩色原图", "FULL COLOR")}</em></span><i aria-hidden="true">→</i><span data-version="B"><small>02 / ERASE</small><b>B</b><em>{tr("全黑白", "MONOCHROME")}</em></span><i aria-hidden="true">→</i><span data-version="C"><small>03 / REWRITE</small><b>C</b><em>{tr("紫蓝重构", "VIOLET REBUILD")}</em></span>
+            <span data-version="A"><small>01 / STORE</small><b>A</b><em>{tr("有限保存", "LIMITED STORAGE")}</em></span><i aria-hidden="true">→</i><span data-version="B"><small>02 / RECHECK</small><b>B</b><em>{tr("假片段混入", "FALSE TRACES")}</em></span><i aria-hidden="true">→</i><span data-version="C"><small>03 / RELEASE</small><b>C</b><em>{tr("保护或放手", "PROTECT / RELEASE")}</em></span>
           </div>}
-          <p>{intro === 0 ? tr("人们因为害怕遗忘而不断保存、搜索与回看。但保存下来的图像，未必等于你真正记住的经历。", "WE SAVE, SEARCH, AND REPLAY BECAUSE WE FEAR FORGETTING. BUT A STORED IMAGE IS NOT THE SAME AS A REMEMBERED EXPERIENCE.") : intro === 1 ? tr("只看几秒。不要刻意数数，也不要寻找标准答案，只记住你自然注意到的部分。", "LOOK FOR A FEW SECONDS. DO NOT COUNT DELIBERATELY OR HUNT FOR A CORRECT ANSWER; NOTICE WHAT STAYS WITH YOU.") : intro === 2 ? tr("凭第一感觉作答。装置暂时不揭晓原图，只把这个数字保存为你的第一个记忆版本。", "ANSWER FROM FIRST IMPRESSION. THE MACHINE WILL NOT REVEAL THE SOURCE YET; IT SAVES THIS NUMBER AS YOUR FIRST MEMORY VERSION.") : intro === 3 ? tr(`你选择了 ${recallAnswer} 人。害怕记错会推动我们再次确认，而每次确认又会增加熟悉感。接下来，同一个人数问题还会出现两次，并穿插两个画面细节。`, `YOU CHOSE ${recallAnswer}. FEAR OF BEING WRONG DRIVES ANOTHER CHECK; EACH CHECK ADDS FAMILIARITY. THE COUNT WILL RETURN TWICE, WITH TWO VISUAL DETAILS BETWEEN VERSIONS.`) : tr("穿行缩短为约 36 秒：10 秒后第一次回想，画面立刻全黑白；23 秒后第二次回想，世界重构成紫蓝色。移动只负责收集照片和避开干扰。", "THE JOURNEY NOW LASTS ABOUT 36 SECONDS: RECALL AT 10 SECONDS TURNS THE WHOLE WORLD MONOCHROME; RECALL AT 23 SECONDS REBUILDS IT IN VIOLET. MOVEMENT ONLY COLLECTS PHOTOS AND AVOIDS INTERFERENCE.")}</p>
-          {previous && intro === 0 && <div className="previous-memory"><b>{tr(`上次：VERSION ${previous.version}`, `LAST: VERSION ${previous.version}`)}</b><span>{tr(`保留 ${previous.caught} 个片段 · 本次从原图开始`, `${previous.caught} FRAGMENTS · START AGAIN FROM THE FIRST IMAGE`)}</span></div>}
+          <p>{intro === 0 ? tr("人们因为害怕遗忘而不断保存、搜索与回看。但保存下来的图像，未必等于你真正记住的经历。", "WE SAVE, SEARCH, AND REPLAY BECAUSE WE FEAR FORGETTING. BUT A STORED IMAGE IS NOT THE SAME AS A REMEMBERED EXPERIENCE.") : intro === 1 ? tr("只看几秒。不要刻意数数，也不要寻找标准答案，只记住你自然注意到的部分。", "LOOK FOR A FEW SECONDS. DO NOT COUNT DELIBERATELY OR HUNT FOR A CORRECT ANSWER; NOTICE WHAT STAYS WITH YOU.") : intro === 2 ? tr("凭第一感觉作答。装置暂时不揭晓原图，只把这个数字保存为你的第一个记忆版本。", "ANSWER FROM FIRST IMPRESSION. THE MACHINE WILL NOT REVEAL THE SOURCE YET; IT SAVES THIS NUMBER AS YOUR FIRST MEMORY VERSION.") : intro === 3 ? tr(`你选择了 ${recallAnswer} 人。害怕记错会推动我们再次确认，而每次确认又会增加熟悉感。接下来，同一个人数问题还会出现两次，并穿插两个画面细节。`, `YOU CHOSE ${recallAnswer}. FEAR OF BEING WRONG DRIVES ANOTHER CHECK; EACH CHECK ADDS FAMILIARITY. THE COUNT WILL RETURN TWICE, WITH TWO VISUAL DETAILS BETWEEN VERSIONS.`) : tr("36 秒分为保存、复盘与放手：照片只能占 5 格，之后会覆盖旧片段；泡泡会混入假片段；长按装置 0.7 秒，可暂时保护一格。第 10 秒和第 23 秒仍会回到同一个人数问题。", "THE 36-SECOND JOURNEY MOVES THROUGH STORAGE, RECHECKING, AND RELEASE: ONLY 5 PHOTO SLOTS EXIST; LATER PHOTOS OVERWRITE EARLIER ONES; BUBBLES INSERT FALSE TRACES; HOLD FOR 0.7 SECONDS TO LOCK ONE SLOT. THE SAME COUNT QUESTION RETURNS AT 10 AND 23 SECONDS.")}</p>
+            {previous && intro === 0 && <div className="previous-memory"><b>{tr(`上次：VERSION ${previous.version}`, `LAST: VERSION ${previous.version}`)}</b><span>{tr(`最终保留 ${previous.retained ?? Math.min(SAVE_SLOT_COUNT, previous.caught)} 个片段 · 本次从原图开始`, `${previous.retained ?? Math.min(SAVE_SLOT_COUNT, previous.caught)} FRAGMENTS REMAINED · START AGAIN FROM THE FIRST IMAGE`)}</span></div>}
           <button disabled={!ready} onClick={advanceIntro}>{loadError ? tr("素材加载失败，请刷新页面", "ASSET LOAD FAILED · REFRESH") : !ready ? tr("正在装载记忆…", "LOADING MEMORY…") : intro === 0 ? tr("先看一段记忆", "SHOW ME A MEMORY") : intro === 1 ? tr("我看过了", "I HAVE SEEN IT") : intro === 2 ? tr("保留这个回答", "KEEP THIS ANSWER") : intro === 3 ? tr("看看记忆如何被反复确认", "SEE HOW MEMORY IS RECHECKED") : tr("进入被改写的记忆", "ENTER THE REWRITTEN MEMORY")}</button>
           {loadError && <button onClick={() => location.reload()}>{tr("重新加载", "RELOAD")}</button>}
           <small>{tr("点击、回车或街机按钮继续", "CLICK · ENTER · OR ARCADE BUTTON")}</small>
@@ -869,8 +949,8 @@ export default function MemoryRushGame() {
           </div>
           <blockquote>{tr("当技术替我们保存每一个版本，它是在帮助我们记住，还是让我们逐渐失去遗忘的能力？", "WHEN TECHNOLOGY KEEPS EVERY VERSION FOR US, DOES IT HELP US REMEMBER—OR TEACH US HOW NOT TO FORGET?")}</blockquote>
           <dl className="result-traces">
-            <div><dt>{tr("保留", "RETAINED")}</dt><dd>{record.caught}</dd></div><div><dt>{tr("遗漏", "OMITTED")}</dt><dd>{record.missed}</dd></div>
-            <div><dt>{tr("回想次数", "RECALLS")}</dt><dd>{record.recalls?.length ?? 0}</dd></div><div><dt>{tr("受到干扰", "INTERRUPTIONS")}</dt><dd>{record.bumps}</dd></div>
+            <div><dt>{tr("最终保留", "RETAINED")}</dt><dd>{record.retained ?? Math.min(SAVE_SLOT_COUNT, record.caught)}</dd></div><div><dt>{tr("被覆盖", "OVERWRITTEN")}</dt><dd>{record.overwritten ?? 0}</dd></div>
+            <div><dt>{tr("主动保护", "PROTECTIONS")}</dt><dd>{record.protections ?? 0}</dd></div><div><dt>{tr("受到干扰", "INTERRUPTIONS")}</dt><dd>{record.bumps}</dd></div>
           </dl>
           <div className="result-note">{tr("离开装置后，画面会继续存在；但你可以选择，不再把每一次遗忘都当作缺陷。", "THE IMAGE WILL REMAIN AFTER YOU LEAVE. YOU MAY STILL CHOOSE NOT TO TREAT EVERY ACT OF FORGETTING AS A DEFECT.")}</div>
           <p role="status">{shareMessage}</p>
@@ -881,3 +961,4 @@ export default function MemoryRushGame() {
     </main>
   );
 }
+
