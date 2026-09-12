@@ -1305,3 +1305,37 @@ body { font-family:"Arial Rounded MT Bold","PingFang SC","Microsoft YaHei",syste
   .memory-storage i,.memory-storage i[data-locked="true"],.protect-memory,.protect-memory i { animation:none!important; transition:none!important; }
 }
 
+/* V18 — recall is a clean checkpoint; play controls leave the stage while answering. */
+.rush-choice {
+  inset:26% 5% auto;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  column-gap:1.4cqw;
+  row-gap:1cqh;
+  padding:2cqh 4cqw 2.2cqh;
+  clip-path:polygon(0 0,94% 0,100% 9%,100% 100%,0 100%);
+}
+.rush-choice>span,.rush-choice>h2,.rush-choice>p { grid-column:1/-1; }
+.rush-choice>span { width:max-content; max-width:100%; margin-bottom:.2cqh; }
+.rush-choice h2 { margin:.25cqh 0; font-size:clamp(24px,5.7cqw,39px); line-height:1.03; }
+.rush-choice p { max-width:92%; margin:0 0 .7cqh; font-size:clamp(10px,2cqw,14px); line-height:1.45; }
+.rush-choice button {
+  min-width:0;
+  min-height:8.2cqh;
+  display:grid;
+  place-content:center;
+  gap:.45cqh;
+  padding:1cqh 1cqw;
+  border:1px solid var(--grid-ink);
+  border-left:4px solid var(--grid-ink);
+  text-align:center;
+}
+.rush-choice button strong { font-size:clamp(21px,4.8cqw,34px); line-height:1; }
+.rush-choice button span { font-size:clamp(8px,1.55cqw,11px); line-height:1.15; }
+.rush-choice button[data-selected="true"] { transform:translateY(-.35cqh); box-shadow:4px 4px 0 var(--signal-red); }
+.rush-choice[data-choice="false"]>button { grid-column:1/-1; min-height:6.4cqh; }
+@media (max-width:420px), (max-height:720px) {
+  .rush-choice { inset:24.5% 4% auto; padding:1.6cqh 3.2cqw 1.8cqh; }
+  .rush-choice h2 { font-size:clamp(22px,5.4cqw,34px); }
+  .rush-choice button { min-height:7.4cqh; }
+}
+

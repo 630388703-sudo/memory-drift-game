@@ -865,6 +865,7 @@ export default function MemoryRushGame() {
         {started && !choice && <aside className="reconstructed-preview"><span>{tr(`系统此刻相信：${hud.version === "A" ? 4 : hud.version === "B" ? 5 : 3} 人`, `SYSTEM CURRENTLY BELIEVES: ${hud.version === "A" ? 4 : hud.version === "B" ? 5 : 3} PEOPLE`)}</span><div className="memory-figures">{Array.from({length: hud.version === "A" ? 4 : hud.version === "B" ? 5 : 3},(_,index)=><img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{"--figure-scale":1.05+(index%2)*.2} as CSSProperties}/>)}</div></aside>}
         {started && <><div className="combo-pill" data-active={hud.checks > 0}>{hud.checks > 0 ? `×${hud.checks} ${tr("重复使它更熟悉", "REPETITION FEELS FAMILIAR")}` : tr("再次查看同一段记忆", "RECHECK THE SAME MEMORY")}</div>
           <div className="rush-journey"><span>{hud.version === "A" ? tr("01 / 彩色原图", "01 / COLOR SOURCE") : hud.version === "B" ? tr("02 / 全景黑白", "02 / FULL MONOCHROME") : tr("03 / 紫蓝重构", "03 / VIOLET REWRITE")}</span><strong>{tr(`保留 ${hud.memories} 段 · ${seconds}s · ${gameSpeed}×`, `RETAINED ${hud.memories} · ${seconds}s · ${gameSpeed}×`)}</strong><progress max={RUN_DURATION_MS / 1000} value={RUN_DURATION_MS / 1000-seconds} aria-label={tr("重构进度", "Reconstruction progress")} /></div>
+          {!choice && !paused && <>
           <div className="run-purpose"><b>{hud.version === "A" ? tr("保存 / 5 格", "STORE / 5 SLOTS") : hud.version === "B" ? tr("复盘 / 假片段", "RECHECK / FALSE TRACES") : tr("放手 / 保护", "RELEASE / PROTECT")}</b><span>{hud.version === "A" ? tr("接住照片；存满后，新片段会覆盖最早的记忆。", "CATCH PHOTOS; WHEN FULL, NEW FRAGMENTS OVERWRITE THE OLDEST.") : hud.version === "B" ? tr("继续寻找照片，避开混入熟悉感的泡泡。", "KEEP FINDING PHOTOS; AVOID BUBBLES THAT FEEL FAMILIAR.") : tr("决定继续保存，或长按装置暂时保护一个片段。", "KEEP SAVING, OR HOLD THE CONTROL TO LOCK ONE FRAGMENT.")}</span></div>
           <div className="memory-storage" data-overwritten={hud.overwritten > 0} data-protected={hud.protected}>
             <header><b>{tr("有限保存槽", "LIMITED STORAGE")}</b><span>{tr(`覆盖 ${hud.overwritten} 次`, `${hud.overwritten} OVERWRITES`)}</span></header>
@@ -879,7 +880,7 @@ export default function MemoryRushGame() {
             onKeyUp={(event)=>{ if (["Enter"," "].includes(event.key)) endProtectHold(); }}
             onClick={(event)=>{ if (event.detail === 0) beginProtectHold(.8); }}>
             <small>{hud.protected ? tr("片段已锁定", "TRACE LOCKED") : tr("长按 0.7 秒", "HOLD 0.7 SEC")}</small><strong>{hud.protected ? tr("正在保护", "PROTECTED") : tr("保护一个片段", "PROTECT ONE TRACE")}</strong><i aria-hidden="true" />
-          </button></>}
+          </button></>}</>}
 
         {versionPulse && <div className="version-transition" data-version={versionPulse} role="status" aria-live="assertive">
           <span>{versionPulse === "B" ? tr("你的第二次回想已被装置采用", "YOUR SECOND RECALL HAS BEEN ACCEPTED") : tr("你的第三次回想已被装置采用", "YOUR THIRD RECALL HAS BEEN ACCEPTED")}</span>
@@ -920,7 +921,7 @@ export default function MemoryRushGame() {
           {previous && intro === 0 && <button className="rush-skip" disabled={!ready} onClick={restartObservation}>{tr("直接观察原图", "GO TO THE FIRST IMAGE")}</button>}
         </div>}
 
-        {(choice || paused) && <section className="rush-choice" data-phase={choicePhase} aria-label={tr("回想停顿", "Recall checkpoint")}>
+        {(choice || paused) && <section className="rush-choice" data-phase={choicePhase} data-choice={choice} aria-label={tr("回想停顿", "Recall checkpoint")}>
           <span>{choice ? tr(`第 ${choiceStage} 次回想 · ${choicePhase === "count" ? "1 / 2 人数" : "2 / 2 细节"}`, `RECALL ${choiceStage} · ${choicePhase === "count" ? "1 / 2 COUNT" : "2 / 2 DETAIL"}`) : tr("暂时停下", "PAUSED")}</span>
           <h2>{choice ? choicePhase === "count"
             ? tr("最开始，是几个人？", "HOW MANY PEOPLE WERE THERE AT THE START?")
