@@ -1327,23 +1327,62 @@ body { font-family:"Arial Rounded MT Bold","PingFang SC","Microsoft YaHei",syste
   .memory-storage i,.memory-storage i[data-locked="true"],.protect-memory,.protect-memory i { animation:none!important; transition:none!important; }
 }
 
-/* V19 — reserve an unobstructed play corridor; all bottom controls live below the traveler. */
-.rush-game .memory-storage {
-  bottom:18.2%;
-}
-.rush-game .rush-feedback {
-  bottom:11.6%;
-  min-height:3.5cqh;
-}
-.rush-game .pickup-legend {
+/* V19 — one bottom layout container prevents independent overlays from colliding. */
+.rush-game .bottom-console {
+  position:absolute;
+  z-index:9;
   left:4%;
-  right:33%;
-  bottom:2.3%;
-}
-.rush-game .protect-memory {
   right:4%;
   bottom:2.3%;
-  width:27%;
+  display:grid;
+  grid-template-rows:auto auto auto;
+  gap:.85cqh;
+  pointer-events:none;
+}
+.rush-game .bottom-console .memory-storage,
+.rush-game .bottom-console .rush-feedback,
+.rush-game .bottom-console .pickup-legend,
+.rush-game .bottom-console .protect-memory {
+  position:relative;
+  inset:auto;
+  width:auto;
+  min-width:0;
+  transform:none;
+  box-sizing:border-box;
+}
+.rush-game .bottom-console .memory-storage {
+  padding:.55cqh 1.2cqw .7cqh;
+}
+.rush-game .bottom-console .rush-feedback {
+  min-height:3.5cqh;
+  display:grid;
+  place-items:center;
+  padding:.55cqh 1.2cqw;
+}
+.rush-game .bottom-actions {
+  min-width:0;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(25%,29%);
+  align-items:stretch;
+  gap:1.2cqw;
+  pointer-events:none;
+}
+.rush-game .bottom-console .pickup-legend {
+  display:grid;
+  grid-template-columns:1fr;
+  gap:0;
+  padding:0;
+}
+.rush-game .bottom-console .pickup-legend span {
+  min-height:2.05cqh;
+  padding:.25cqh 1cqw;
+}
+.rush-game .bottom-console .protect-memory {
+  height:100%;
+  min-height:0;
+  right:auto;
+  bottom:auto;
+  pointer-events:auto;
 }
 .rush-game .settings-icon {
   width:clamp(38px,7.2cqw,54px);
@@ -1369,11 +1408,19 @@ body { font-family:"Arial Rounded MT Bold","PingFang SC","Microsoft YaHei",syste
   box-shadow:3px 3px 0 var(--signal-red);
 }
 .rush-game .settings-icon[data-open="true"] svg { transform:rotate(45deg); }
+@media (min-width:700px) {
+  .rush-game {
+    width:min(calc(100vw - 32px),calc((100dvh - 32px) * .5625));
+    height:min(calc(100dvh - 32px),calc((100vw - 32px) * 1.77777));
+  }
+}
 @media (max-width:420px), (max-height:720px) {
-  .rush-game .memory-storage { left:4%; right:4%; bottom:18.2%; }
-  .rush-game .rush-feedback { bottom:11.5%; }
-  .rush-game .pickup-legend { left:4%; right:34%; bottom:2.1%; }
-  .rush-game .protect-memory { right:4%; bottom:2.1%; width:28%; min-height:6.8cqh; }
+  .rush-game .bottom-console { left:4%; right:4%; bottom:1.8%; gap:.65cqh; }
+  .rush-game .bottom-console .memory-storage { padding:.4cqh 1cqw .55cqh; }
+  .rush-game .bottom-console .rush-feedback { min-height:3.2cqh; }
+  .rush-game .bottom-actions { grid-template-columns:minmax(0,1fr) 29%; gap:1cqw; }
+  .rush-game .bottom-console .pickup-legend span { min-height:1.9cqh; }
+  .rush-game .bottom-console .protect-memory { min-height:0; }
   .rush-game .settings-icon { width:40px; min-width:40px; padding:5px; }
 }
 

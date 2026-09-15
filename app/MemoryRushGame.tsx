@@ -912,20 +912,24 @@ export default function MemoryRushGame() {
           <div className="rush-journey"><span>{hud.version === "A" ? tr("01 / 彩色原图", "01 / COLOR SOURCE") : hud.version === "B" ? tr("02 / 全景黑白", "02 / FULL MONOCHROME") : tr("03 / 紫蓝重构", "03 / VIOLET REWRITE")}</span><strong>{tr(`保留 ${hud.memories} 段 · ${seconds}s · ${gameSpeed}×`, `RETAINED ${hud.memories} · ${seconds}s · ${gameSpeed}×`)}</strong><progress max={RUN_DURATION_MS / 1000} value={RUN_DURATION_MS / 1000-seconds} aria-label={tr("重构进度", "Reconstruction progress")} /></div>
           {!choice && !paused && <>
           <div className="run-purpose"><b>{hud.version === "A" ? tr("A / 保存", "A / STORE") : hud.version === "B" ? tr("B / 复盘", "B / RECHECK") : tr("C / 放手", "C / RELEASE")}</b><span>{hud.version === "A" ? tr("只保留你来得及接住的照片；5 格之后会覆盖最早片段。", "KEEP ONLY THE PHOTOS YOU CAN REACH; AFTER 5 SLOTS, THE OLDEST TRACE IS OVERWRITTEN.") : hud.version === "B" ? tr("你的第一次回想使世界失去颜色；泡泡会混入熟悉的假片段。", "YOUR FIRST RECALL REMOVED THE WORLD'S COLOR; BUBBLES INSERT FAMILIAR FALSE TRACES.") : tr("你的第二次回想把世界重构为紫蓝；长按可保护一格，也可以放手。", "YOUR SECOND RECALL REBUILT THE WORLD IN VIOLET; HOLD TO PROTECT ONE SLOT, OR LET GO.")}</span></div>
-          <div className="memory-storage" data-overwritten={hud.overwritten > 0} data-protected={hud.protected}>
-            <header><b>{tr("有限保存槽", "LIMITED STORAGE")}</b><span>{tr(`覆盖 ${hud.overwritten} 次`, `${hud.overwritten} OVERWRITES`)}</span></header>
-            <div>{Array.from({ length: SAVE_SLOT_COUNT }, (_, index) => <i key={index} data-filled={index < hud.memories} data-locked={hud.protected && index === 0}>{hud.protected && index === 0 ? "▣" : String(index + 1).padStart(2,"0")}</i>)}</div>
-          </div>
-          <div className="rush-feedback" data-fault={feedback.includes("串线") || feedback.includes("压缩坏了") || feedback.includes("碰撞") || feedback.includes("假片段") || feedback.includes("覆盖了")} role="status">{shownFeedback}</div>
-          <div className="pickup-legend"><span>{tr("照片：保存；满 5 格后覆盖", "PHOTO: SAVE; OVERWRITE AFTER 5")}</span><span>{tr("泡泡：混入熟悉的假片段", "BUBBLE: INSERT A FAMILIAR FALSE TRACE")}</span><span>{tr("干扰：打断并冲淡一段记忆", "INTERFERENCE: DISRUPT AND FADE A TRACE")}</span></div>
-          <button className="protect-memory" type="button" disabled={choice || paused || hud.memories < 1} data-holding={hud.hold > 0} data-protected={hud.protected} aria-pressed={hud.protected} style={{"--hold":`${hud.hold * 100}%`} as CSSProperties}
-            onPointerDown={(event)=>{ event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); beginProtectHold(); }}
-            onPointerUp={endProtectHold} onPointerCancel={endProtectHold} onPointerLeave={endProtectHold}
-            onKeyDown={(event)=>{ if (["Enter"," "].includes(event.key) && !event.repeat) beginProtectHold(); }}
-            onKeyUp={(event)=>{ if (["Enter"," "].includes(event.key)) endProtectHold(); }}
-            onClick={(event)=>{ if (event.detail === 0) beginProtectHold(.8); }}>
-            <small>{hud.protected ? tr("片段已锁定", "TRACE LOCKED") : tr("长按 0.7 秒", "HOLD 0.7 SEC")}</small><strong>{hud.protected ? tr("正在保护", "PROTECTED") : tr("保护一个片段", "PROTECT ONE TRACE")}</strong><i aria-hidden="true" />
-          </button></>}</>}
+          <div className="bottom-console">
+            <div className="memory-storage" data-overwritten={hud.overwritten > 0} data-protected={hud.protected}>
+              <header><b>{tr("有限保存槽", "LIMITED STORAGE")}</b><span>{tr(`覆盖 ${hud.overwritten} 次`, `${hud.overwritten} OVERWRITES`)}</span></header>
+              <div>{Array.from({ length: SAVE_SLOT_COUNT }, (_, index) => <i key={index} data-filled={index < hud.memories} data-locked={hud.protected && index === 0}>{hud.protected && index === 0 ? "▣" : String(index + 1).padStart(2,"0")}</i>)}</div>
+            </div>
+            <div className="rush-feedback" data-fault={feedback.includes("串线") || feedback.includes("压缩坏了") || feedback.includes("碰撞") || feedback.includes("假片段") || feedback.includes("覆盖了")} role="status">{shownFeedback}</div>
+            <div className="bottom-actions">
+              <div className="pickup-legend"><span>{tr("照片：保存；满 5 格后覆盖", "PHOTO: SAVE; OVERWRITE AFTER 5")}</span><span>{tr("泡泡：混入熟悉的假片段", "BUBBLE: INSERT A FAMILIAR FALSE TRACE")}</span><span>{tr("干扰：打断并冲淡一段记忆", "INTERFERENCE: DISRUPT AND FADE A TRACE")}</span></div>
+              <button className="protect-memory" type="button" disabled={choice || paused || hud.memories < 1} data-holding={hud.hold > 0} data-protected={hud.protected} aria-pressed={hud.protected} style={{"--hold":`${hud.hold * 100}%`} as CSSProperties}
+                onPointerDown={(event)=>{ event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); beginProtectHold(); }}
+                onPointerUp={endProtectHold} onPointerCancel={endProtectHold} onPointerLeave={endProtectHold}
+                onKeyDown={(event)=>{ if (["Enter"," "].includes(event.key) && !event.repeat) beginProtectHold(); }}
+                onKeyUp={(event)=>{ if (["Enter"," "].includes(event.key)) endProtectHold(); }}
+                onClick={(event)=>{ if (event.detail === 0) beginProtectHold(.8); }}>
+                <small>{hud.protected ? tr("片段已锁定", "TRACE LOCKED") : tr("长按 0.7 秒", "HOLD 0.7 SEC")}</small><strong>{hud.protected ? tr("正在保护", "PROTECTED") : tr("保护一个片段", "PROTECT ONE TRACE")}</strong><i aria-hidden="true" />
+              </button>
+            </div>
+          </div></>}</>}
 
         {versionPulse && <div className="version-transition" data-version={versionPulse} role="status" aria-live="assertive">
           <span>{tr(`你的回答：${versionCause.recall} 人 · ${liveDetailLabel}`, `YOUR RECALL: ${versionCause.recall} PEOPLE · ${liveDetailLabel}`)}</span>
