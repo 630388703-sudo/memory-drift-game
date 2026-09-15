@@ -1384,12 +1384,18 @@ body { font-family:"Arial Rounded MT Bold","PingFang SC","Microsoft YaHei",syste
   bottom:auto;
   pointer-events:auto;
 }
-.rush-game .settings-icon {
+.rush-game .settings-icon,
+.rush-game .rush-settings .pause-icon {
   width:clamp(38px,7.2cqw,54px);
   min-width:clamp(38px,7.2cqw,54px);
   padding:.65cqh 1.35cqw;
   display:grid;
   place-items:center;
+}
+.rush-game .pause-icon svg {
+  width:clamp(17px,3.6cqw,25px);
+  height:clamp(17px,3.6cqw,25px);
+  fill:currentColor;
 }
 .rush-game .settings-icon svg {
   width:clamp(17px,3.6cqw,25px);
@@ -1421,7 +1427,8 @@ body { font-family:"Arial Rounded MT Bold","PingFang SC","Microsoft YaHei",syste
   .rush-game .bottom-actions { grid-template-columns:minmax(0,1fr) 29%; gap:1cqw; }
   .rush-game .bottom-console .pickup-legend span { min-height:1.9cqh; }
   .rush-game .bottom-console .protect-memory { min-height:0; }
-  .rush-game .settings-icon { width:40px; min-width:40px; padding:5px; }
+  .rush-game .settings-icon,
+  .rush-game .rush-settings .pause-icon { width:40px; min-width:40px; padding:5px; }
 }
 
 /* V18 — recall is a clean checkpoint; play controls leave the stage while answering. */
@@ -1457,4 +1464,3 @@ body { font-family:"Arial Rounded MT Bold","PingFang SC","Microsoft YaHei",syste
   .rush-choice h2 { font-size:clamp(22px,5.4cqw,34px); }
   .rush-choice button { min-height:7.4cqh; }
 }
-

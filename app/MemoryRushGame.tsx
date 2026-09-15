@@ -851,7 +851,18 @@ export default function MemoryRushGame() {
 
         {awake && !booting && <div className="rush-settings">
           <span className="device-pill">{lastDevice === "gamepad" ? tr("街机", "ARCADE") : lastDevice === "keyboard" ? tr("键盘", "KEYS") : tr("触控", "TOUCH")}</span>
-          {started && <button className="pause-quick" onClick={pauseGame} disabled={choice}>{paused ? tr("继续", "RESUME") : tr("暂停", "PAUSE")}</button>}
+          {started && <button
+            className="pause-quick pause-icon"
+            type="button"
+            aria-label={paused ? tr("继续游戏", "Resume game") : tr("暂停游戏", "Pause game")}
+            title={paused ? tr("继续游戏", "Resume game") : tr("暂停游戏", "Pause game")}
+            onClick={pauseGame}
+            disabled={choice}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              {paused ? <path d="M8 5l11 7-11 7Z" /> : <path d="M6 5h4v14H6zM14 5h4v14h-4z" />}
+            </svg>
+          </button>}
           <button
             className="settings-toggle settings-icon"
             type="button"
@@ -1014,4 +1025,3 @@ export default function MemoryRushGame() {
     </main>
   );
 }
-
