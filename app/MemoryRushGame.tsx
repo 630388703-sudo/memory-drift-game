@@ -11,7 +11,8 @@ import glitchOverlayUrl from "../game/assets/memory-glitch-overlay.webp";
 
 const W = 1080;
 const H = 1920;
-const PLAYER_Y = 0.79;
+// Keep the traveler inside the unobstructed play corridor above the bottom HUD dock.
+const PLAYER_Y = 0.65;
 const RUN_DURATION_MS = 24000;
 const RECALL_AT_MS = [6500, 15000] as const;
 const SAVE_SLOT_COUNT = 5;
@@ -851,7 +852,22 @@ export default function MemoryRushGame() {
         {awake && !booting && <div className="rush-settings">
           <span className="device-pill">{lastDevice === "gamepad" ? tr("街机", "ARCADE") : lastDevice === "keyboard" ? tr("键盘", "KEYS") : tr("触控", "TOUCH")}</span>
           {started && <button className="pause-quick" onClick={pauseGame} disabled={choice}>{paused ? tr("继续", "RESUME") : tr("暂停", "PAUSE")}</button>}
-          <button className="settings-toggle" aria-expanded={settingsOpen} aria-controls="display-controls" onClick={() => setSettingsOpen(!settingsOpen)}>{tr("设置", "SETTINGS")} <span>{settingsOpen ? "×" : "+"}</span></button>
+          <button
+            className="settings-toggle settings-icon"
+            type="button"
+            data-open={settingsOpen}
+            aria-label={tr(settingsOpen ? "关闭设置" : "打开设置", settingsOpen ? "CLOSE SETTINGS" : "OPEN SETTINGS")}
+            title={tr(settingsOpen ? "关闭设置" : "设置", settingsOpen ? "Close settings" : "Settings")}
+            aria-expanded={settingsOpen}
+            aria-controls="display-controls"
+            onClick={() => setSettingsOpen(!settingsOpen)}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="3.25" />
+              <circle cx="12" cy="12" r="7.1" />
+              <path d="M12 2.2v3M12 18.8v3M2.2 12h3M18.8 12h3M5.1 5.1l2.2 2.2M16.7 16.7l2.2 2.2M18.9 5.1l-2.2 2.2M7.3 16.7l-2.2 2.2" />
+            </svg>
+          </button>
           {settingsOpen && <div className="settings-popover" id="display-controls">
             <button aria-pressed={quiet} onClick={() => { quietRef.current = !quiet; setQuiet(!quiet); }}>{tr("故障强度", "GLITCH")}<strong>{quiet ? tr("柔和", "SOFT") : tr("完整", "FULL")}</strong></button>
             <button aria-pressed={sound} onClick={() => { const next = !soundRef.current; soundRef.current = next; setSound(next); if (next) unlockAudio(); else ambienceRef.current?.pause(); }}>{tr("声音", "SOUND")}<strong>{sound ? tr("开", "ON") : tr("关", "OFF")}</strong></button>
@@ -971,7 +987,7 @@ export default function MemoryRushGame() {
           <div className="result-kicker">ARCHIVE AFTERIMAGE · RUN {String(record.run).padStart(2,"0")} · VERSION {record.version}</div>
           <div className="result-witness" aria-hidden="true"><span /><span /></div>
           <h2>{tr("遗忘，\n也许不是记忆的失败", "FORGETTING MAY NOT BE\nMEMORY'S FAILURE")}</h2>
-          <p className="result-thesis">{tr("大脑通过淡化、重组与舍弃过去保护当下；数字系统却让每个版本都能被永久召回。", "The mind protects the present by fading, rebuilding, and releasing the past; digital systems make every version permanently retrievable.")}</p>
+          <p className="result-thesis">{tr("遗忘使我们得以淡化、重组并放下过去；数字系统却不断保存和召回旧的痕迹，让本应远去的记忆一次次返回。", "Forgetting lets us fade, reshape, and release the past; digital systems keep saving and recalling old traces, making what should recede return again and again.")}</p>
           <div className="result-process" aria-label={tr("记忆重构过程", "Memory reconstruction process")}>
             <span><b>01</b>{tr("进入装置", "ENTERED")}</span><i>→</i><span><b>02</b>{tr(`${record.checks ?? 0} 次确认`, `${record.checks ?? 0} RECHECKS`)}</span><i>→</i><span><b>03</b>{tr(`版本 ${record.version}`, `VERSION ${record.version}`)}</span>
           </div>

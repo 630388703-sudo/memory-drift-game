@@ -1327,6 +1327,56 @@ body { font-family:"Arial Rounded MT Bold","PingFang SC","Microsoft YaHei",syste
   .memory-storage i,.memory-storage i[data-locked="true"],.protect-memory,.protect-memory i { animation:none!important; transition:none!important; }
 }
 
+/* V19 — reserve an unobstructed play corridor; all bottom controls live below the traveler. */
+.rush-game .memory-storage {
+  bottom:18.2%;
+}
+.rush-game .rush-feedback {
+  bottom:11.6%;
+  min-height:3.5cqh;
+}
+.rush-game .pickup-legend {
+  left:4%;
+  right:33%;
+  bottom:2.3%;
+}
+.rush-game .protect-memory {
+  right:4%;
+  bottom:2.3%;
+  width:27%;
+}
+.rush-game .settings-icon {
+  width:clamp(38px,7.2cqw,54px);
+  min-width:clamp(38px,7.2cqw,54px);
+  padding:.65cqh 1.35cqw;
+  display:grid;
+  place-items:center;
+}
+.rush-game .settings-icon svg {
+  width:clamp(17px,3.6cqw,25px);
+  height:clamp(17px,3.6cqw,25px);
+  overflow:visible;
+  fill:none;
+  stroke:currentColor;
+  stroke-width:1.75;
+  stroke-linecap:square;
+  vector-effect:non-scaling-stroke;
+  transition:transform .28s cubic-bezier(.2,.75,.2,1),color .2s ease;
+}
+.rush-game .settings-icon[data-open="true"] {
+  color:#fff;
+  background:var(--grid-ink);
+  box-shadow:3px 3px 0 var(--signal-red);
+}
+.rush-game .settings-icon[data-open="true"] svg { transform:rotate(45deg); }
+@media (max-width:420px), (max-height:720px) {
+  .rush-game .memory-storage { left:4%; right:4%; bottom:18.2%; }
+  .rush-game .rush-feedback { bottom:11.5%; }
+  .rush-game .pickup-legend { left:4%; right:34%; bottom:2.1%; }
+  .rush-game .protect-memory { right:4%; bottom:2.1%; width:28%; min-height:6.8cqh; }
+  .rush-game .settings-icon { width:40px; min-width:40px; padding:5px; }
+}
+
 /* V18 — recall is a clean checkpoint; play controls leave the stage while answering. */
 .rush-choice {
   inset:26% 5% auto;
