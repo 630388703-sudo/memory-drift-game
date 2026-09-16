@@ -913,11 +913,14 @@ export default function MemoryRushGame() {
           <div className="loader-track" aria-hidden="true"><i /></div>
           <small>{tr("约 3 秒", "ABOUT 3 SECONDS")}</small>
         </section>}
-        {started && !choice && <aside className="reconstructed-preview"><span>{hud.version === "A" ? tr("原图记录：4 人", "SOURCE RECORD: 4 PEOPLE") : tr(`装置补写：${hud.version === "B" ? 5 : 3} 人（并非原图）`, `MACHINE REWRITE: ${hud.version === "B" ? 5 : 3} PEOPLE · NOT THE SOURCE`)}</span><div className="memory-figures">{Array.from({length: hud.version === "A" ? 4 : hud.version === "B" ? 5 : 3},(_,index)=><img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{"--figure-scale":1.05+(index%2)*.2} as CSSProperties}/>)}</div></aside>}
+        {started && !choice && !paused && hud.version !== "A" && <aside className="reconstructed-preview" data-version={hud.version} aria-label={tr("按你的回想生成的画面，不是原图", "Generated from your recall, not the source")}>
+          <span>{tr(`按你的回答补写 · ${versionCause.recall} 人`, `YOUR ANSWER RECONSTRUCTED · ${versionCause.recall} PEOPLE`)}<small>{tr("当前版本 ≠ 原图证据", "THIS VERSION IS NOT SOURCE EVIDENCE")}</small></span>
+          <div className="memory-figures">{Array.from({length: versionCause.recall},(_,index)=><img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{"--figure-scale":1.05+(index%2)*.2} as CSSProperties}/>)}</div>
+        </aside>}
         {started && <><div className="combo-pill" data-active={hud.checks > 0}>{hud.checks > 0 ? `×${hud.checks} ${tr("重复使它更熟悉", "REPETITION FEELS FAMILIAR")}` : tr("再次查看同一段记忆", "RECHECK THE SAME MEMORY")}</div>
           <div className="rush-journey"><span>{hud.version === "A" ? tr("01 / 彩色原图", "01 / COLOR SOURCE") : hud.version === "B" ? tr("02 / 全景黑白", "02 / FULL MONOCHROME") : tr("03 / 紫蓝重构", "03 / VIOLET REWRITE")}</span><strong>{tr(`保留 ${hud.memories} 段 · ${seconds}s · ${gameSpeed}×`, `RETAINED ${hud.memories} · ${seconds}s · ${gameSpeed}×`)}</strong><progress max={RUN_DURATION_MS / 1000} value={RUN_DURATION_MS / 1000-seconds} aria-label={tr("重构进度", "Reconstruction progress")} /></div>
           {!choice && !paused && <>
-          <div className="run-purpose"><b>{hud.version === "A" ? tr("A / 保存", "A / STORE") : hud.version === "B" ? tr("B / 复盘", "B / RECHECK") : tr("C / 放手", "C / RELEASE")}</b><span>{hud.version === "A" ? tr("只保留你来得及接住的照片；5 格之后会覆盖最早片段。", "KEEP ONLY THE PHOTOS YOU CAN REACH; AFTER 5 SLOTS, THE OLDEST TRACE IS OVERWRITTEN.") : hud.version === "B" ? tr("你的第一次回想使世界失去颜色；泡泡会混入熟悉的假片段。", "YOUR FIRST RECALL REMOVED THE WORLD'S COLOR; BUBBLES INSERT FAMILIAR FALSE TRACES.") : tr("你的第二次回想把世界重构为紫蓝；长按可保护一格，也可以放手。", "YOUR SECOND RECALL REBUILT THE WORLD IN VIOLET; HOLD TO PROTECT ONE SLOT, OR LET GO.")}</span></div>
+          <div className="run-purpose"><b>{hud.version === "A" ? tr("A / 保存", "A / STORE") : hud.version === "B" ? tr("B / 复盘", "B / RECHECK") : tr("C / 放手", "C / RELEASE")}</b><span>{hud.version === "A" ? tr("接住照片；第 6 张开始覆盖最早片段。", "CATCH PHOTOS; THE SIXTH OVERWRITES THE OLDEST.") : hud.version === "B" ? tr("泡泡混入假片段；熟悉不等于真实。", "BUBBLES INSERT FALSE TRACES; FAMILIAR IS NOT TRUE.") : tr("长按保护一格，也可以选择放手。", "HOLD TO PROTECT A TRACE, OR LET GO.")}</span></div>
           <div className="bottom-console">
             <div className="memory-storage" data-overwritten={hud.overwritten > 0} data-protected={hud.protected}>
               <header><b>{tr("有限保存槽", "LIMITED STORAGE")}</b><span>{tr(`覆盖 ${hud.overwritten} 次`, `${hud.overwritten} OVERWRITES`)}</span></header>
@@ -925,7 +928,7 @@ export default function MemoryRushGame() {
             </div>
             <div className="rush-feedback" data-fault={feedback.includes("串线") || feedback.includes("压缩坏了") || feedback.includes("碰撞") || feedback.includes("假片段") || feedback.includes("覆盖了")} role="status">{shownFeedback}</div>
             <div className="bottom-actions">
-              <div className="pickup-legend"><span>{tr("照片：保存；满 5 格后覆盖", "PHOTO: SAVE; OVERWRITE AFTER 5")}</span><span>{tr("泡泡：混入熟悉的假片段", "BUBBLE: INSERT A FAMILIAR FALSE TRACE")}</span><span>{tr("干扰：打断并冲淡一段记忆", "INTERFERENCE: DISRUPT AND FADE A TRACE")}</span></div>
+              <div className="pickup-legend compact-legend"><span>{tr("照片 · 保存", "PHOTO · SAVE")}</span><span>{tr("泡泡 · 改写", "BUBBLE · REWRITE")}</span><span>{tr("碰撞 · 打断", "IMPACT · INTERRUPT")}</span></div>
               <button className="protect-memory" type="button" disabled={choice || paused || hud.memories < 1} data-holding={hud.hold > 0} data-protected={hud.protected} aria-pressed={hud.protected} style={{"--hold":`${hud.hold * 100}%`} as CSSProperties}
                 onPointerDown={(event)=>{ event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); beginProtectHold(); }}
                 onPointerUp={endProtectHold} onPointerCancel={endProtectHold} onPointerLeave={endProtectHold}
@@ -941,9 +944,9 @@ export default function MemoryRushGame() {
           <span>{tr(`你的回答：${versionCause.recall} 人 · ${liveDetailLabel}`, `YOUR RECALL: ${versionCause.recall} PEOPLE · ${liveDetailLabel}`)}</span>
           <strong>VERSION {versionPulse}</strong>
           <div className="rewrite-equation" aria-label={tr("回答触发画面改写", "Answer triggers a visual rewrite")}>
-            <span><small>{tr("你的回想", "YOUR RECALL")}</small><b>{versionCause.recall} {tr("人", "PEOPLE")}</b></span><i>→</i><span><small>{tr("装置当作事实", "MACHINE TREATS AS FACT")}</small><b>{versionPulse === "B" ? tr("全景黑白", "FULL MONOCHROME") : tr("紫蓝重构", "VIOLET REWRITE")}</b></span>
+            <span><small>{tr("你的回想", "YOUR RECALL")}</small><b>{versionCause.recall} {tr("人", "PEOPLE")}</b></span><i>→</i><span><small>{tr("装置据此重画", "MACHINE REDRAWS IT")}</small><b>{versionCause.recall} {tr("人", "PEOPLE")}</b></span>
           </div>
-          <p>{versionPulse === "B" ? tr("没有判对或错：装置采用你的回想，移除全部颜色，并补写为 5 人。", "NO RIGHT OR WRONG: THE MACHINE ADOPTS YOUR RECALL, REMOVES ALL COLOR, AND REWRITES THE COUNT AS 5.") : tr("没有判对或错：装置再次采用你的回想，把世界重构为紫蓝色，并补写为 3 人。", "NO RIGHT OR WRONG: THE MACHINE ADOPTS YOUR RECALL AGAIN, REBUILDS THE WORLD IN VIOLET, AND REWRITES THE COUNT AS 3.")}</p>
+          <p>{tr(`人数来自你的回答；${versionPulse === "B" ? "黑白" : "紫蓝"}色调由装置设定。细节回答已保存，结束时与原图对照。`, `THE COUNT COMES FROM YOUR ANSWER; THE ${versionPulse === "B" ? "MONOCHROME" : "VIOLET"} PALETTE IS SET BY THE MACHINE. YOUR DETAIL ANSWER IS SAVED FOR THE FINAL COMPARISON.`)}</p>
         </div>}
 
         {awake && !booting && !started && !record && <div key={intro} className="rush-intro" data-step={intro}>
@@ -989,22 +992,28 @@ export default function MemoryRushGame() {
             : tr("记忆已暂停", "MEMORY PAUSED")}</h2>
           {choice ? <><p>{choicePhase === "count"
             ? tr("你刚才经历的保存、覆盖与干扰，是否改变了答案？先回答人数，再补写一个画面细节。", "DID STORAGE, OVERWRITING, AND INTERFERENCE CHANGE YOUR ANSWER? RECALL THE COUNT, THEN ONE VISUAL DETAIL.")
-            : tr("选择后，装置会把你的回想当作事实，并据此改写颜色和人数。", "AFTER YOU CHOOSE, THE MACHINE WILL TREAT YOUR RECALL AS FACT AND REWRITE COLOR AND COUNT.")}</p>
+            : tr("细节回答会保存到结尾。接下来的人数按你刚才的回答重画，色调由装置切换。", "THIS DETAIL IS SAVED FOR THE END. YOUR COUNT WILL BE REDRAWN; THE MACHINE CHANGES THE PALETTE.")}</p>
           {checkpointOptions(choicePhase, choiceStage).map((value,index)=><button key={value} data-selected={choiceIndex === index} onFocus={()=>{choiceIndexRef.current=index;setChoiceIndex(index);}} onClick={()=>chooseCheckpointOption(value)}><strong>{typeof value === "number" ? value : value === "left" ? tr("左侧", "LEFT") : value === "center" ? tr("中央", "CENTER") : value === "right" ? tr("右侧", "RIGHT") : value === "blue" ? tr("蓝色", "BLUE") : value === "white" ? tr("白色", "WHITE") : tr("粉色", "PINK")}</strong><span>{typeof value === "number" ? tr("个人", "PEOPLE") : tr("凭第一印象", "FIRST IMPRESSION")}</span></button>)}</> : <button onClick={pauseGame}>{tr("继续", "RESUME")}</button>}
         </section>}
 
         {record && <section className="memory-result" aria-label={tr("记忆重构结语", "Memory reconstruction epilogue")}>
           <div className="result-kicker">ARCHIVE AFTERIMAGE · RUN {String(record.run).padStart(2,"0")} · VERSION {record.version}</div>
-          <div className="result-witness" aria-hidden="true"><span /><span /></div>
-          <h2>{tr("遗忘，\n也许不是记忆的失败", "FORGETTING MAY NOT BE\nMEMORY'S FAILURE")}</h2>
-          <p className="result-thesis">{tr("遗忘使我们得以淡化、重组并放下过去；数字系统却不断保存和召回旧的痕迹，让本应远去的记忆一次次返回。", "Forgetting lets us fade, reshape, and release the past; digital systems keep saving and recalling old traces, making what should recede return again and again.")}</p>
-          <div className="result-process" aria-label={tr("记忆重构过程", "Memory reconstruction process")}>
-            <span><b>01</b>{tr("进入装置", "ENTERED")}</span><i>→</i><span><b>02</b>{tr(`${record.checks ?? 0} 次确认`, `${record.checks ?? 0} RECHECKS`)}</span><i>→</i><span><b>03</b>{tr(`版本 ${record.version}`, `VERSION ${record.version}`)}</span>
+          <h2>{tr("你记住的，\n还是最初的画面吗？", "DO YOU REMEMBER\nTHE FIRST IMAGE?")}</h2>
+          <div className="recall-timeline" aria-label={tr("原图与你的三次回答对照", "Source and your three answers")}>
+            {[4, ...Array.from({length:3},(_,index) => record.recalls?.[index] ?? "—")].map((count,index) => <div key={index} data-source={index === 0}>
+              <span>{index === 0 ? tr("原图", "SOURCE") : tr(`回想 ${index}`, `RECALL ${index}`)}</span>
+              <strong>{count}<small>{tr("人", "PEOPLE")}</small></strong>
+              <em>{index === 0 ? tr("最初呈现", "FIRST SHOWN") : index === 1 ? tr("首次判断", "FIRST ANSWER") : tr(`生成版本 ${index === 2 ? "B" : "C"}`, `GENERATED ${index === 2 ? "B" : "C"}`)}</em>
+            </div>)}
           </div>
-          <div className="recall-evidence"><div className="intro-photo intro-photo-1"><img src={resolveImageUrl(backgroundAUrl)} alt={tr("最初呈现的场景", "The scene shown at the start")} /><div className="memory-figures">{[.82,1,.7,.9].map((scale,index)=><img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{"--figure-scale":scale} as CSSProperties}/>)}</div></div><strong>{tr("最初画面：4 人", "FIRST IMAGE: 4 PEOPLE")}</strong><p>{tr("你的三次回想", "YOUR THREE RECALLS")}: {(record.recalls ?? []).join(" → ")}</p><p>{(record.recalls ?? []).some(n=>n!==4) ? tr("你的回答与最初画面出现了差异。熟悉的感觉，是否让你更确信？", "Your answers differed from the first image. Did familiarity make you more certain?") : tr("这一次，你记住了人数。记忆也会保持稳定；这不意味着其他细节从未改变。", "This time you retained the count. Memory can remain stable; other details may still have changed.")}</p></div>
+          <div className="recall-evidence"><strong>{tr("现在，再看一次原图", "NOW LOOK AT THE SOURCE AGAIN")}</strong><div className="intro-photo intro-photo-1"><img src={resolveImageUrl(backgroundAUrl)} alt={tr("最初呈现的场景", "The scene shown at the start")} /><div className="memory-figures">{[.82,1,.7,.9].map((scale,index)=><img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{"--figure-scale":scale} as CSSProperties}/>)}</div></div><p>{(record.recalls ?? []).some(n=>n!==4) ? tr("你的回答与原图出现了差异。这不代表失败，也不能仅凭这一次体验确定差异的原因。", "YOUR ANSWERS DIFFERED FROM THE SOURCE. THIS IS NOT A FAILURE; THIS EXPERIENCE ALONE CANNOT EXPLAIN WHY.") : tr("这一次，你始终记住了人数。记忆可以保持稳定，不需要发生错误才有意义。", "THIS TIME YOU RETAINED THE COUNT. MEMORY CAN REMAIN STABLE; AN ERROR IS NOT REQUIRED FOR THE EXPERIENCE TO MATTER.")}</p></div>
           <div className="detail-evidence">
-            <span><b>{tr("细节 01", "DETAIL 01")}</b>{tr("旋转木马原本在右侧", "CAROUSEL SOURCE: RIGHT")}<em>{tr("你的回想", "YOUR RECALL")}: {(record.details?.[0] === "left" ? tr("左侧", "LEFT") : record.details?.[0] === "center" ? tr("中央", "CENTER") : tr("右侧", "RIGHT"))}</em></span>
-            <span><b>{tr("细节 02", "DETAIL 02")}</b>{tr("天空窗口原本是蓝色", "SKY WINDOW SOURCE: BLUE")}<em>{tr("你的回想", "YOUR RECALL")}: {(record.details?.[1] === "white" ? tr("白色", "WHITE") : record.details?.[1] === "pink" ? tr("粉色", "PINK") : tr("蓝色", "BLUE"))}</em></span>
+            <span><b>{tr("细节 01", "DETAIL 01")}</b>{tr("旋转木马原本在右侧", "CAROUSEL SOURCE: RIGHT")}<em>{tr("你的回想", "YOUR RECALL")}: {(record.details?.[0] === "left" ? tr("左侧", "LEFT") : record.details?.[0] === "center" ? tr("中央", "CENTER") : record.details?.[0] === "right" ? tr("右侧", "RIGHT") : "—")}</em></span>
+            <span><b>{tr("细节 02", "DETAIL 02")}</b>{tr("天空窗口原本是蓝色", "SKY WINDOW SOURCE: BLUE")}<em>{tr("你的回想", "YOUR RECALL")}: {(record.details?.[1] === "white" ? tr("白色", "WHITE") : record.details?.[1] === "pink" ? tr("粉色", "PINK") : record.details?.[1] === "blue" ? tr("蓝色", "BLUE") : "—")}</em></span>
+          </div>
+          <div className="result-reflection">
+            <h3>{tr("遗忘，\n也许不是记忆的失败", "FORGETTING MAY NOT BE\nMEMORY'S FAILURE")}</h3>
+            <p className="result-thesis">{tr("有些过去会渐渐模糊，数字记录却可以一次次将它召回。我们反复保存和确认，究竟是在靠近过去，还是在形成一个越来越熟悉的版本？", "THE PAST MAY FADE, WHILE DIGITAL RECORDS CAN BRING IT BACK AGAIN AND AGAIN. DOES REPEATED SAVING AND CHECKING BRING US CLOSER TO THE PAST, OR TO AN EVER MORE FAMILIAR VERSION?")}</p>
           </div>
           <blockquote>{tr("当技术替我们保存每一个版本，它是在帮助我们记住，还是让我们逐渐失去遗忘的能力？", "WHEN TECHNOLOGY KEEPS EVERY VERSION FOR US, DOES IT HELP US REMEMBER—OR TEACH US HOW NOT TO FORGET?")}</blockquote>
           <dl className="result-traces">
