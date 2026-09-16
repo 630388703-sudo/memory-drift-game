@@ -38,5 +38,23 @@ test('fault styling matches the new plain-language feedback, not protection feed
 });
 
 test('retired mechanic instructions cannot return to the active copy', () => {
-  for (const phrase of ['旧磁带','停摆时钟','褪色票根','残影替你','装置正在把一次触碰转换','记忆能力已生效']) assert.ok(!source.includes(phrase), phrase);
+  for (const phrase of ['旧磁带','停摆时钟','褪色票根','残影替你','装置正在把一次触碰转换','记忆能力已生效','记不清的，就先放一放']) assert.ok(!source.includes(phrase), phrase);
+});
+
+const recallSource = readFileSync(new URL('../app/memory-recall.ts', import.meta.url), 'utf8');
+const recallCode = ts.transpileModule(recallSource.replaceAll('export ', ''), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+const recall = vm.runInNewContext(`${recallCode};({COUNT_OPTIONS, moveCount, recallLabel, comparisonState})`);
+test('uncertainty is reachable and never displayed as zero people', () => {
+  assert.equal(recall.moveCount(5, 1), 0);
+  assert.equal(recall.moveCount(3, -1), 0);
+  assert.equal(recall.moveCount(0, 1), 3);
+  for (const value of [0, 'unknown']) {
+    assert.equal(recall.recallLabel(value, 'zh'), '记不清了');
+    assert.equal(recall.recallLabel(value, 'en'), 'Not sure');
+    assert.equal(recall.comparisonState(value, 4), 'uncertain');
+  }
+  assert.equal(recall.comparisonState(4, 4), 'same');
+  assert.equal(recall.comparisonState(5, 4), 'different');
+  assert.equal(recall.comparisonState(undefined, 4), 'missing');
+  assert.equal(recall.recallLabel(undefined, 'en'), '—');
 });
