@@ -1498,25 +1498,14 @@ body { font-family:"Arial Rounded MT Bold","PingFang SC","Microsoft YaHei",syste
   .rush-choice h2 { font-size:clamp(22px,5.4cqw,34px); }
   .rush-choice button { min-height:7.4cqh; }
 }
-/* Quiet attract screen: a breathing point cloud around an unfinished frame. */
-.dormant-screen { background:radial-gradient(ellipse at 50% 38%,#0d1733 0,#040911 58%,#02050b 100%); gap:1.5cqh; }
-.dormant-screen::before { opacity:.45; background:linear-gradient(90deg,transparent 17%,#79e8de22 17.1%,transparent 17.25% 82%,#b7a0ff22 82.1%,transparent 82.25%),linear-gradient(0deg,transparent 18%,#b7a0ff19 18.1%,transparent 18.2% 82%,#79e8de19 82.1%,transparent 82.2%); }
-.memory-nebula { position:relative; width:86cqw; height:49cqh; max-width:100%; overflow:visible; margin:-4cqh 0 0; pointer-events:none; }
-.nebula-layer { transform-origin:300px 320px; animation:memoryGather 17s cubic-bezier(.45,0,.55,1) var(--phase) infinite; }
-.nebula-traces { transform-origin:300px 320px; animation:memoryOrbit 38s linear infinite; opacity:.65; }
-.nebula-halo { transform-origin:center; animation:memoryHalo 11s ease-in-out infinite; }
-.nebula-core { transform-origin:300px 320px; animation:memoryCore 11s ease-in-out infinite; }
-.dormant-screen strong { font-weight:500; letter-spacing:.16em; }
-.dormant-screen small { max-width:85%; line-height:1.6; letter-spacing:.04em; }
-.dormant-screen em { border-left:2px solid #95e3d0; color:#95b5c6; }
-@keyframes memoryGather {
-  0%,100% { transform:translateY(0) rotate(-9deg) scale(.82,1); opacity:.4; }
-  45% { transform:translateY(-8px) rotate(12deg) scale(1.08,.86); opacity:.92; }
-  70% { transform:translateY(10px) rotate(3deg) scale(.96,1.12); opacity:.62; }
-}
-@keyframes memoryOrbit { to { transform:rotate(360deg); } }
-@keyframes memoryHalo { 50% { opacity:.55; transform:scale(.85); } }
-@keyframes memoryCore { 50% { opacity:.4; transform:scale(.9); } }
+/* Attract screen: a grainy photographic surface, suspended in a dark gallery. */
+.dormant-screen { background:radial-gradient(ellipse at 46% 37%,#16212b 0,#0b1119 45%,#06090e 100%); gap:1.2cqh; }
+.dormant-screen::before { opacity:.22; background:linear-gradient(90deg,transparent 7%,#b6c6be30 7.1%,transparent 7.2% 93%,#b6c6be30 93.1%,transparent 93.2%); }
+.rush-game .dormant-screen .memory-afterimage { position:relative; inset:auto; display:block; flex-shrink:0; width:100cqw; height:60cqh; max-width:none; object-fit:contain; margin:-6cqh -8cqw 0; pointer-events:none; }
+.dormant-code { color:#9cacae; font-size:clamp(8px,1.6cqw,11px); letter-spacing:.23em; }
+.dormant-screen strong { font-family:"STKaiti","KaiTi",serif; font-weight:400; font-size:clamp(25px,5.7cqw,40px); letter-spacing:.21em; color:#e9e8df; }
+.dormant-screen small { max-width:85%; line-height:1.7; letter-spacing:.06em; color:#94a4a8; }
+.dormant-screen em { border-left:1px solid #a9b7b2; color:#95a3a5; background:transparent; }
 .rush-choice[data-choice="true"],.recall-choice { grid-template-columns:repeat(2,minmax(0,1fr)); }
 .rush-intro .recall-choice button { min-height:7cqh; animation:none; }
 .recall-choice button:last-child strong { font:750 clamp(16px,3.4cqw,24px)/1.2 "Microsoft YaHei",sans-serif; }
@@ -1536,7 +1525,3 @@ body { font-family:"Arial Rounded MT Bold","PingFang SC","Microsoft YaHei",syste
 .memory-changes .detail-evidence>span[data-comparison="uncertain"] { border-left-color:#7b6eaa; background:#f2eff7; }
 .memory-changes .detail-evidence b { color:#244a68; font-size:clamp(11px,2.2cqw,15px); }
 .memory-changes .detail-evidence small { color:#586879; font-size:clamp(10px,2cqw,14px); }
-@media(prefers-reduced-motion:reduce) {
-  .memory-nebula * { animation:none!important; }
-  .nebula-layer { opacity:.7; }
-}
