@@ -64,3 +64,48 @@ test('uncertainty is reachable and never displayed as zero people', () => {
   assert.equal(recall.comparisonState(undefined, 4), 'missing');
   assert.equal(recall.recallLabel(undefined, 'en'), '—');
 });
+
+test('the intro has one photo entry and comments identify their source', () => {
+  assert.ok(!source.includes('className="rush-skip"'));
+  assert.ok(source.includes('开始看照片'));
+  assert.ok(source.includes('OTHER PEOPLE’S COMMENTS'));
+  assert.ok(source.includes('游戏虚构'));
+  assert.ok(source.includes('Comments: '));
+  assert.ok(!source.includes('This game alone cannot tell'));
+  assert.ok(!source.includes('一次答错或改答案'));
+});
+
+const faultSource = readFileSync(new URL('../app/photo-fault.ts', import.meta.url), 'utf8');
+const faultCode = ts.transpileModule(faultSource.replaceAll('export ', ''), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+const photoFault = vm.runInNewContext(`${faultCode};({photoFaultStrength, drawPhotoFault})`);
+
+test('photo faults are brief, stop when reduced or paused, and leave the original clean', () => {
+  const strength = photoFault.photoFaultStrength;
+  assert.equal(strength(210, 0, 'A', 0, false), 0);
+  assert.ok(strength(210, 0, 'B', 0, false) > .7);
+  assert.equal(strength(500, 0, 'B', 0, false), 0);
+  assert.equal(strength(210, 0, 'C', 1050, true), 0);
+  assert.equal(strength(1051, 0, 'A', 1050, false), 0);
+  for (let time = 0; time < 24000; time += 37) {
+    const value = strength(time, 2, 'C', 840, false);
+    assert.ok(Number.isFinite(value) && value >= 0 && value <= 1);
+  }
+});
+
+test('photo faults stay clipped to the image and restore canvas state', () => {
+  const calls = [];
+  const ctx = new Proxy({}, {
+    get: (_, key) => (...args) => calls.push([key, ...args]),
+    set: (_, key, value) => {calls.push([key, value]); return true;},
+  });
+  const image = {naturalWidth:400, naturalHeight:600};
+  photoFault.drawPhotoFault(ctx, image, 200, 300, 100, 150, 0);
+  assert.equal(calls.length, 0);
+  photoFault.drawPhotoFault(ctx, image, 200, 300, 100, 150, .7);
+  assert.equal(calls[0][0], 'save');
+  assert.equal(calls.at(-1)[0], 'restore');
+  assert.equal(calls.filter(c=>c[0]==='drawImage').length, 5);
+  assert.ok(calls.findIndex(c=>c[0]==='clip') < calls.findIndex(c=>c[0]==='drawImage'));
+  const clip = calls.find(c=>c[0]==='rect');
+  assert.deepEqual(clip, ['rect',166,255,68,87]);
+});

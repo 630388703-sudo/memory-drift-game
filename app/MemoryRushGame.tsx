@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import DormantVisual from "./DormantVisual";
+import { drawPhotoFault, photoFaultStrength } from "./photo-fault";
 import { COUNT_OPTIONS, moveCount, recallLabel, comparisonState } from "./memory-recall";
 import { MemoryAudio, type MemoryCue } from "./memory-audio";
 import backgroundAUrl from "../game/assets/grid-surreal-memory-a.webp";
@@ -682,7 +683,13 @@ export default function MemoryRushGame() {
           ctx.save();
           if (item.kind === "photo" && (item.id % 3 === 0 || r.drift > .65)) ctx.filter = `grayscale(${Math.min(1, r.drift * 1.6)})`;
           const scale = 0.46 + item.y * 0.72;
-          if (item.kind === "photo") drawContained(ctx, assets.photo, item.x * W, item.y * H, 148 * scale * item.size, 164 * scale * item.size);
+          if (item.kind === "photo") {
+            const photoWidth = 148 * scale * item.size;
+            const photoHeight = 164 * scale * item.size;
+            drawContained(ctx, assets.photo, item.x * W, item.y * H, photoWidth, photoHeight);
+            const fault = photoFaultStrength(now, item.id, r.version, r.impactUntil, quietRef.current || r.paused);
+            drawPhotoFault(ctx, assets.photo, item.x * W, item.y * H, photoWidth, photoHeight, fault);
+          }
           if (item.kind === "cart") drawContained(ctx, assets.cart, item.x * W, item.y * H, 250 * scale, 275 * scale);
           if (item.kind === "bubble") {
             const pulse = 1 + Math.sin(now * .008 + item.id) * .045;
@@ -898,11 +905,11 @@ export default function MemoryRushGame() {
           <p>{tr("马上就好", "One moment")}</p>
           <small>{tr("约 3 秒", "ABOUT 3 SECONDS")}</small>
         </section>}
-        {started && !choice && !paused && memoryEvent && <aside className="shared-memory-event" data-event={memoryEvent} aria-label={tr("虚构的旧留言", "Fictional old comments")} aria-live="polite">
-          <header>{tr("旧留言", "OLD COMMENTS")}<small>{tr("虚构内容", "FICTIONAL")}</small></header>
+        {started && !choice && !paused && memoryEvent && <aside className="shared-memory-event" data-event={memoryEvent} aria-label={tr("别人的留言，游戏虚构", "Other people’s comments, written for the game")} aria-live="polite">
+          <header>{tr("别人的留言", "OTHER PEOPLE’S COMMENTS")}<small>{tr("游戏虚构", "FICTIONAL")}</small></header>
           <p><b>A</b>{memoryEvent === "people" ? tr("“那张照片里有五个人吧？”", '“There were five people in that photo, right?”') : tr("“我记得天空是粉色的。”", '“I remember a pink sky.”')}</p>
           <p><b>B</b>{memoryEvent === "people" ? tr("“对，我也记得是五个。”", '“Yes, I remember five too.”') : tr("“我也记得，淡淡的粉色。”", '“Me too. A pale pink.”')}</p>
-          <footer>{tr("只是留言，不是原图。", "Comments, not the original photo.")}</footer>
+          <footer>{tr("他们记得的，和你一样吗？", "Do you remember it the same way?")}</footer>
         </aside>}
         {started && !choice && !paused && !memoryEvent && hud.version !== "A" && <aside className="reconstructed-preview" data-version={hud.version} aria-label={tr("按你的回答画的，不是原图", "Drawn from your answer, not the original")}>
           <span>{versionCause.recall === 0 ? tr("人数记不清了", "The count is unclear") : tr(`你选了 ${versionCause.recall} 人`, `You chose ${versionCause.recall} people`)}<small>{tr("这是照你的回答画的，不是原图。", "Drawn from your answer, not the original.")}</small></span>
@@ -967,10 +974,9 @@ export default function MemoryRushGame() {
           </div>}
           <p>{intro === 0 ? tr("手机里存着很多照片，你还记得里面的细节吗？先看一张，稍后凭记忆回答几个问题。", "You have the photo saved. How much do you remember? Look at one now, then answer a few questions without looking back.") : intro === 1 ? tr("看看照片里的人和周围的景物。看好后，点下面的按钮。", "Look at the people and their surroundings. Continue when you are ready.") : intro === 2 ? tr("选你记得的人数。暂时不看原图，结束后再对照。", "Choose the number you remember. We will show the original at the end.") : intro === 3 ? tr(`你的回答是：${answerLabel(recallAnswer)}。游戏中还会问两次，也会问到位置和颜色。到时按你记得的选。`, `You answered: ${answerLabel(recallAnswer)}. You will be asked twice more, plus questions about position and color. Choose what you remember each time.`) : tr("左右移动接照片，躲开泡泡和障碍。长按下方按钮可挡一次碰撞。移动时间共 24 秒（1×速度），回答问题时暂停计时。", "Move left or right to catch photos. Dodge bubbles and obstacles. Hold the button below to block one hit. At 1× speed, movement lasts 24 seconds; questions pause the timer.")}</p>
             {previous && intro === 0 && <div className="previous-memory"><b>{tr(`上次：VERSION ${previous.version}`, `LAST: VERSION ${previous.version}`)}</b><span>{tr(`上次留下 ${previous.retained ?? Math.min(SAVE_SLOT_COUNT, previous.caught)} 张照片 · 这次重新开始`, `You kept ${previous.retained ?? Math.min(SAVE_SLOT_COUNT, previous.caught)} photos last time · Start fresh`)}</span></div>}
-          <button disabled={!ready} onClick={advanceIntro}>{loadError ? tr("图片没加载出来，请刷新重试", "The pictures did not load. Please refresh.") : !ready ? tr("正在加载照片…", "Loading photos…") : intro === 0 ? tr("看照片", "Look at the photo") : intro === 1 ? tr("我看过了", "Continue") : intro === 2 ? tr("选好了", "Keep this answer") : intro === 3 ? tr("接下来怎么玩", "How to play") : tr("开始", "Start")}</button>
+          <button disabled={!ready} onClick={advanceIntro}>{loadError ? tr("图片没加载出来，请刷新重试", "The pictures did not load. Please refresh.") : !ready ? tr("正在加载照片…", "Loading photos…") : intro === 0 ? tr("开始看照片", "Start with the photo") : intro === 1 ? tr("我看过了", "Continue") : intro === 2 ? tr("选好了", "Keep this answer") : intro === 3 ? tr("接下来怎么玩", "How to play") : tr("开始", "Start")}</button>
           {loadError && <button onClick={() => location.reload()}>{tr("重新加载", "RELOAD")}</button>}
           <small>{tr("点击、回车或街机按钮继续", "CLICK · ENTER · OR ARCADE BUTTON")}</small>
-          {previous && intro === 0 && <button className="rush-skip" disabled={!ready} onClick={restartObservation}>{tr("直接看照片", "Go straight to the photo")}</button>}
         </div>}
 
         {(choice || paused) && <section className="rush-choice" data-phase={choicePhase} data-choice={choice} aria-label={tr("回答问题", "Questions")}>
@@ -1012,22 +1018,20 @@ export default function MemoryRushGame() {
               })}
             </ol>
             <div className="detail-evidence">
-              {([{key:"count", title:tr("最后记得的人数","FINAL COUNT"), source:4, answer:record.recalls?.[2]}, {key:"side", title:tr("旋转木马的位置","CAROUSEL POSITION"), source:"right", answer:record.details?.[0]}, {key:"sky", title:tr("天空的颜色","SKY COLOR"), source:"blue", answer:record.details?.[1]}]).map(item => {
+              {([{key:"count", title:tr("最后记得的人数","FINAL COUNT"), source:4, answer:record.recalls?.[2], comment:record.sharedMemories?.includes("people") ? 5 : undefined}, {key:"side", title:tr("旋转木马的位置","CAROUSEL POSITION"), source:"right", answer:record.details?.[0]}, {key:"sky", title:tr("天空的颜色","SKY COLOR"), source:"blue", answer:record.details?.[1], comment:record.sharedMemories?.includes("sky") ? "pink" : undefined}]).map(item => {
                 const state = comparisonState(item.answer, item.source);
-                return <span key={item.key} data-comparison={state}><b>{item.title}</b>{tr("原图：","Original: ")}{answerLabel(item.source)}<em>{tr("你的回想：","Your recall: ")}{answerLabel(item.answer)}</em><small>{state === "uncertain" ? tr("没有确定答案","Left uncertain") : state === "same" ? tr("与原图一致","Matches the original") : state === "different" ? tr("与原图不同","Differs from the original") : tr("没有记录","Not recorded")}</small></span>;
+                return <span key={item.key} data-comparison={state}><b>{item.title}</b>{tr("原图：","Original: ")}{answerLabel(item.source)}{item.comment !== undefined && <span>{tr("留言：", "Comments: ")}{answerLabel(item.comment)}</span>}<em>{tr("你的回想：","Your recall: ")}{answerLabel(item.answer)}</em><small>{state === "uncertain" ? tr("没有确定答案","Left uncertain") : state === "same" ? tr("与原图一致","Matches the original") : state === "different" ? tr("与原图不同","Differs from the original") : tr("没有记录","Not recorded")}</small></span>;
               })}
             </div>
-            <p>{tr("这些是你当时的回答。仅凭这次游戏，无法判断留言有没有影响你。", "These are the answers you gave. This game alone cannot tell whether the comments influenced them.")}</p>
           </section>
           <div className="result-reflection">
-            {(record.sharedMemories?.length ?? 0) > 0 && <section className="shared-memory-reveal" aria-label={tr("旧留言与原图对照", "Comments compared with the original")}>
+            {(record.sharedMemories?.length ?? 0) > 0 && <section className="shared-memory-reveal" aria-label={tr("别人的留言与原图对照", "Other people’s comments and the original")}>
               <h3>{tr("刚才的留言，可信吗？", "Were those comments right?")}</h3>
               {record.sharedMemories?.includes("people") && <p>{tr("两条留言都说有五个人，原图里却只有四个。", "Both comments said five people. The original had four.")}</p>}
               {record.sharedMemories?.includes("sky") && <p>{tr("他们还记得粉色的天空，原图里的天空却是蓝色。", "They also remembered a pink sky. The original sky was blue.")}</p>}
-              <p>{tr("听到别人也这样说，你有没有更相信那个答案？这些留言是为游戏编写的，不是真实玩家的记录。", "Did hearing someone else say it make that answer feel more convincing? These comments were written for the game, not left by real players.")}</p>
+              <p>{tr("这些留言是为游戏编写的，不是真实玩家的评论。", "These comments were written for the game, not posted by real players.")}</p>
               <details><summary>{tr("这和曼德拉效应有什么关系？", "How does this relate to the Mandela effect?")}</summary>
                 <p>{tr("很多人对同一件事有相似的记忆，却与可核实的事实不符，这类现象通常被称为曼德拉效应。", "The Mandela effect describes shared memories that do not match verifiable facts.")}</p>
-                <p>{tr("这里用虚构留言演示“别人也这么记得”的干扰。一次答错或改答案，不能证明发生了曼德拉效应。", "The fictional comments show how someone else's account can become a distraction. One wrong or changed answer does not demonstrate the Mandela effect.")}</p>
                 <a href="https://news.uchicago.edu/story/visual-mandela-effect-false-memories-psychology-neuroscience-pikachu-mr-monopoly-waldo" target="_blank" rel="noreferrer">{tr("相关研究：芝加哥大学", "Research: University of Chicago")}</a>
               </details>
             </section>}
