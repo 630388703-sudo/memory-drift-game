@@ -4,6 +4,7 @@ import { useEffect, useRef, type RefObject } from "react";
 
 const WIDTH = 720;
 const HEIGHT = 840;
+const DORMANT_CYCLE_SECONDS = 20;
 const PALETTE = ["#c7e9e1", "#87c8d3", "#a9b5e2", "#e5d4c2", "#c7d5e8"];
 const grain = Array.from({length:220}, (_, index) => ({
   x: ((index * 137.508) % WIDTH),
@@ -58,8 +59,13 @@ export default function DormantVisual({ developing = false, sharedTime }: { deve
       const elapsed = Math.max(0, performance.now()-enteredAt);
       const progress = developing ? (media.matches ? 1 : Math.min(1, Math.max(0, (elapsed-180)/2650))) : 0;
       const develop = progress * progress * (3-2*progress);
-      const dissolve = Math.pow((1 + Math.sin(time * .24 - 1)) / 2, 2) * (1-develop);
-      const pointAt = (u: number, v: number, offset = 0) => surface(u,v,time+offset,dissolve,develop);
+      // Twenty seconds per gather / release cycle, with a quiet opening pause.
+      // This is an idle loop, never a minimum wait before accepting input.
+      const cycle = (time % DORMANT_CYCLE_SECONDS) / DORMANT_CYCLE_SECONDS;
+      const release = cycle < .2 ? 0 : cycle < .6 ? (cycle-.2)/.4 : (1-cycle)/.4;
+      const dissolve = release * release * (3-2*release) * (1-develop);
+      const motionTime = time * .55;
+      const pointAt = (u: number, v: number, offset = 0) => surface(u,v,motionTime+offset,dissolve,develop);
       const haze = ctx.createRadialGradient(360,390,25,360,390,340);
       haze.addColorStop(0, "rgba(117,153,174,.13)");
       haze.addColorStop(.55, "rgba(94,124,163,.045)");
@@ -128,8 +134,8 @@ export default function DormantVisual({ developing = false, sharedTime }: { deve
           const p=pointAt(u,v);
           const edge=Math.pow(Math.abs(u),3)+Math.pow(Math.abs(v),3);
           const drift=dissolve*edge;
-          const x=p.x+Math.cos(phase+time*.17)*drift*64;
-          const y=p.y+Math.sin(phase*.7+time*.14)*drift*52;
+          const x=p.x+Math.cos(phase+motionTime*.17)*drift*64;
+          const y=p.y+Math.sin(phase*.7+motionTime*.14)*drift*52;
           const light=.5+.5*Math.sin(phase);
           ctx.globalAlpha=(.2+light*.56)*(1-drift*.25)*(1-develop*.55);
           ctx.fillStyle=PALETTE[(row+col)%PALETTE.length];
@@ -186,5 +192,5 @@ export default function DormantVisual({ developing = false, sharedTime }: { deve
     };
   }, [developing, sharedTime]);
 
-  return <canvas ref={canvasRef} className="memory-afterimage" data-developing={developing} aria-hidden="true" />;
+  return <canvas ref={canvasRef} className="memory-afterimage" data-developing={developing} data-cycle-seconds={DORMANT_CYCLE_SECONDS} aria-hidden="true" />;
 }
