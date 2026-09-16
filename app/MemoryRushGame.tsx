@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { MemoryAudio, type MemoryCue } from "./memory-audio";
 import backgroundAUrl from "../game/assets/grid-surreal-memory-a.webp";
 import backgroundBUrl from "../game/assets/grid-surreal-memory-b.webp";
 import playerUrl from "../game/assets/traveler-run-back.png";
@@ -244,28 +245,20 @@ export default function MemoryRushGame() {
   const quietRef = useRef(false);
   const [loadError, setLoadError] = useState(false);
   const [shareMessage, setShareMessage] = useState("");
-  const audioRef = useRef<AudioContext | null>(null);
-  const ambienceRef = useRef<HTMLAudioElement | null>(null);
-  const impactRef = useRef<HTMLAudioElement | null>(null);
+  const audioRef = useRef<MemoryAudio | null>(null);
   const [sound, setSound] = useState(true);
   const soundRef = useRef(true);
   const unlockAudio = useCallback(() => {
-    if (!audioRef.current) audioRef.current = new AudioContext();
-    void audioRef.current.resume();
-    if (soundRef.current && ambienceRef.current) void ambienceRef.current.play().catch(() => undefined);
-  }, []);
-  const chime = useCallback((frequency = 640, duration = .18, rough = false) => {
     if (!soundRef.current) return;
-    const audio = audioRef.current;
-    if (!audio) return;
-    void audio.resume();
-    const osc = audio.createOscillator(); const gain = audio.createGain();
-    osc.connect(gain); gain.connect(audio.destination); osc.type = rough ? "sawtooth" : "sine";
-    osc.frequency.setValueAtTime(frequency, audio.currentTime);
-    if (!rough) osc.frequency.exponentialRampToValueAtTime(frequency * 1.16, audio.currentTime + duration);
-    gain.gain.setValueAtTime(rough ? .025 : .035, audio.currentTime);
-    gain.gain.exponentialRampToValueAtTime(.001, audio.currentTime + duration);
-    osc.start(); osc.stop(audio.currentTime + duration + .02);
+    try {
+      if (!audioRef.current) audioRef.current = new MemoryAudio(new AudioContext(), document.baseURI);
+      audioRef.current.setActive(!document.hidden && awakeRef.current);
+      audioRef.current.unlock();
+    } catch { /* Audio support is optional; the installation remains playable. */ }
+  }, []);
+  const playCue = useCallback((cue: MemoryCue) => {
+    if (!soundRef.current) return;
+    audioRef.current?.play(cue);
   }, []);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const runtimeRef = useRef<Runtime>(makeRuntime());
@@ -298,13 +291,16 @@ export default function MemoryRushGame() {
   }, [language]);
 
   useEffect(() => {
-    const ambience = new Audio(new URL("audio/nostalgic-memories.mp3", document.baseURI).href);
-    const impact = new Audio(new URL("audio/impact-thud.mp3", document.baseURI).href);
-    ambience.loop = true; ambience.preload = "auto"; ambience.volume = .14;
-    impact.preload = "auto"; impact.volume = 1;
-    ambienceRef.current = ambience; impactRef.current = impact;
-    return () => { ambience.pause(); impact.pause(); ambienceRef.current = null; impactRef.current = null; window.clearTimeout(bootTimerRef.current); window.clearTimeout(versionTimerRef.current); };
+    const onVisibility = () => audioRef.current?.setActive(!document.hidden && awakeRef.current);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      audioRef.current?.dispose(); audioRef.current = null;
+      window.clearTimeout(bootTimerRef.current); window.clearTimeout(versionTimerRef.current);
+    };
   }, []);
+
+  useEffect(() => { audioRef.current?.setScene(hud.version, paused); }, [hud.version, paused, awake, sound]);
 
   useEffect(() => {
     let live = true;
@@ -353,14 +349,8 @@ export default function MemoryRushGame() {
     resultShownAtRef.current = performance.now();
     setPrevious(next); setRecord(next); setStarted(false);
     setShareMessage("");
-  }, [previous]);
-
-  const playImpact = useCallback(() => {
-    if (!soundRef.current) return;
-    const impact = impactRef.current;
-    if (impact) { impact.currentTime = 0; void impact.play().catch(() => undefined); }
-    chime(82, .42, true);
-  }, [chime]);
+    playCue("finish");
+  }, [previous, playCue]);
 
   const movePointer = useCallback((clientX: number) => {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -376,24 +366,24 @@ export default function MemoryRushGame() {
     if (!r.started || r.paused || r.holdActive) return;
     if (r.memories < 1) {
       setFeedback("先保存一个片段，才能进行保护");
-      chime(210, .12, true);
+      playCue("warning");
       return;
     }
     r.holdActive = true;
     r.holdTriggered = false;
     r.holdStartedAt = r.clock - (pressure >= .72 ? HOLD_TO_PROTECT_MS : 0);
     r.lastInteraction = r.clock;
-  }, [chime]);
+  }, [playCue]);
 
   const endProtectHold = useCallback(() => {
     const r = runtimeRef.current;
     if (r.holdActive && !r.holdTriggered && r.clock - r.holdStartedAt < HOLD_TO_PROTECT_MS) {
       setFeedback("还没有锁定：请继续按住");
-      chime(260, .08, true);
+      playCue("warning");
     }
     r.holdActive = false;
     r.holdTriggered = false;
-  }, [chime]);
+  }, [playCue]);
 
   const engageProtection = useCallback(() => {
     const r = runtimeRef.current;
@@ -405,8 +395,8 @@ export default function MemoryRushGame() {
     r.protectUntil = r.clock + PROTECTION_MS;
     r.effectUntil = r.clock + 560;
     setFeedback("长按完成：一个片段暂时不会被改写");
-    chime(1040, .24);
-  }, [chime]);
+    playCue("protect");
+  }, [playCue]);
 
   const chooseCheckpointOption = useCallback((answer: number | string) => {
     const r = runtimeRef.current;
@@ -418,7 +408,7 @@ export default function MemoryRushGame() {
       setChoiceIndex(1);
       setChoicePhase("detail");
       setFeedback("人数判断已记录 · 再确认一个画面细节");
-      chime(720, .12);
+      playCue("confirm");
       return;
     }
     if (typeof answer !== "string") return;
@@ -436,13 +426,13 @@ export default function MemoryRushGame() {
     window.clearTimeout(versionTimerRef.current);
     versionTimerRef.current = window.setTimeout(() => setVersionPulse(null), 2200);
     setFeedback(`回答已写入 · 世界切换为 VERSION ${nextVersion}`);
-    chime(880);
-  }, [choicePhase, chime, recallAnswer]);
+    playCue("transition");
+  }, [choicePhase, playCue, recallAnswer]);
 
   const advanceIntro = useCallback(() => {
-    unlockAudio(); chime(720, .1);
+    unlockAudio(); playCue("confirm");
     if (intro < 4) setIntro(intro + 1); else begin();
-  }, [intro, begin, unlockAudio, chime]);
+  }, [intro, begin, unlockAudio, playCue]);
 
   const restartObservation = useCallback(() => {
     recordRef.current = null;
@@ -452,10 +442,10 @@ export default function MemoryRushGame() {
 
   const wake = useCallback(() => {
     if (awakeRef.current) return;
-    awakeRef.current = true; bootingRef.current = true; setAwake(true); setBooting(true); unlockAudio(); chime(410, .35, true);
+    awakeRef.current = true; bootingRef.current = true; setAwake(true); setBooting(true); unlockAudio(); playCue("wake");
     window.clearTimeout(bootTimerRef.current);
-    bootTimerRef.current = window.setTimeout(() => { bootingRef.current = false; setBooting(false); chime(760, .28); }, 3200);
-  }, [unlockAudio, chime]);
+    bootTimerRef.current = window.setTimeout(() => { bootingRef.current = false; setBooting(false); playCue("ready"); }, 3200);
+  }, [unlockAudio, playCue]);
 
   const sleep = useCallback(() => {
     if (runtimeRef.current.started) return;
@@ -463,7 +453,7 @@ export default function MemoryRushGame() {
     window.clearTimeout(bootTimerRef.current); bootingRef.current = false; setBooting(false);
     recordRef.current = null; resultShownAtRef.current = 0;
     awakeRef.current = false; setAwake(false); setIntro(0); setRecord(null); setSettingsOpen(false);
-    ambienceRef.current?.pause();
+    audioRef.current?.setActive(false);
   }, []);
 
   useEffect(() => {
@@ -555,7 +545,7 @@ export default function MemoryRushGame() {
         const startPressed = Boolean(pad.buttons[9]?.pressed);
         if ((stick || actionPressed || startPressed) && deviceRef.current !== "gamepad") { deviceRef.current = "gamepad"; setLastDevice("gamepad"); }
         if (!r.started && intro===2 && stick && !inputRef.current.gamepadHorizontal) setRecallAnswer(value=>Math.max(3,Math.min(5,value+Math.sign(stick))));
-        if (choice && stick && !inputRef.current.gamepadHorizontal) { choiceIndexRef.current = (choiceIndexRef.current + (stick > 0 ? 1 : 2)) % 3; setChoiceIndex(choiceIndexRef.current); chime(680, .07); }
+        if (choice && stick && !inputRef.current.gamepadHorizontal) { choiceIndexRef.current = (choiceIndexRef.current + (stick > 0 ? 1 : 2)) % 3; setChoiceIndex(choiceIndexRef.current); playCue("confirm"); }
         if (actionPressed && !inputRef.current.gamepadDash) { if (!awakeRef.current) wake(); else if (bootingRef.current) { /* wait for signal loading */ } else if (choice) chooseCheckpointOption(checkpointOptions(choicePhase, r.recallStage)[choiceIndexRef.current]); else if (r.started) beginProtectHold(); else if (record) restartObservation(); else advanceIntro(); }
         if (!actionPressed && inputRef.current.gamepadDash && r.started) endProtectHold();
         if (startPressed && !inputRef.current.gamepadStart) { if (!awakeRef.current) wake(); else if (choice) { /* keep the choice pause */ } else if (r.started) { r.paused = !r.paused; setPaused(r.paused); } else if (record) restartObservation(); else advanceIntro(); }
@@ -600,7 +590,7 @@ export default function MemoryRushGame() {
             else r.memories += 1;
             r.score += (echoHit ? 80 : 100) * Math.min(8, r.combo);
             r.stats.caught += 1;
-            r.drift = Math.min(1, r.drift + (storageWasFull ? .11 : .055)); chime(620 + Math.min(r.combo, 8) * 55);
+            r.drift = Math.min(1, r.drift + (storageWasFull ? .11 : .055)); playCue(storageWasFull ? "overwrite" : "collect");
             if (r.stats.caught % 4 === 0) r.effectUntil = now + 750;
             setFeedback(storageWasFull ? "保存槽已满：最新片段覆盖了最早片段" : echoHit ? "残影替你接住了遗漏" : r.combo > 2 ? `连续记住 ×${r.combo}` : "照片已装入口袋");
           } else if (item.kind === "bubble" && playerHit && r.shield > 0) {
@@ -608,7 +598,7 @@ export default function MemoryRushGame() {
             r.shield = 0;
             r.protectUntil = 0;
             r.effectUntil = now + 460;
-            setFeedback("保护锁抵消了一次泡泡改写"); chime(840, .18);
+            setFeedback("保护锁抵消了一次泡泡改写"); playCue("block");
           } else if (item.kind === "bubble" && playerHit) {
             item.hit = true;
             r.overwritten += 1;
@@ -616,20 +606,20 @@ export default function MemoryRushGame() {
             r.combo = 0;
             r.shakeUntil = now + 430; r.effectUntil = now + 980; r.impactUntil = now + 480; r.drift = Math.min(1, r.drift + .14);
             setImpactPulse(value => value === "a" ? "b" : "a");
-            setFeedback("泡泡混入了熟悉的假片段"); chime(130, .28, true);
+            setFeedback("泡泡混入了熟悉的假片段"); playCue("bubble");
           } else if (item.kind === "cart" && playerHit && r.shield > 0) {
             item.hit = true;
             r.shield = 0;
             r.protectUntil = 0;
             r.effectUntil = now + 460;
-            setFeedback("保护锁抵消了一次强干扰"); chime(760, .16);
+            setFeedback("保护锁抵消了一次强干扰"); playCue("block");
           } else if (item.kind === "cart" && playerHit) {
             item.hit = true;
             r.stats.bumps += 1;
             if (r.memories > 0) r.memories -= 1;
             r.combo = 0; r.shakeUntil = now + 760; r.effectUntil = now + 1250; r.impactUntil = now + 840; r.drift = Math.min(1, r.drift + .2);
             setImpactPulse(value => value === "a" ? "b" : "a");
-            setFeedback("碰撞：画面与声音同时断裂"); playImpact();
+            setFeedback("碰撞：画面与声音同时断裂"); playCue("collision");
           }
         });
         r.items.forEach((item) => {
@@ -784,7 +774,7 @@ export default function MemoryRushGame() {
     };
     frame = requestAnimationFrame(tick);
     return () => { active = false; cancelAnimationFrame(frame); };
-  }, [finishRun, chime, playImpact, advanceIntro, record, choice, choicePhase, chooseCheckpointOption, wake, intro, restartObservation, beginProtectHold, endProtectHold, engageProtection]);
+  }, [finishRun, playCue, advanceIntro, record, choice, choicePhase, chooseCheckpointOption, wake, intro, restartObservation, beginProtectHold, endProtectHold, engageProtection]);
 
   const saveCard = useCallback(() => {
     if (!record) return;
@@ -881,7 +871,12 @@ export default function MemoryRushGame() {
           </button>
           {settingsOpen && <div className="settings-popover" id="display-controls">
             <button aria-pressed={quiet} onClick={() => { quietRef.current = !quiet; setQuiet(!quiet); }}>{tr("故障强度", "GLITCH")}<strong>{quiet ? tr("柔和", "SOFT") : tr("完整", "FULL")}</strong></button>
-            <button aria-pressed={sound} onClick={() => { const next = !soundRef.current; soundRef.current = next; setSound(next); if (next) unlockAudio(); else ambienceRef.current?.pause(); }}>{tr("声音", "SOUND")}<strong>{sound ? tr("开", "ON") : tr("关", "OFF")}</strong></button>
+            <button aria-pressed={sound} onClick={() => { const next = !soundRef.current; soundRef.current = next; setSound(next); audioRef.current?.setEnabled(next); if (next) unlockAudio(); }}>{tr("声音", "SOUND")}<strong>{sound ? tr("开", "ON") : tr("关", "OFF")}</strong></button>
+            <div className="audio-preview" role="group" aria-label={tr("音效试听", "Sound preview")}>
+              <span>{tr("试听", "LISTEN")}</span>
+              <button type="button" disabled={!sound} onClick={() => { unlockAudio(); playCue("collect"); }}>{tr("收集", "COLLECT")}</button>
+              <button type="button" disabled={!sound} onClick={() => { unlockAudio(); playCue("collision"); }}>{tr("碰撞", "IMPACT")}</button>
+            </div>
             <button onClick={() => { const next=language === "zh" ? "en" : "zh"; setLanguage(next); localStorage.setItem("memory-rush-language", next); }}>{tr("语言", "LANGUAGE")}<strong>{language === "zh" ? "EN" : "中文"}</strong></button>
             <div className="speed-selector" role="group" aria-label={tr("体验速度", "Experience speed")}>
               <span>{tr("倍速", "SPEED")}</span>
@@ -971,7 +966,7 @@ export default function MemoryRushGame() {
           </div>}
           {intro === 1 && <div className="intro-photo intro-photo-1"><img src={resolveImageUrl(backgroundAUrl)} alt={tr("最初呈现的记忆场景", "The memory scene shown at the start")} /><div className="memory-figures" aria-label={tr("照片里有四个人", "Four people are visible in the photograph")}>{[.82,1,.7,.9].map((scale,index) => <img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{"--figure-scale":scale} as CSSProperties} />)}</div><i /></div>}
           {intro === 2 && <div className="recall-choice" role="group" aria-label={tr("选择记得的人数", "Choose the number you remember")}>
-            {[3,4,5].map(value => <button key={value} data-selected={recallAnswer === value} onClick={() => { setRecallAnswer(value); chime(560 + value * 70, .09); }}><strong>{value}</strong><span>{tr("个人", "PEOPLE")}</span></button>)}
+            {[3,4,5].map(value => <button key={value} data-selected={recallAnswer === value} onClick={() => { setRecallAnswer(value); playCue("confirm"); }}><strong>{value}</strong><span>{tr("个人", "PEOPLE")}</span></button>)}
           </div>}
           {intro === 4 && <div className="version-map" aria-label={tr("记忆版本变化", "Memory version changes")}>
             <span data-version="A"><small>01 / STORE</small><b>A</b><em>{tr("有限保存", "LIMITED STORAGE")}</em></span><i aria-hidden="true">→</i><span data-version="B"><small>02 / RECHECK</small><b>B</b><em>{tr("假片段混入", "FALSE TRACES")}</em></span><i aria-hidden="true">→</i><span data-version="C"><small>03 / RELEASE</small><b>C</b><em>{tr("保护或放手", "PROTECT / RELEASE")}</em></span>

@@ -28,6 +28,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
+      - run: npm run test:audio
       - run: npm test
       - run: npm run build:static
       - uses: actions/configure-pages@v5

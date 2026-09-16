@@ -312,6 +312,10 @@ body { font-family:"Arial Rounded MT Bold","PingFang SC","Microsoft YaHei",syste
   padding:.8cqh 2cqw; box-shadow:none; text-align:left;
 }
 .settings-popover button strong { color:#ef634e; }
+.audio-preview { display:grid; grid-template-columns:1fr 1fr 1fr; gap:.8cqw; align-items:center; padding:.65cqh 0; border-bottom:1px solid rgba(36,89,166,.28); }
+.audio-preview>span { padding-left:.5cqw; font:800 clamp(9px,1.7cqw,12px)/1 ui-monospace,monospace; }
+.rush-settings .settings-popover .audio-preview button { justify-content:center; min-width:0; min-height:36px; padding:5px; font-size:clamp(10px,1.9cqw,13px); }
+.rush-settings .settings-popover .audio-preview button:disabled { opacity:.4; cursor:not-allowed; }
 .speed-selector { display:grid; grid-template-columns:1fr repeat(3,auto); align-items:center; gap:.65cqw; padding-top:.75cqh; border-top:1px solid rgba(36,89,166,.28); }
 .speed-selector>span { padding-left:.5cqw; color:#173755; font:800 clamp(8px,1.55cqw,10px)/1 ui-monospace,monospace; letter-spacing:.08em; }
 .rush-settings .settings-popover .speed-selector button { min-width:8.2cqw; min-height:3.8cqh; justify-content:center; padding:.45cqh .8cqw; border:1px solid rgba(36,89,166,.42); color:#173755; background:transparent; font:800 clamp(8px,1.55cqw,10px)/1 ui-monospace,monospace; }
