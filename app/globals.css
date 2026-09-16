@@ -344,24 +344,19 @@ body { font-family:"Arial Rounded MT Bold","PingFang SC","Microsoft YaHei",syste
 @keyframes particleFloat { to { transform:translate(1.2cqw,-2.4cqh) scale(1.7); opacity:.28; } }
 
 .signal-loader {
-  position:absolute; z-index:60; inset:0; overflow:hidden; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1.25cqh;
-  padding:10%; color:#edf7ff; background:#02050b; font-family:ui-monospace,"Cascadia Mono",monospace; text-align:center;
+  position:absolute; z-index:60; inset:0; overflow:hidden; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1.2cqh;
+  padding:8%; color:#e9e8df; background:radial-gradient(ellipse at 46% 37%,#16212b 0,#0b1119 45%,#06090e 100%);
+  font-family:ui-monospace,"Cascadia Mono",monospace; text-align:center;
+  animation:exposureComplete 3.2s ease-in-out both;
 }
-.signal-loader::before { content:""; position:absolute; inset:0; opacity:.38; background:linear-gradient(rgba(53,132,255,.16) 1px,transparent 1px),linear-gradient(90deg,rgba(53,132,255,.16) 1px,transparent 1px); background-size:9cqw 9cqw; animation:loaderGrid 3.2s linear both; }
-.loader-index { position:absolute; left:5%; top:5%; padding-left:1.2cqw; border-left:3px solid #ff4d47; color:#91d8ff; font-size:clamp(8px,1.8cqw,12px); letter-spacing:.15em; }
-.loader-orbit { position:relative; width:27cqw; aspect-ratio:1; margin-bottom:2cqh; }
-.loader-orbit i { position:absolute; inset:0; border:1px solid rgba(103,212,255,.5); border-radius:50%; animation:loaderOrbit 1.55s linear infinite; }
-.loader-orbit i:nth-child(2) { inset:18%; border-color:rgba(255,65,136,.72); animation-direction:reverse; animation-duration:1.15s; }
-.loader-orbit i:nth-child(3) { inset:38%; border:0; background:#f5fbff; box-shadow:-8px 0 0 #0ee7ce,8px 0 0 #ff425f; animation:loaderPulse .7s ease-in-out infinite alternate; }
-.signal-loader strong { position:relative; font-size:clamp(19px,4.9cqw,34px); letter-spacing:.07em; }
-.signal-loader p { position:relative; max-width:78%; margin:0; color:#9fb8c9; font:600 clamp(9px,1.9cqw,13px)/1.55 "Microsoft YaHei",sans-serif; }
-.loader-track { position:relative; width:72%; height:4px; margin-top:2cqh; background:rgba(96,146,180,.22); overflow:hidden; }
-.loader-track i { display:block; width:0; height:100%; background:linear-gradient(90deg,#17e2c2,#1d73ff 48%,#ff3f77); animation:loaderFill 3.2s cubic-bezier(.22,.76,.2,1) both; }
-.signal-loader small { position:relative; color:#79a2ba; letter-spacing:.14em; }
-@keyframes loaderOrbit { to { transform:rotate(360deg) scale(.94); } }
-@keyframes loaderPulse { to { transform:scale(.62); opacity:.42; } }
-@keyframes loaderFill { 12%{width:8%} 52%{width:67%} 83%{width:88%} to{width:100%} }
-@keyframes loaderGrid { from{transform:perspective(450px) rotateX(58deg) translateY(18%);transform-origin:center bottom} to{transform:perspective(450px) rotateX(58deg) translateY(-4%);transform-origin:center bottom} }
+.signal-loader::before { content:""; position:absolute; inset:0; opacity:.22; pointer-events:none; background:linear-gradient(90deg,transparent 7%,#b6c6be30 7.1%,transparent 7.2% 93%,#b6c6be30 93.1%,transparent 93.2%); }
+.loader-index { position:absolute; left:5%; top:5%; color:#9cacae; font-size:clamp(8px,1.6cqw,11px); letter-spacing:.23em; }
+.rush-game .signal-loader .memory-afterimage { position:relative; inset:auto; display:block; flex-shrink:0; width:100cqw; height:60cqh; max-width:none; object-fit:contain; margin:-6cqh -8cqw 0; pointer-events:none; }
+.signal-loader strong { position:relative; font-family:"STKaiti","KaiTi",serif; font-weight:400; font-size:clamp(23px,5.2cqw,36px); letter-spacing:.12em; line-height:1.4; }
+.signal-loader p { position:relative; max-width:85%; margin:0; color:#94a4a8; font:500 clamp(10px,2cqw,14px)/1.7 "Microsoft YaHei",sans-serif; letter-spacing:.06em; }
+.signal-loader small { position:absolute; right:5%; bottom:5%; padding:.6cqh 1.2cqw; border-left:1px solid #a9b7b2; color:#95a3a5; font-size:clamp(8px,1.7cqw,12px); letter-spacing:.12em; }
+@keyframes exposureComplete { 0%,92% { opacity:1; } 100% { opacity:0; } }
+@media(prefers-reduced-motion:reduce) { .signal-loader { animation:none; } }
 
 @media (max-width:420px), (max-height:720px) {
   .rush-hud { grid-template-columns:.75fr 1.7fr .75fr; padding-inline:3cqw; }
@@ -373,7 +368,7 @@ body { font-family:"Arial Rounded MT Bold","PingFang SC","Microsoft YaHei",syste
   .combo-pill { top:12.5%; }
 }
 
-@media (prefers-reduced-motion:reduce) { .td-fluid>i,.td-fluid>b,.loader-orbit i,.loader-track i,.signal-loader::before { animation:none; } .loader-track i{width:100%} }
+
 
 /* Language-specific editorial typography. Uses installed system faces for offline exhibitions. */
 .rush-game[data-lang="en"] { font-family:"Bahnschrift Condensed","Arial Narrow","Aptos Narrow",sans-serif; }

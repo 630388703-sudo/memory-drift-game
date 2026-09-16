@@ -202,6 +202,7 @@ export default function MemoryRushGame() {
   const [booting, setBooting] = useState(false);
   const bootingRef = useRef(false);
   const bootTimerRef = useRef(0);
+  const memoryVisualTime = useRef(5);
   const [intro, setIntro] = useState(0);
   const [recallAnswer, setRecallAnswer] = useState(4);
   const [language, setLanguage] = useState<"zh" | "en">(() => {
@@ -887,17 +888,16 @@ export default function MemoryRushGame() {
 
         {!awake && <button className="dormant-screen" onClick={wake} aria-label={tr("唤醒装置", "Wake installation")}>
           <span className="dormant-code">MEMORY CHANNEL / 00</span>
-          <DormantVisual />
+          <DormantVisual sharedTime={memoryVisualTime} />
           <strong>{tr("你还记得吗？", "Do you remember?")}</strong>
           <small>{tr("碰一下，或按任意键开始", "Touch here or press any key to start")}</small>
           <em>{tr("等待开始", "READY WHEN YOU ARE")}</em>
         </button>}
         {awake && booting && <section className="signal-loader" aria-live="polite" aria-label={tr("正在准备游戏", "Getting the game ready")}>
-          <span className="loader-index">01 / SIGNAL ACQUIRED</span>
-          <div className="loader-orbit" aria-hidden="true"><i /><i /><i /></div>
-          <strong>{tr("稍等一下", "One moment")}</strong>
-          <p>{tr("照片准备好了就开始。", "We will start when the photos are ready.")}</p>
-          <div className="loader-track" aria-hidden="true"><i /></div>
+          <span className="loader-index">01 / FIRST EXPOSURE</span>
+          <DormantVisual developing sharedTime={memoryVisualTime} />
+          <strong>{tr("照片正在显影", "The image is developing")}</strong>
+          <p>{tr("稍后进入", "Opening shortly")}</p>
           <small>{tr("约 3 秒", "ABOUT 3 SECONDS")}</small>
         </section>}
         {started && !choice && !paused && memoryEvent && <aside className="shared-memory-event" data-event={memoryEvent} aria-label={tr("虚构的旧留言", "Fictional old comments")} aria-live="polite">
