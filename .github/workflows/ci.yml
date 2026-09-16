@@ -29,6 +29,7 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run test:audio
+      - run: npm run test:copy
       - run: npm test
       - run: npm run build:static
       - uses: actions/configure-pages@v5

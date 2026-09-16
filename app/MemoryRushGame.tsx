@@ -24,6 +24,7 @@ type MemoryVersion = "A" | "B" | "C";
 type ItemKind = "photo" | "cart" | "bubble";
 type DeviceKind = "touch" | "keyboard" | "gamepad";
 type CheckpointPhase = "count" | "detail";
+type SharedMemoryEvent = "people" | "sky";
 const GAME_SPEEDS = [0.8, 1, 1.25] as const;
 type GameSpeed = (typeof GAME_SPEEDS)[number];
 type HardwareControl = { wake: () => void; move: (axis: number) => void; press: (pressure?: number) => void; release?: () => void; pause: () => void };
@@ -31,7 +32,7 @@ declare global { interface Window { MemoryDriftInput?: HardwareControl } }
 type Item = { id: number; kind: ItemKind; x: number; y: number; speed: number; size: number; hit?: boolean };
 type Trail = { x: number; at: number };
 type RunStats = { caught: number; missed: number; bumps: number };
-type MemoryRecord = RunStats & { score: number; checks: number; version: MemoryVersion; run: number; recalls?: number[]; details?: string[]; retained?: number; overwritten?: number; protections?: number };
+type MemoryRecord = RunStats & { score: number; checks: number; version: MemoryVersion; run: number; recalls?: number[]; details?: string[]; retained?: number; overwritten?: number; protections?: number; sharedMemories?: SharedMemoryEvent[] };
 type Runtime = {
   clock: number;
   paused: boolean;
@@ -41,6 +42,7 @@ type Runtime = {
   recallStage: number;
   recalls: number[];
   details: string[];
+  sharedMemories: SharedMemoryEvent[];
   started: boolean;
   x: number;
   targetX: number;
@@ -71,7 +73,7 @@ type Runtime = {
 
 const emptyStats = (): RunStats => ({ caught: 0, missed: 0, bumps: 0 });
 const makeRuntime = (): Runtime => ({
-  clock: 0, paused: false, drift: 0, effectUntil: 0, impactUntil: 0, recallStage: 0, recalls: [], details: [],
+  clock: 0, paused: false, drift: 0, effectUntil: 0, impactUntil: 0, recallStage: 0, recalls: [], details: [], sharedMemories: [],
   started: false, x: 0.5, targetX: 0.5, items: [], nextId: 1, lastSpawn: 0,
   score: 0, combo: 0, checks: 0, memories: 0, version: "A", previousVersion: "A", versionFade: 0,
   shakeUntil: 0, shield: 0, overwritten: 0, protections: 0, holdActive: false, holdStartedAt: 0, holdTriggered: false, protectUntil: 0,
@@ -81,43 +83,23 @@ const makeRuntime = (): Runtime => ({
 });
 
 const feedbackEn = (text: string) => {
-  if (text.startsWith("连续记住")) return text.replace("连续记住", "MEMORY CHAIN");
-  if (text.startsWith("第 ")) return text.replace("次确认：熟悉感正在增加", " CHECKS · FAMILIARITY IS INCREASING").replace("第 ", "");
-  if (text.startsWith("进入 VERSION")) return text.replace("进入", "ENTERED").replace("场景记忆已重排", "SCENE MEMORY REORDERED");
-  if (text.startsWith("人数判断已记录")) return "COUNT RECORDED · NOW RECALL ONE VISUAL DETAIL";
-  if (text.startsWith("回答已写入")) return text.replace("回答已写入 · 世界切换为", "ANSWER WRITTEN · WORLD SWITCHED TO");
+  if (text.startsWith("连续接住")) return text.replace("连续接住", "Caught in a row");
   const table: Record<string, string> = {
-    "左右移动收集照片 · 避开干扰 · 稍后回想": "MOVE TO COLLECT PHOTOS · AVOID INTERFERENCE · RECALL LATER",
-    "保存槽已满：最新片段覆盖了最早片段": "STORAGE FULL · THE NEWEST FRAGMENT OVERWROTE THE OLDEST",
-    "长按完成：一个片段暂时不会被改写": "HOLD COMPLETE · ONE FRAGMENT IS TEMPORARILY LOCKED",
-    "还没有锁定：请继续按住": "NOT LOCKED YET · KEEP HOLDING",
-    "先保存一个片段，才能进行保护": "STORE A FRAGMENT BEFORE PROTECTING IT",
-    "保护锁抵消了一次泡泡改写": "MEMORY LOCK BLOCKED ONE BUBBLE REWRITE",
-    "保护锁抵消了一次强干扰": "MEMORY LOCK BLOCKED ONE HARD INTERRUPTION",
-    "泡泡混入了熟悉的假片段": "A FAMILIAR-LOOKING FALSE FRAGMENT ENTERED THE MEMORY",
-    "回想已记录 · 继续寻找照片": "RECALL RECORDED · CONTINUE FINDING PHOTOS",
-    "一个片段离开了画面": "A FRAGMENT LEFT THE FRAME",
-    "过去的你会帮忙补捡": "YOUR PAST ECHO WILL CATCH MISSED PHOTOS",
-    "左右拖动接照片 · 轻点相框泡泡": "MOVE LEFT OR RIGHT · TAP FRAME BUBBLES",
-    "你主动丢掉一张记忆，换来短暂加速": "ONE MEMORY RELEASED · TEMPORARY DASH",
-    "记忆能力已生效：它也会改变最后留下的版本": "MEMORY ABILITY ACTIVE · IT WILL ALTER THE VERSION YOU LEAVE WITH",
-    "残影替你接住了遗漏": "YOUR ECHO CAUGHT A MISSED PHOTO",
-    "照片已装入口袋": "PHOTO STORED IN YOUR POCKET",
-    "冲刺撞开了记忆柜": "DASH BROKE THROUGH THE MEMORY CART",
-    "记忆泡泡替你挡住一次碰撞": "MEMORY BUBBLE BLOCKED THE COLLISION",
-    "画面短暂串线，继续寻找照片": "BRIEF SIGNAL DISRUPTION · KEEP LOOKING FOR PHOTOS",
-    "相框泡泡：照片 +1，颜色回来了": "FRAME BUBBLE · PHOTO +1 · COLOR RESTORED",
-    "旧磁带：下一段回声提前响起 · 连击 +2": "OLD TAPE · EARLY ECHO · CHAIN +2",
-    "褪色票根：一次带回 2 格记忆": "FADED TICKET · MEMORY +2",
-    "停摆时钟：展厅时间 +5 秒": "STOPPED CLOCK · TIME +5 SEC",
-    "冲刺穿过了坏掉的像素": "DASHED THROUGH CORRUPTED PIXELS",
-    "保护泡泡隔开了静电噪点": "COLOR SHELL BLOCKED SIGNAL NOISE",
-    "记忆被压缩坏了：物体暂时失去颜色": "MEMORY COMPRESSION ERROR · COLOR TEMPORARILY LOST",
-    "错过入口也没关系，再接一张就能重开": "RIFT MISSED · CATCH ONE MORE PHOTO TO REOPEN IT",
-    "漏掉的照片，下轮更容易再次出现": "MISSED PHOTO · MORE LIKELY TO RETURN NEXT RUN",
-    "啪！记忆 +1 · 恢复颜色 · 保护 +1": "POP · MEMORY +1 · COLOR RESTORED · SHIELD +1",
-    "长按锁定失败：记忆产生新的错位": "LOCK FAILED · A NEW MISALIGNMENT APPEARED",
-    "停止触碰：画面正在重新稳定": "NO INPUT · THE IMAGE IS STABILIZING",
+    "左右移动，接住照片。": "Move left and right to catch photos.",
+    "存满了，最早的一张被换掉了。": "Full. The oldest photo was replaced.",
+    "护好了，能挡住一次干扰。": "Protected. You can block one hit.",
+    "再按久一点。": "Hold a little longer.",
+    "先接一张照片。": "Catch a photo first.",
+    "挡住泡泡了，照片没变。": "Bubble blocked. Your photos are unchanged.",
+    "挡住了，照片还在。": "Hit blocked. You kept your photos.",
+    "碰到泡泡，混进了一段假记忆。": "A bubble slipped a false memory in.",
+    "人数记下了，再选一个细节。": "Got it. Now choose one detail.",
+    "记下了，继续接照片。": "Got it. Keep catching photos.",
+    "漏掉了一张。": "Missed a photo.",
+    "接住一张照片。": "Caught a photo.",
+    "撞到了，少了一张照片。": "Ouch. You lost a photo.",
+    "撞到了，画面晃了一下。": "Ouch. The picture shook.",
+    "停一会儿，画面会慢慢恢复。": "Stay still for a moment. The picture will settle.",
   };
   return table[text] ?? text;
 };
@@ -277,7 +259,9 @@ export default function MemoryRushGame() {
       return saved ? JSON.parse(saved) : null;
     } catch { return null; }
   });
-  const [feedback, setFeedback] = useState("过去的你会帮忙补捡");
+  const [feedback, setFeedback] = useState("左右移动，接住照片。");
+  const [memoryEvent, setMemoryEvent] = useState<SharedMemoryEvent | null>(null);
+  const memoryEventRef = useRef<SharedMemoryEvent | null>(null);
   const [impactPulse, setImpactPulse] = useState<"a" | "b" | null>(null);
   const [versionPulse, setVersionPulse] = useState<MemoryVersion | null>(null);
   const [versionCause, setVersionCause] = useState<{ recall: number; detail: string }>({ recall: 4, detail: "" });
@@ -331,19 +315,20 @@ export default function MemoryRushGame() {
     fresh.lastSpawn = 0; fresh.startedAt = 0;
     fresh.items = [{ id: fresh.nextId++, kind: "photo", x: .5, y: .6, speed: .12, size: 1.28 }, { id: fresh.nextId++, kind: "bubble", x: .38, y: .3, speed: .12, size: 1 }];
     runtimeRef.current = fresh;
+    memoryEventRef.current = null; setMemoryEvent(null);
     recordRef.current = null;
     resultShownAtRef.current = 0;
     setHud({ score: 0, combo: 0, checks: 0, memories: 0, drift: 0, version: "A", overwritten: 0, protections: 0, hold: 0, protected: false });
     window.clearTimeout(versionTimerRef.current);
     setRecord(null); setStarted(true); setChoice(false); setChoicePhase("count"); setChoiceStage(0); setPaused(false); setVersionPulse(null); setVersionCause({ recall: recallAnswer, detail: "" }); setSeconds(RUN_DURATION_MS / 1000);
-    setFeedback("左右移动收集照片 · 避开干扰 · 稍后回想");
+    setFeedback("左右移动，接住照片。");
   }, [recallAnswer, unlockAudio]);
 
   const finishRun = useCallback(() => {
     const r = runtimeRef.current;
     if (!r.started) return;
     r.started = false;
-    const next: MemoryRecord = { ...r.stats, score: r.score, checks: r.checks, version: r.version, run: (previous?.run ?? 0) + 1, recalls: [...r.recalls], details: [...r.details], retained: r.memories, overwritten: r.overwritten, protections: r.protections };
+    const next: MemoryRecord = { ...r.stats, score: r.score, checks: r.checks, version: r.version, run: (previous?.run ?? 0) + 1, recalls: [...r.recalls], details: [...r.details], retained: r.memories, overwritten: r.overwritten, protections: r.protections, sharedMemories: [...r.sharedMemories] };
     try { localStorage.setItem("memory-rush-record", JSON.stringify(next)); } catch { /* optional persistence */ }
     recordRef.current = next;
     resultShownAtRef.current = performance.now();
@@ -365,7 +350,7 @@ export default function MemoryRushGame() {
     const r = runtimeRef.current;
     if (!r.started || r.paused || r.holdActive) return;
     if (r.memories < 1) {
-      setFeedback("先保存一个片段，才能进行保护");
+      setFeedback("先接一张照片。");
       playCue("warning");
       return;
     }
@@ -378,7 +363,7 @@ export default function MemoryRushGame() {
   const endProtectHold = useCallback(() => {
     const r = runtimeRef.current;
     if (r.holdActive && !r.holdTriggered && r.clock - r.holdStartedAt < HOLD_TO_PROTECT_MS) {
-      setFeedback("还没有锁定：请继续按住");
+      setFeedback("再按久一点。");
       playCue("warning");
     }
     r.holdActive = false;
@@ -394,7 +379,7 @@ export default function MemoryRushGame() {
     r.protections += 1;
     r.protectUntil = r.clock + PROTECTION_MS;
     r.effectUntil = r.clock + 560;
-    setFeedback("长按完成：一个片段暂时不会被改写");
+    setFeedback("护好了，能挡住一次干扰。");
     playCue("protect");
   }, [playCue]);
 
@@ -407,7 +392,7 @@ export default function MemoryRushGame() {
       choiceIndexRef.current = 1;
       setChoiceIndex(1);
       setChoicePhase("detail");
-      setFeedback("人数判断已记录 · 再确认一个画面细节");
+      setFeedback("人数记下了，再选一个细节。");
       playCue("confirm");
       return;
     }
@@ -425,7 +410,7 @@ export default function MemoryRushGame() {
     setVersionPulse(nextVersion);
     window.clearTimeout(versionTimerRef.current);
     versionTimerRef.current = window.setTimeout(() => setVersionPulse(null), 2200);
-    setFeedback(`回答已写入 · 世界切换为 VERSION ${nextVersion}`);
+    setFeedback("记下了，继续接照片。");
     playCue("transition");
   }, [choicePhase, playCue, recallAnswer]);
 
@@ -553,6 +538,13 @@ export default function MemoryRushGame() {
       }
 
       if (r.started && !r.paused && !document.hidden) {
+        // Scripted social cues, never presented as actual visitor testimony or statistics.
+        const nextEvent: SharedMemoryEvent | null = now >= 2500 && now < 6000 ? "people" : now >= 10000 && now < 14000 ? "sky" : null;
+        if (memoryEventRef.current !== nextEvent) {
+          memoryEventRef.current = nextEvent;
+          setMemoryEvent(nextEvent);
+          if (nextEvent && !r.sharedMemories.includes(nextEvent)) r.sharedMemories.push(nextEvent);
+        }
         if (r.holdActive && !r.holdTriggered && now - r.holdStartedAt >= HOLD_TO_PROTECT_MS) engageProtection();
         if (r.shield > 0 && r.protectUntil > 0 && now >= r.protectUntil) { r.shield = 0; r.protectUntil = 0; }
         const digital = (inputRef.current.right ? 1 : 0) - (inputRef.current.left ? 1 : 0);
@@ -592,13 +584,13 @@ export default function MemoryRushGame() {
             r.stats.caught += 1;
             r.drift = Math.min(1, r.drift + (storageWasFull ? .11 : .055)); playCue(storageWasFull ? "overwrite" : "collect");
             if (r.stats.caught % 4 === 0) r.effectUntil = now + 750;
-            setFeedback(storageWasFull ? "保存槽已满：最新片段覆盖了最早片段" : echoHit ? "残影替你接住了遗漏" : r.combo > 2 ? `连续记住 ×${r.combo}` : "照片已装入口袋");
+            setFeedback(storageWasFull ? "存满了，最早的一张被换掉了。" : echoHit ? "接住一张照片。" : r.combo > 2 ? `连续接住 ×${r.combo}` : "接住一张照片。");
           } else if (item.kind === "bubble" && playerHit && r.shield > 0) {
             item.hit = true;
             r.shield = 0;
             r.protectUntil = 0;
             r.effectUntil = now + 460;
-            setFeedback("保护锁抵消了一次泡泡改写"); playCue("block");
+            setFeedback("挡住泡泡了，照片没变。"); playCue("block");
           } else if (item.kind === "bubble" && playerHit) {
             item.hit = true;
             r.overwritten += 1;
@@ -606,26 +598,27 @@ export default function MemoryRushGame() {
             r.combo = 0;
             r.shakeUntil = now + 430; r.effectUntil = now + 980; r.impactUntil = now + 480; r.drift = Math.min(1, r.drift + .14);
             setImpactPulse(value => value === "a" ? "b" : "a");
-            setFeedback("泡泡混入了熟悉的假片段"); playCue("bubble");
+            setFeedback("碰到泡泡，混进了一段假记忆。"); playCue("bubble");
           } else if (item.kind === "cart" && playerHit && r.shield > 0) {
             item.hit = true;
             r.shield = 0;
             r.protectUntil = 0;
             r.effectUntil = now + 460;
-            setFeedback("保护锁抵消了一次强干扰"); playCue("block");
+            setFeedback("挡住了，照片还在。"); playCue("block");
           } else if (item.kind === "cart" && playerHit) {
             item.hit = true;
             r.stats.bumps += 1;
-            if (r.memories > 0) r.memories -= 1;
+            const lostPhoto = r.memories > 0;
+            if (lostPhoto) r.memories -= 1;
             r.combo = 0; r.shakeUntil = now + 760; r.effectUntil = now + 1250; r.impactUntil = now + 840; r.drift = Math.min(1, r.drift + .2);
             setImpactPulse(value => value === "a" ? "b" : "a");
-            setFeedback("碰撞：画面与声音同时断裂"); playCue("collision");
+            setFeedback(lostPhoto ? "撞到了，少了一张照片。" : "撞到了，画面晃了一下。"); playCue("collision");
           }
         });
         r.items.forEach((item) => {
           if (!item.hit && item.kind === "photo" && item.y >= 1.02) {
             item.hit = true; r.stats.missed += 1; r.combo = 0;
-            setFeedback("一个片段离开了画面");
+            setFeedback("漏掉了一张。");
           }
         });
         r.items = r.items.filter((item) => !item.hit && item.y < 1.08);
@@ -633,7 +626,7 @@ export default function MemoryRushGame() {
         if (now - r.lastInteraction > 1100) {
           r.drift = Math.max(0, r.drift - dt * .16);
           r.effectUntil = Math.min(r.effectUntil, now + 120);
-          if (!r.idleNotified && r.drift > .04) { r.idleNotified = true; setFeedback("停止触碰：画面正在重新稳定"); }
+          if (!r.idleNotified && r.drift > .04) { r.idleNotified = true; setFeedback("停一会儿，画面会慢慢恢复。"); }
         }
 
         if (r.recallStage < RECALL_AT_MS.length && now >= RECALL_AT_MS[r.recallStage]) { r.recallStage += 1; r.paused = true; choiceIndexRef.current = 1; setChoiceIndex(1); setChoicePhase("count"); setChoiceStage(r.recallStage); setChoice(true); }
@@ -783,20 +776,20 @@ export default function MemoryRushGame() {
     g.addColorStop(0, "#5ee0ff"); g.addColorStop(.48, "#fff0a8"); g.addColorStop(1, "#ff8c67"); c.fillStyle = g; c.fillRect(0, 0, 1080, 1440);
     c.fillStyle = "rgba(255,255,255,.84)"; c.roundRect(75, 80, 930, 1280, 52); c.fill(); c.fillStyle = "#173755";
     c.font = "800 34px sans-serif"; c.fillText(`RECONSTRUCTION RECORD · RUN ${String(record.run).padStart(2,"0")}`, 130, 160);
-    c.font = "900 76px sans-serif"; c.fillText(tr("忘了自己是什么", "WHAT WAS I AGAIN?"), 130, 280); c.font = "700 38px sans-serif"; c.fillStyle = "#ef704f"; c.fillText(tr("同一段记忆，此刻的版本", "ONE MEMORY · ITS CURRENT VERSION"), 130, 360);
+    c.font = "900 76px sans-serif"; c.fillText(tr("忘了自己是什么", "WHAT WAS I AGAIN?"), 130, 280); c.font = "700 38px sans-serif"; c.fillStyle = "#ef704f"; c.fillText(tr("你这次记得的样子", "How you remembered it this time"), 130, 360);
     c.fillStyle = "#173755"; c.font = "800 42px sans-serif";
-    [[tr("最初画面","FIRST IMAGE"),4],[tr("第一次回想","FIRST RECALL"),record.recalls?.[0] ?? "—"],[tr("第二次回想","SECOND RECALL"),record.recalls?.[1] ?? "—"],[tr("第三次回想","THIRD RECALL"),record.recalls?.[2] ?? "—"],[tr("保留片段","RETAINED"),record.caught],[tr("受到干扰","INTERRUPTIONS"),record.bumps]].forEach(([label,value],i)=>c.fillText(`${label}  ${value}`,130,500+i*105));
-    c.font = "800 38px sans-serif"; c.fillText(`CURRENT VERSION  ${record.version}`,130,1190); c.font = "600 28px sans-serif"; c.fillText(tr("保存图像与记住经历，是两件不同的事。", "STORING AN IMAGE IS NOT THE SAME AS REMEMBERING."),130,1270);
+    [[tr("最初画面","FIRST IMAGE"),4],[tr("第一次回想","FIRST RECALL"),record.recalls?.[0] ?? "—"],[tr("第二次回想","SECOND RECALL"),record.recalls?.[1] ?? "—"],[tr("第三次回想","THIRD RECALL"),record.recalls?.[2] ?? "—"],[tr("留下的照片","PHOTOS KEPT"),record.retained ?? Math.min(SAVE_SLOT_COUNT, record.caught)],[tr("受到干扰","INTERRUPTIONS"),record.bumps]].forEach(([label,value],i)=>c.fillText(`${label}  ${value}`,130,500+i*105));
+    c.font = "800 38px sans-serif"; c.fillText(`CURRENT VERSION  ${record.version}`,130,1190); c.font = "600 28px sans-serif"; c.fillText(tr("照片留下了。你记得的呢？", "The photo is still here. What do you remember?"),130,1270);
     const a = document.createElement("a"); a.download = `memory-journey-${record.run}.png`; a.href = card.toDataURL("image/png"); a.click();
   }, [record, tr]);
 
   const shareCard = useCallback(async () => {
     if (!record) return;
-    const text = language === "zh" ? `最初画面：4 人｜我的回想：${(record.recalls ?? []).join(" → ")}｜保存图像与记住经历，是两件不同的事。` : `FIRST IMAGE: 4 PEOPLE | MY RECALLS: ${(record.recalls ?? []).join(" → ")} | STORING AN IMAGE IS NOT THE SAME AS REMEMBERING.`;
+    const text = language === "zh" ? `最初画面：4 人｜我的回想：${(record.recalls ?? []).join(" → ")}｜照片留下了。你记得的呢？` : `FIRST IMAGE: 4 PEOPLE | MY RECALLS: ${(record.recalls ?? []).join(" → ")} | The photo is still here. What do you remember?`;
     try {
       if (navigator.share) await navigator.share({ title: tr("忘了自己是什么", "WHAT WAS I AGAIN?"), text, url: location.href });
-      else { await navigator.clipboard.writeText(`${text} ${location.href}`); setShareMessage(tr("结算文字和网址已复制", "RESULT AND LINK COPIED")); }
-    } catch { setShareMessage(tr("分享未完成，可以用保存记忆卡下载图片。", "SHARE NOT COMPLETED · SAVE THE MEMORY CARD INSTEAD")); }
+      else { await navigator.clipboard.writeText(`${text} ${location.href}`); setShareMessage(tr("结果和链接已复制", "Result and link copied")); }
+    } catch { setShareMessage(tr("没能分享出去，可以先保存图片。", "Sharing did not work. Try saving the image instead.")); }
   }, [record, language, tr]);
 
   const pauseGame = useCallback(() => {
@@ -834,9 +827,9 @@ export default function MemoryRushGame() {
         />
 
         {awake && !booting && <header className="rush-hud">
-          <div><span>{tr("保存槽", "STORAGE")}</span><strong>{hud.memories}/{SAVE_SLOT_COUNT}</strong></div>
+          <div><span>{tr("照片", "PHOTOS")}</span><strong>{hud.memories}/{SAVE_SLOT_COUNT}</strong></div>
           <div className="rush-title"><span>WHAT WAS I AGAIN?</span><strong>VERSION {hud.version}</strong></div>
-          <div><span>{tr("重复确认", "RECHECKS")}</span><strong>{String(hud.checks).padStart(2, "0")}</strong></div>
+          <div><span>{tr("回想次数", "RECALLS")}</span><strong>{String(hud.checks).padStart(2, "0")}</strong></div>
         </header>}
 
         {awake && !booting && <div className="rush-settings">
@@ -870,7 +863,7 @@ export default function MemoryRushGame() {
             </svg>
           </button>
           {settingsOpen && <div className="settings-popover" id="display-controls">
-            <button aria-pressed={quiet} onClick={() => { quietRef.current = !quiet; setQuiet(!quiet); }}>{tr("故障强度", "GLITCH")}<strong>{quiet ? tr("柔和", "SOFT") : tr("完整", "FULL")}</strong></button>
+            <button aria-pressed={quiet} onClick={() => { quietRef.current = !quiet; setQuiet(!quiet); }}>{tr("画面抖动", "SHAKE")}<strong>{quiet ? tr("柔和", "SOFT") : tr("标准", "NORMAL")}</strong></button>
             <button aria-pressed={sound} onClick={() => { const next = !soundRef.current; soundRef.current = next; setSound(next); audioRef.current?.setEnabled(next); if (next) unlockAudio(); }}>{tr("声音", "SOUND")}<strong>{sound ? tr("开", "ON") : tr("关", "OFF")}</strong></button>
             <div className="audio-preview" role="group" aria-label={tr("音效试听", "Sound preview")}>
               <span>{tr("试听", "LISTEN")}</span>
@@ -901,41 +894,47 @@ export default function MemoryRushGame() {
               return <b key={index} style={{ "--x": `${x}%`, "--y": `${y}%`, "--delay": `${-(index % 17) * .16}s`, "--size": `${2 + (index % 5) * 1.2}px`, "--tone": index % 4 } as CSSProperties} />;
             })}
           </span>
-          <strong>{tr("等待一段记忆靠近", "WAITING FOR A MEMORY")}</strong>
-          <small>{tr("靠近 · 触碰 · 按下任意键", "APPROACH · TOUCH · PRESS ANY KEY")}</small>
-          <em>{tr("信号未响应", "SIGNAL DORMANT")}</em>
+          <strong>{tr("你还记得吗？", "Do you remember?")}</strong>
+          <small>{tr("碰一下，或按任意键开始", "Touch here or press any key to start")}</small>
+          <em>{tr("等待开始", "READY WHEN YOU ARE")}</em>
         </button>}
-        {awake && booting && <section className="signal-loader" aria-live="polite" aria-label={tr("正在读取观众信号", "Reading visitor signal")}>
+        {awake && booting && <section className="signal-loader" aria-live="polite" aria-label={tr("正在准备游戏", "Getting the game ready")}>
           <span className="loader-index">01 / SIGNAL ACQUIRED</span>
           <div className="loader-orbit" aria-hidden="true"><i /><i /><i /></div>
-          <strong>{tr("正在读取你的靠近", "READING YOUR APPROACH")}</strong>
-          <p>{tr("装置正在把一次触碰转换为记忆入口", "THE INSTALLATION IS TURNING ONE TOUCH INTO A MEMORY ENTRY")}</p>
+          <strong>{tr("稍等一下", "One moment")}</strong>
+          <p>{tr("照片准备好了就开始。", "We will start when the photos are ready.")}</p>
           <div className="loader-track" aria-hidden="true"><i /></div>
           <small>{tr("约 3 秒", "ABOUT 3 SECONDS")}</small>
         </section>}
-        {started && !choice && !paused && hud.version !== "A" && <aside className="reconstructed-preview" data-version={hud.version} aria-label={tr("按你的回想生成的画面，不是原图", "Generated from your recall, not the source")}>
-          <span>{tr(`按你的回答补写 · ${versionCause.recall} 人`, `YOUR ANSWER RECONSTRUCTED · ${versionCause.recall} PEOPLE`)}<small>{tr("当前版本 ≠ 原图证据", "THIS VERSION IS NOT SOURCE EVIDENCE")}</small></span>
+        {started && !choice && !paused && memoryEvent && <aside className="shared-memory-event" data-event={memoryEvent} aria-label={tr("虚构的旧留言", "Fictional old comments")} aria-live="polite">
+          <header>{tr("旧留言", "OLD COMMENTS")}<small>{tr("虚构内容", "FICTIONAL")}</small></header>
+          <p><b>A</b>{memoryEvent === "people" ? tr("“那张照片里有五个人吧？”", '“There were five people in that photo, right?”') : tr("“我记得天空是粉色的。”", '“I remember a pink sky.”')}</p>
+          <p><b>B</b>{memoryEvent === "people" ? tr("“对，我也记得是五个。”", '“Yes, I remember five too.”') : tr("“我也记得，淡淡的粉色。”", '“Me too. A pale pink.”')}</p>
+          <footer>{tr("只是留言，不是原图。", "Comments, not the original photo.")}</footer>
+        </aside>}
+        {started && !choice && !paused && !memoryEvent && hud.version !== "A" && <aside className="reconstructed-preview" data-version={hud.version} aria-label={tr("按你的回答画的，不是原图", "Drawn from your answer, not the original")}>
+          <span>{tr(`你选了 ${versionCause.recall} 人`, `You chose ${versionCause.recall} people`)}<small>{tr("这是照你的回答画的，不是原图。", "Drawn from your answer, not the original.")}</small></span>
           <div className="memory-figures">{Array.from({length: versionCause.recall},(_,index)=><img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{"--figure-scale":1.05+(index%2)*.2} as CSSProperties}/>)}</div>
         </aside>}
-        {started && <><div className="combo-pill" data-active={hud.checks > 0}>{hud.checks > 0 ? `×${hud.checks} ${tr("重复使它更熟悉", "REPETITION FEELS FAMILIAR")}` : tr("再次查看同一段记忆", "RECHECK THE SAME MEMORY")}</div>
-          <div className="rush-journey"><span>{hud.version === "A" ? tr("01 / 彩色原图", "01 / COLOR SOURCE") : hud.version === "B" ? tr("02 / 全景黑白", "02 / FULL MONOCHROME") : tr("03 / 紫蓝重构", "03 / VIOLET REWRITE")}</span><strong>{tr(`保留 ${hud.memories} 段 · ${seconds}s · ${gameSpeed}×`, `RETAINED ${hud.memories} · ${seconds}s · ${gameSpeed}×`)}</strong><progress max={RUN_DURATION_MS / 1000} value={RUN_DURATION_MS / 1000-seconds} aria-label={tr("重构进度", "Reconstruction progress")} /></div>
+        {started && <><div className="combo-pill" data-active={hud.checks > 0}>{hud.checks > 0 ? `×${hud.checks} ${tr("次回想", "recalls")}` : tr("再看一次", "Look again")}</div>
+          <div className="rush-journey"><span>{hud.version === "A" ? tr("01 / 彩色", "01 / COLOR") : hud.version === "B" ? tr("02 / 黑白", "02 / BLACK & WHITE") : tr("03 / 紫蓝", "03 / VIOLET")}</span><strong>{tr(`照片 ${hud.memories} 张 · ${seconds}s · ${gameSpeed}×`, `${hud.memories} photos · ${seconds}s · ${gameSpeed}×`)}</strong><progress max={RUN_DURATION_MS / 1000} value={RUN_DURATION_MS / 1000-seconds} aria-label={tr("本轮进度", "Round progress")} /></div>
           {!choice && !paused && <>
-          <div className="run-purpose"><b>{hud.version === "A" ? tr("A / 保存", "A / STORE") : hud.version === "B" ? tr("B / 复盘", "B / RECHECK") : tr("C / 放手", "C / RELEASE")}</b><span>{hud.version === "A" ? tr("接住照片；第 6 张开始覆盖最早片段。", "CATCH PHOTOS; THE SIXTH OVERWRITES THE OLDEST.") : hud.version === "B" ? tr("泡泡混入假片段；熟悉不等于真实。", "BUBBLES INSERT FALSE TRACES; FAMILIAR IS NOT TRUE.") : tr("长按保护一格，也可以选择放手。", "HOLD TO PROTECT A TRACE, OR LET GO.")}</span></div>
+          <div className="run-purpose"><b>{hud.version === "A" ? tr("A / 保存", "A / STORE") : hud.version === "B" ? tr("B / 复盘", "B / RECHECK") : tr("C / 放手", "C / RELEASE")}</b><span>{hud.version === "A" ? tr("最多留 5 张，接满后会换掉最早的一张。", "Keep up to 5 photos. New ones replace the oldest.") : hud.version === "B" ? tr("躲开泡泡，别让假记忆混进来。", "Avoid bubbles. They slip false memories in.") : tr("按住下方按钮，可以挡住一次干扰。", "Hold the button below to block one hit.")}</span></div>
           <div className="bottom-console">
             <div className="memory-storage" data-overwritten={hud.overwritten > 0} data-protected={hud.protected}>
-              <header><b>{tr("有限保存槽", "LIMITED STORAGE")}</b><span>{tr(`覆盖 ${hud.overwritten} 次`, `${hud.overwritten} OVERWRITES`)}</span></header>
+              <header><b>{tr("留下的照片", "PHOTOS KEPT")}</b><span>{tr(`换过 ${hud.overwritten} 次`, `${hud.overwritten} changes`)}</span></header>
               <div>{Array.from({ length: SAVE_SLOT_COUNT }, (_, index) => <i key={index} data-filled={index < hud.memories} data-locked={hud.protected && index === 0}>{hud.protected && index === 0 ? "▣" : String(index + 1).padStart(2,"0")}</i>)}</div>
             </div>
-            <div className="rush-feedback" data-fault={feedback.includes("串线") || feedback.includes("压缩坏了") || feedback.includes("碰撞") || feedback.includes("假片段") || feedback.includes("覆盖了")} role="status">{shownFeedback}</div>
+            <div className="rush-feedback" data-fault={feedback.includes("撞到了") || feedback.includes("假记忆") || feedback.includes("被换掉")} role="status">{shownFeedback}</div>
             <div className="bottom-actions">
-              <div className="pickup-legend compact-legend"><span>{tr("照片 · 保存", "PHOTO · SAVE")}</span><span>{tr("泡泡 · 改写", "BUBBLE · REWRITE")}</span><span>{tr("碰撞 · 打断", "IMPACT · INTERRUPT")}</span></div>
+              <div className="pickup-legend compact-legend"><span>{tr("照片 · 保存", "PHOTO · SAVE")}</span><span>{tr("泡泡 · 假记忆", "BUBBLE · FALSE MEMORY")}</span><span>{tr("碰撞 · 打断", "IMPACT · INTERRUPT")}</span></div>
               <button className="protect-memory" type="button" disabled={choice || paused || hud.memories < 1} data-holding={hud.hold > 0} data-protected={hud.protected} aria-pressed={hud.protected} style={{"--hold":`${hud.hold * 100}%`} as CSSProperties}
                 onPointerDown={(event)=>{ event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); beginProtectHold(); }}
                 onPointerUp={endProtectHold} onPointerCancel={endProtectHold} onPointerLeave={endProtectHold}
                 onKeyDown={(event)=>{ if (["Enter"," "].includes(event.key) && !event.repeat) beginProtectHold(); }}
                 onKeyUp={(event)=>{ if (["Enter"," "].includes(event.key)) endProtectHold(); }}
                 onClick={(event)=>{ if (event.detail === 0) beginProtectHold(.8); }}>
-                <small>{hud.protected ? tr("片段已锁定", "TRACE LOCKED") : tr("长按 0.7 秒", "HOLD 0.7 SEC")}</small><strong>{hud.protected ? tr("正在保护", "PROTECTED") : tr("保护一个片段", "PROTECT ONE TRACE")}</strong><i aria-hidden="true" />
+                <small>{hud.protected ? tr("可挡一次 · 最多 4 秒", "ONE HIT · UP TO 4s") : tr("长按 0.7 秒", "HOLD 0.7 SEC")}</small><strong>{hud.protected ? tr("正在保护", "PROTECTED") : tr("护住照片", "PROTECT PHOTOS")}</strong><i aria-hidden="true" />
               </button>
             </div>
           </div></>}</>}
@@ -944,24 +943,24 @@ export default function MemoryRushGame() {
           <span>{tr(`你的回答：${versionCause.recall} 人 · ${liveDetailLabel}`, `YOUR RECALL: ${versionCause.recall} PEOPLE · ${liveDetailLabel}`)}</span>
           <strong>VERSION {versionPulse}</strong>
           <div className="rewrite-equation" aria-label={tr("回答触发画面改写", "Answer triggers a visual rewrite")}>
-            <span><small>{tr("你的回想", "YOUR RECALL")}</small><b>{versionCause.recall} {tr("人", "PEOPLE")}</b></span><i>→</i><span><small>{tr("装置据此重画", "MACHINE REDRAWS IT")}</small><b>{versionCause.recall} {tr("人", "PEOPLE")}</b></span>
+            <span><small>{tr("你的回想", "YOUR RECALL")}</small><b>{versionCause.recall} {tr("人", "PEOPLE")}</b></span><i>→</i><span><small>{tr("现在画里也有", "NOW IN THE PICTURE")}</small><b>{versionCause.recall} {tr("人", "PEOPLE")}</b></span>
           </div>
-          <p>{tr(`人数来自你的回答；${versionPulse === "B" ? "黑白" : "紫蓝"}色调由装置设定。细节回答已保存，结束时与原图对照。`, `THE COUNT COMES FROM YOUR ANSWER; THE ${versionPulse === "B" ? "MONOCHROME" : "VIOLET"} PALETTE IS SET BY THE MACHINE. YOUR DETAIL ANSWER IS SAVED FOR THE FINAL COMPARISON.`)}</p>
+          <p>{tr(`照你的回答，画了 ${versionCause.recall} 个人。这一段换成${versionPulse === "B" ? "黑白" : "紫蓝"}色，结束后再看原图。`, `The picture now has ${versionCause.recall} people, as you chose. This section uses ${versionPulse === "B" ? "black and white" : "violet"}. We will show the original at the end.`)}</p>
         </div>}
 
         {awake && !booting && !started && !record && <div key={intro} className="rush-intro" data-step={intro}>
           <span>{intro === 0
-            ? tr("从保存到回想 · 同一段记忆正在被重新写入", "FROM STORAGE TO RECALL · ONE MEMORY IS BEING REWRITTEN")
-            : tr(`进入记忆 0${intro + 1} / 05`, `MEMORY ENTRY 0${intro + 1} / 05`)}</span>
+            ? tr("先看一眼，再凭记忆回答", "Take a look, then answer from memory")
+            : tr(`开始之前 0${intro + 1} / 05`, `BEFORE YOU START 0${intro + 1} / 05`)}</span>
           <nav className="experience-route" aria-label={tr("体验流程", "Experience route")}>
             {[tr("靠近", "APPROACH"),tr("观看", "OBSERVE"),tr("回想", "RECALL"),tr("穿行", "JOURNEY"),tr("对照", "COMPARE")].map((label,index) => {
               const active = intro === 0 ? 0 : intro === 1 ? 1 : intro < 4 ? 2 : 3;
               return <i key={label} data-active={index <= active}><b>0{index + 1}</b>{label}</i>;
             })}
           </nav>
-          <h1>{intro === 0 ? tr("忘了自己是什么", "WHAT WAS I AGAIN?") : intro === 1 ? tr("先看一眼这段记忆", "LOOK AT THIS MEMORY") : intro === 2 ? tr("你刚才看见了几个人？", "HOW MANY PEOPLE DID YOU SEE?") : intro === 3 ? tr(`你先记住了 ${recallAnswer} 人`, `YOU FIRST REMEMBERED ${recallAnswer} PEOPLE`) : tr("接下来，每次回答都会改写世界", "NEXT, EVERY ANSWER WILL REWRITE THE WORLD")}</h1>
+          <h1>{intro === 0 ? tr("忘了自己是什么", "WHAT WAS I AGAIN?") : intro === 1 ? tr("看看这张照片", "Look at this photo") : intro === 2 ? tr("你刚才看见了几个人？", "HOW MANY PEOPLE DID YOU SEE?") : intro === 3 ? tr(`你选了 ${recallAnswer} 人`, `You chose ${recallAnswer} people`) : tr("接下来，边走边回想", "Keep moving. We will ask again.")}</h1>
           {intro === 0 && <div className="intro-photo intro-photo-0">
-            <img src={resolveImageUrl(photoUrl)} alt={tr("被装置保存并重新书写的记忆图像", "A MEMORY IMAGE STORED AND REWRITTEN BY THE MACHINE")} />
+            <img src={resolveImageUrl(photoUrl)} alt={tr("一只装着照片的相框", "A framed photo")} />
             <i />
           </div>}
           {intro === 3 && <div className="motive-loop" aria-label={tr("反复回看的循环", "The cycle of repeated checking")}>
@@ -972,58 +971,69 @@ export default function MemoryRushGame() {
             {[3,4,5].map(value => <button key={value} data-selected={recallAnswer === value} onClick={() => { setRecallAnswer(value); playCue("confirm"); }}><strong>{value}</strong><span>{tr("个人", "PEOPLE")}</span></button>)}
           </div>}
           {intro === 4 && <div className="version-map" aria-label={tr("记忆版本变化", "Memory version changes")}>
-            <span data-version="A"><small>01 / STORE</small><b>A</b><em>{tr("有限保存", "LIMITED STORAGE")}</em></span><i aria-hidden="true">→</i><span data-version="B"><small>02 / RECHECK</small><b>B</b><em>{tr("假片段混入", "FALSE TRACES")}</em></span><i aria-hidden="true">→</i><span data-version="C"><small>03 / RELEASE</small><b>C</b><em>{tr("保护或放手", "PROTECT / RELEASE")}</em></span>
+            <span data-version="A"><small>01 / STORE</small><b>A</b><em>{tr("接住照片", "CATCH PHOTOS")}</em></span><i aria-hidden="true">→</i><span data-version="B"><small>02 / RECHECK</small><b>B</b><em>{tr("躲开泡泡", "AVOID BUBBLES")}</em></span><i aria-hidden="true">→</i><span data-version="C"><small>03 / RELEASE</small><b>C</b><em>{tr("护住照片", "PROTECT PHOTOS")}</em></span>
           </div>}
-          <p>{intro === 0 ? tr("人们因为害怕遗忘而不断保存、搜索与回看。但保存下来的图像，未必等于你真正记住的经历。", "WE SAVE, SEARCH, AND REPLAY BECAUSE WE FEAR FORGETTING. BUT A STORED IMAGE IS NOT THE SAME AS A REMEMBERED EXPERIENCE.") : intro === 1 ? tr("只看几秒。不要刻意数数，也不要寻找标准答案，只记住你自然注意到的部分。", "LOOK FOR A FEW SECONDS. DO NOT COUNT DELIBERATELY OR HUNT FOR A CORRECT ANSWER; NOTICE WHAT STAYS WITH YOU.") : intro === 2 ? tr("凭第一感觉作答。装置暂时不揭晓原图，只把这个数字保存为你的第一个记忆版本。", "ANSWER FROM FIRST IMPRESSION. THE MACHINE WILL NOT REVEAL THE SOURCE YET; IT SAVES THIS NUMBER AS YOUR FIRST MEMORY VERSION.") : intro === 3 ? tr(`你选择了 ${recallAnswer} 人。害怕记错会推动我们再次确认，而每次确认又会增加熟悉感。接下来，同一个人数问题还会出现两次，并穿插两个画面细节。`, `YOU CHOSE ${recallAnswer}. FEAR OF BEING WRONG DRIVES ANOTHER CHECK; EACH CHECK ADDS FAMILIARITY. THE COUNT WILL RETURN TWICE, WITH TWO VISUAL DETAILS BETWEEN VERSIONS.`) : tr("24 秒分为保存、复盘与放手。第 7 秒和第 15 秒，同一个人数问题会再次出现；你的答案不会被评分，而会直接改写下一版画面。", "THE 24-SECOND JOURNEY MOVES THROUGH STORAGE, RECHECKING, AND RELEASE. AT 7 AND 15 SECONDS, THE SAME COUNT RETURNS; YOUR ANSWER IS NOT SCORED—IT DIRECTLY REWRITES THE NEXT VERSION.")}</p>
-            {previous && intro === 0 && <div className="previous-memory"><b>{tr(`上次：VERSION ${previous.version}`, `LAST: VERSION ${previous.version}`)}</b><span>{tr(`最终保留 ${previous.retained ?? Math.min(SAVE_SLOT_COUNT, previous.caught)} 个片段 · 本次从原图开始`, `${previous.retained ?? Math.min(SAVE_SLOT_COUNT, previous.caught)} FRAGMENTS REMAINED · START AGAIN FROM THE FIRST IMAGE`)}</span></div>}
-          <button disabled={!ready} onClick={advanceIntro}>{loadError ? tr("素材加载失败，请刷新页面", "ASSET LOAD FAILED · REFRESH") : !ready ? tr("正在装载记忆…", "LOADING MEMORY…") : intro === 0 ? tr("先看一段记忆", "SHOW ME A MEMORY") : intro === 1 ? tr("我看过了", "I HAVE SEEN IT") : intro === 2 ? tr("保留这个回答", "KEEP THIS ANSWER") : intro === 3 ? tr("看看记忆如何被反复确认", "SEE HOW MEMORY IS RECHECKED") : tr("进入被改写的记忆", "ENTER THE REWRITTEN MEMORY")}</button>
+          <p>{intro === 0 ? tr("有些照片存了很久，里面的细节却记不清了。先看一张照片，过一会儿，再说说你还记得什么。", "You can keep a photo for years and still forget its details. Look at one now. In a moment, tell us what you remember.") : intro === 1 ? tr("看几秒就好，记住你注意到的地方。看完再继续。", "Take a few seconds. Notice what catches your eye, then continue.") : intro === 2 ? tr("选你记得的人数。暂时不看原图，结束后再对照。", "Choose the number you remember. We will show the original at the end.") : intro === 3 ? tr(`先记下 ${recallAnswer} 人。等会儿还会问两次，也会问到照片里的其他细节。你可以改答案，也可以不改。`, `${recallAnswer} people. We will ask twice more, along with a couple of details. You can change your answer or keep it.`) : tr("左右移动接照片，躲开泡泡和障碍。跑动共 24 秒，中途会停下来问两次；回答时不计时。按住按钮可以保护照片。", "Move left and right to catch photos. Avoid bubbles and obstacles. You have 24 seconds of movement, with two pauses for questions. The timer stops while you answer. Hold the button to protect your photos.")}</p>
+            {previous && intro === 0 && <div className="previous-memory"><b>{tr(`上次：VERSION ${previous.version}`, `LAST: VERSION ${previous.version}`)}</b><span>{tr(`上次留下 ${previous.retained ?? Math.min(SAVE_SLOT_COUNT, previous.caught)} 张照片 · 这次重新开始`, `You kept ${previous.retained ?? Math.min(SAVE_SLOT_COUNT, previous.caught)} photos last time · Start fresh`)}</span></div>}
+          <button disabled={!ready} onClick={advanceIntro}>{loadError ? tr("图片没加载出来，请刷新重试", "The pictures did not load. Please refresh.") : !ready ? tr("正在加载照片…", "Loading photos…") : intro === 0 ? tr("看照片", "Look at the photo") : intro === 1 ? tr("我看过了", "I HAVE SEEN IT") : intro === 2 ? tr("选好了", "Keep this answer") : intro === 3 ? tr("接下来怎么玩", "How to play") : tr("开始", "Start")}</button>
           {loadError && <button onClick={() => location.reload()}>{tr("重新加载", "RELOAD")}</button>}
           <small>{tr("点击、回车或街机按钮继续", "CLICK · ENTER · OR ARCADE BUTTON")}</small>
-          {previous && intro === 0 && <button className="rush-skip" disabled={!ready} onClick={restartObservation}>{tr("直接观察原图", "GO TO THE FIRST IMAGE")}</button>}
+          {previous && intro === 0 && <button className="rush-skip" disabled={!ready} onClick={restartObservation}>{tr("直接看照片", "Go straight to the photo")}</button>}
         </div>}
 
-        {(choice || paused) && <section className="rush-choice" data-phase={choicePhase} data-choice={choice} aria-label={tr("回想停顿", "Recall checkpoint")}>
-          <span>{choice ? tr(`第 ${choiceStage} 次回想 · ${choicePhase === "count" ? "1 / 2 人数" : "2 / 2 细节"}`, `RECALL ${choiceStage} · ${choicePhase === "count" ? "1 / 2 COUNT" : "2 / 2 DETAIL"}`) : tr("暂时停下", "PAUSED")}</span>
+        {(choice || paused) && <section className="rush-choice" data-phase={choicePhase} data-choice={choice} aria-label={tr("回答问题", "Questions")}>
+          <span>{choice ? tr(`再想一想 · ${choicePhase === "count" ? "人数" : "细节"}`, `Think back · ${choicePhase === "count" ? "People" : "Details"}`) : tr("暂时停下", "PAUSED")}</span>
           <h2>{choice ? choicePhase === "count"
-            ? tr("再问一次：最开始，是几个人？", "ASK AGAIN: HOW MANY PEOPLE WERE THERE AT THE START?")
+            ? tr("最开始的照片里，有几个人？", "How many people were in the first photo?")
             : choiceStage === 1
               ? tr("旋转木马在画面的哪一侧？", "WHICH SIDE HELD THE CAROUSEL?")
               : tr("原图中的天空窗口，更接近哪种颜色？", "WHAT COLOR WAS THE SKY WINDOW IN THE SOURCE?")
-            : tr("记忆已暂停", "MEMORY PAUSED")}</h2>
+            : tr("已暂停", "Paused")}</h2>
           {choice ? <><p>{choicePhase === "count"
-            ? tr("你刚才经历的保存、覆盖与干扰，是否改变了答案？先回答人数，再补写一个画面细节。", "DID STORAGE, OVERWRITING, AND INTERFERENCE CHANGE YOUR ANSWER? RECALL THE COUNT, THEN ONE VISUAL DETAIL.")
-            : tr("细节回答会保存到结尾。接下来的人数按你刚才的回答重画，色调由装置切换。", "THIS DETAIL IS SAVED FOR THE END. YOUR COUNT WILL BE REDRAWN; THE MACHINE CHANGES THE PALETTE.")}</p>
-          {checkpointOptions(choicePhase, choiceStage).map((value,index)=><button key={value} data-selected={choiceIndex === index} onFocus={()=>{choiceIndexRef.current=index;setChoiceIndex(index);}} onClick={()=>chooseCheckpointOption(value)}><strong>{typeof value === "number" ? value : value === "left" ? tr("左侧", "LEFT") : value === "center" ? tr("中央", "CENTER") : value === "right" ? tr("右侧", "RIGHT") : value === "blue" ? tr("蓝色", "BLUE") : value === "white" ? tr("白色", "WHITE") : tr("粉色", "PINK")}</strong><span>{typeof value === "number" ? tr("个人", "PEOPLE") : tr("凭第一印象", "FIRST IMPRESSION")}</span></button>)}</> : <button onClick={pauseGame}>{tr("继续", "RESUME")}</button>}
+            ? tr("想想最开始的那张照片，选你记得的人数。", "Think of the first photo. Choose the number you remember.")
+            : tr("凭记忆选一个，选完继续。", "Choose what you remember, then carry on.")}</p>
+          {checkpointOptions(choicePhase, choiceStage).map((value,index)=><button key={value} data-selected={choiceIndex === index} onFocus={()=>{choiceIndexRef.current=index;setChoiceIndex(index);}} onClick={()=>chooseCheckpointOption(value)}><strong>{typeof value === "number" ? value : value === "left" ? tr("左侧", "LEFT") : value === "center" ? tr("中央", "CENTER") : value === "right" ? tr("右侧", "RIGHT") : value === "blue" ? tr("蓝色", "BLUE") : value === "white" ? tr("白色", "WHITE") : tr("粉色", "PINK")}</strong><span>{typeof value === "number" ? tr("个人", "PEOPLE") : tr("我记得是这样", "As I remember it")}</span></button>)}</> : <button onClick={pauseGame}>{tr("继续", "RESUME")}</button>}
         </section>}
 
-        {record && <section className="memory-result" aria-label={tr("记忆重构结语", "Memory reconstruction epilogue")}>
+        {record && <section className="memory-result" aria-label={tr("这次的结果", "Your results")}>
           <div className="result-kicker">ARCHIVE AFTERIMAGE · RUN {String(record.run).padStart(2,"0")} · VERSION {record.version}</div>
           <h2>{tr("你记住的，\n还是最初的画面吗？", "DO YOU REMEMBER\nTHE FIRST IMAGE?")}</h2>
           <div className="recall-timeline" aria-label={tr("原图与你的三次回答对照", "Source and your three answers")}>
             {[4, ...Array.from({length:3},(_,index) => record.recalls?.[index] ?? "—")].map((count,index) => <div key={index} data-source={index === 0}>
               <span>{index === 0 ? tr("原图", "SOURCE") : tr(`回想 ${index}`, `RECALL ${index}`)}</span>
               <strong>{count}<small>{tr("人", "PEOPLE")}</small></strong>
-              <em>{index === 0 ? tr("最初呈现", "FIRST SHOWN") : index === 1 ? tr("首次判断", "FIRST ANSWER") : tr(`生成版本 ${index === 2 ? "B" : "C"}`, `GENERATED ${index === 2 ? "B" : "C"}`)}</em>
+              <em>{index === 0 ? tr("一开始看到的", "What you first saw") : index === 1 ? tr("首次判断", "FIRST ANSWER") : tr(`照此画成 ${index === 2 ? "B" : "C"}`, `Used for ${index === 2 ? "B" : "C"}`)}</em>
             </div>)}
           </div>
-          <div className="recall-evidence"><strong>{tr("现在，再看一次原图", "NOW LOOK AT THE SOURCE AGAIN")}</strong><div className="intro-photo intro-photo-1"><img src={resolveImageUrl(backgroundAUrl)} alt={tr("最初呈现的场景", "The scene shown at the start")} /><div className="memory-figures">{[.82,1,.7,.9].map((scale,index)=><img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{"--figure-scale":scale} as CSSProperties}/>)}</div></div><p>{(record.recalls ?? []).some(n=>n!==4) ? tr("你的回答与原图出现了差异。这不代表失败，也不能仅凭这一次体验确定差异的原因。", "YOUR ANSWERS DIFFERED FROM THE SOURCE. THIS IS NOT A FAILURE; THIS EXPERIENCE ALONE CANNOT EXPLAIN WHY.") : tr("这一次，你始终记住了人数。记忆可以保持稳定，不需要发生错误才有意义。", "THIS TIME YOU RETAINED THE COUNT. MEMORY CAN REMAIN STABLE; AN ERROR IS NOT REQUIRED FOR THE EXPERIENCE TO MATTER.")}</p></div>
+          <div className="recall-evidence"><strong>{tr("现在，再看一次原图", "NOW LOOK AT THE SOURCE AGAIN")}</strong><div className="intro-photo intro-photo-1"><img src={resolveImageUrl(backgroundAUrl)} alt={tr("最初呈现的场景", "The scene shown at the start")} /><div className="memory-figures">{[.82,1,.7,.9].map((scale,index)=><img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{"--figure-scale":scale} as CSSProperties}/>)}</div></div><p>{(record.recalls ?? []).some(n=>n!==4) ? tr("有的答案和原图不一样。看看上面的记录，你是从哪一次开始这样记的？", "Some answers differ from the original. Look at your answers above. When did you start remembering it that way?") : tr("三次都是 4 人，你记住了。再看看其他细节有没有变化。", "Four people, all three times. You remembered. How about the other details?")}</p></div>
           <div className="detail-evidence">
             <span><b>{tr("细节 01", "DETAIL 01")}</b>{tr("旋转木马原本在右侧", "CAROUSEL SOURCE: RIGHT")}<em>{tr("你的回想", "YOUR RECALL")}: {(record.details?.[0] === "left" ? tr("左侧", "LEFT") : record.details?.[0] === "center" ? tr("中央", "CENTER") : record.details?.[0] === "right" ? tr("右侧", "RIGHT") : "—")}</em></span>
             <span><b>{tr("细节 02", "DETAIL 02")}</b>{tr("天空窗口原本是蓝色", "SKY WINDOW SOURCE: BLUE")}<em>{tr("你的回想", "YOUR RECALL")}: {(record.details?.[1] === "white" ? tr("白色", "WHITE") : record.details?.[1] === "pink" ? tr("粉色", "PINK") : record.details?.[1] === "blue" ? tr("蓝色", "BLUE") : "—")}</em></span>
           </div>
           <div className="result-reflection">
+            {(record.sharedMemories?.length ?? 0) > 0 && <section className="shared-memory-reveal" aria-label={tr("旧留言与原图对照", "Comments compared with the original")}>
+              <h3>{tr("刚才的留言，可信吗？", "Were those comments right?")}</h3>
+              {record.sharedMemories?.includes("people") && <p>{tr("两条留言都说有五个人，原图里却只有四个。", "Both comments said five people. The original had four.")}</p>}
+              {record.sharedMemories?.includes("sky") && <p>{tr("他们还记得粉色的天空，原图里的天空却是蓝色。", "They also remembered a pink sky. The original sky was blue.")}</p>}
+              <p>{tr("听到别人也这样说，你有没有更相信那个答案？这些留言是为游戏编写的，不是真实玩家的记录。", "Did hearing someone else say it make that answer feel more convincing? These comments were written for the game, not left by real players.")}</p>
+              <details><summary>{tr("这和曼德拉效应有什么关系？", "How does this relate to the Mandela effect?")}</summary>
+                <p>{tr("很多人对同一件事有相似的记忆，却与可核实的事实不符，这类现象通常被称为曼德拉效应。", "The Mandela effect describes shared memories that do not match verifiable facts.")}</p>
+                <p>{tr("这里用虚构留言演示“别人也这么记得”的干扰。一次答错或改答案，不能证明发生了曼德拉效应。", "The fictional comments show how someone else's account can become a distraction. One wrong or changed answer does not demonstrate the Mandela effect.")}</p>
+                <a href="https://news.uchicago.edu/story/visual-mandela-effect-false-memories-psychology-neuroscience-pikachu-mr-monopoly-waldo" target="_blank" rel="noreferrer">{tr("相关研究：芝加哥大学", "Research: University of Chicago")}</a>
+              </details>
+            </section>}
             <h3>{tr("遗忘，\n也许不是记忆的失败", "FORGETTING MAY NOT BE\nMEMORY'S FAILURE")}</h3>
-            <p className="result-thesis">{tr("有些过去会渐渐模糊，数字记录却可以一次次将它召回。我们反复保存和确认，究竟是在靠近过去，还是在形成一个越来越熟悉的版本？", "THE PAST MAY FADE, WHILE DIGITAL RECORDS CAN BRING IT BACK AGAIN AND AGAIN. DOES REPEATED SAVING AND CHECKING BRING US CLOSER TO THE PAST, OR TO AN EVER MORE FAMILIAR VERSION?")}</p>
+            <p className="result-thesis">{tr("照片一直在，记忆却未必和它一样。那些反复翻看的旧照片，是让你记得更清楚，还是越来越难放下？", "The photo stays, but your memory may not match it. When you keep looking through old photos, do you remember more clearly, or find it harder to let go?")}</p>
           </div>
-          <blockquote>{tr("当技术替我们保存每一个版本，它是在帮助我们记住，还是让我们逐渐失去遗忘的能力？", "WHEN TECHNOLOGY KEEPS EVERY VERSION FOR US, DOES IT HELP US REMEMBER—OR TEACH US HOW NOT TO FORGET?")}</blockquote>
+          <blockquote>{tr("什么都能存下来以后，我们还舍得忘记吗？", "When we can save everything, can we still let ourselves forget?")}</blockquote>
           <dl className="result-traces">
-            <div><dt>{tr("最终保留", "RETAINED")}</dt><dd>{record.retained ?? Math.min(SAVE_SLOT_COUNT, record.caught)}</dd></div><div><dt>{tr("被覆盖", "OVERWRITTEN")}</dt><dd>{record.overwritten ?? 0}</dd></div>
-            <div><dt>{tr("主动保护", "PROTECTIONS")}</dt><dd>{record.protections ?? 0}</dd></div><div><dt>{tr("受到干扰", "INTERRUPTIONS")}</dt><dd>{record.bumps}</dd></div>
+            <div><dt>{tr("留下的照片", "PHOTOS KEPT")}</dt><dd>{record.retained ?? Math.min(SAVE_SLOT_COUNT, record.caught)}</dd></div><div><dt>{tr("换过几次", "CHANGES")}</dt><dd>{record.overwritten ?? 0}</dd></div>
+            <div><dt>{tr("保护次数", "TIMES PROTECTED")}</dt><dd>{record.protections ?? 0}</dd></div><div><dt>{tr("碰到几次", "HITS")}</dt><dd>{record.bumps}</dd></div>
           </dl>
-          <div className="result-note">{tr("离开装置后，画面会继续存在；但你可以选择，不再把每一次遗忘都当作缺陷。", "THE IMAGE WILL REMAIN AFTER YOU LEAVE. YOU MAY STILL CHOOSE NOT TO TREAT EVERY ACT OF FORGETTING AS A DEFECT.")}</div>
+          <div className="result-note">{tr("记不清的，就先放一放。", "It is okay to leave some things unclear.")}</div>
           <p role="status">{shareMessage}</p>
-          <div className="result-actions"><button onClick={saveCard}>{tr("保存记忆卡", "SAVE MEMORY CARD")}</button><button onClick={shareCard}>{tr("分享结果", "SHARE RESULT")}</button></div>
-          <button className="replay-memory" onClick={restartObservation}>{tr("再次查看同一段记忆", "RECHECK THE SAME MEMORY")}</button>
+          <div className="result-actions"><button onClick={saveCard}>{tr("保存这次记录", "Save this record")}</button><button onClick={shareCard}>{tr("分享结果", "SHARE RESULT")}</button></div>
+          <button className="replay-memory" onClick={restartObservation}>{tr("再看一次", "Look again")}</button>
         </section>}
       </section>
     </main>

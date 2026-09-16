@@ -1489,6 +1489,19 @@ body { font-family:"Arial Rounded MT Bold","PingFang SC","Microsoft YaHei",syste
 .result-reflection { border-top:1px solid var(--grid-ink); margin-top:1.1cqh; padding-top:1.6cqh; }
 .result-reflection h3 { margin:0 0 1cqh; color:var(--grid-ink); font:800 clamp(23px,5.2cqw,36px)/1.15 "STKaiti","KaiTi",serif; white-space:pre-line; }
 .result-reflection .result-thesis { max-width:100%; margin:0; }
+.shared-memory-event { position:absolute; z-index:8; top:25%; left:16%; width:68%; box-sizing:border-box; padding:1.1cqh 2.3cqw; border:1px solid var(--grid-ink); border-left:4px solid var(--signal-red); background:rgba(250,250,244,.96); color:#173755; box-shadow:4px 4px 0 rgba(36,89,166,.25); pointer-events:none; }
+.shared-memory-event header { display:flex; align-items:center; justify-content:space-between; gap:1cqw; font-size:clamp(11px,2.3cqw,16px); font-weight:800; }
+.shared-memory-event header small { color:#5b6d7a; font-size:clamp(9px,1.7cqw,12px); }
+.shared-memory-event p { display:flex; align-items:baseline; gap:1cqw; margin:.7cqh 0; font:600 clamp(11px,2.3cqw,16px)/1.45 "Microsoft YaHei",sans-serif; }
+.shared-memory-event p b { color:var(--grid-ink); font-size:.85em; }
+.shared-memory-event footer { padding-top:.5cqh; border-top:1px solid #b9c7d8; color:#576e80; font-size:clamp(9px,1.8cqw,12px); }
+.shared-memory-reveal { margin:0 0 2cqh; padding:1.5cqh 2cqw; border-left:4px solid var(--signal-blue); background:rgba(36,89,166,.045); }
+.shared-memory-reveal h3 { font:800 clamp(17px,3.6cqw,25px)/1.3 "Microsoft YaHei",sans-serif; }
+.shared-memory-reveal p,.shared-memory-reveal details { font:500 clamp(11px,2.2cqw,15px)/1.55 "Microsoft YaHei",sans-serif; }
+.shared-memory-reveal p { margin:.8cqh 0; }
+.shared-memory-reveal summary { cursor:pointer; color:var(--grid-ink); font-weight:700; padding:.8cqh 0; }
+.shared-memory-reveal a { color:var(--grid-ink); text-decoration:underline; }
+.rush-game .rush-feedback[data-fault="true"]::before { content:"INTERRUPTION"; }
 .rush-game .memory-result>* { flex-shrink:0; }
 @media (max-width:420px), (max-height:720px) {
   .rush-choice { inset:24.5% 4% auto; padding:1.6cqh 3.2cqw 1.8cqh; }
