@@ -823,7 +823,7 @@ export default function MemoryRushGame() {
 
   return (
     <main className="rush-page">
-      <section className="rush-game" data-lang={language} data-impact={impactPulse ?? undefined} aria-label={tr("记忆与遗忘竖屏游戏", "Vertical game about memory and forgetting")}>
+      <section className="rush-game" data-lang={language} data-screen={record ? "result" : !awake ? "dormant" : booting ? "loading" : started ? "playing" : "intro"} data-impact={impactPulse ?? undefined} aria-label={tr("记忆与遗忘竖屏游戏", "Vertical game about memory and forgetting")}>
         <canvas
           ref={canvasRef}
           width={W}
@@ -968,7 +968,7 @@ export default function MemoryRushGame() {
           {intro === 2 && <div className="recall-choice" role="group" aria-label={tr("选择记得的人数", "Choose the number you remember")}>
             {COUNT_OPTIONS.map(value => <button key={value} data-selected={recallAnswer === value} onClick={() => { setRecallAnswer(value); playCue("confirm"); }}><strong>{value === 0 ? tr("记不清了", "Not sure") : value}</strong><span>{value === 0 ? tr("直接继续", "Continue") : tr("个人", "PEOPLE")}</span></button>)}
           </div>}
-          {intro === 4 && <div className="version-map" aria-label={tr("记忆版本变化", "Memory version changes")}>
+          {intro === 4 && <div className="version-map" style={{"--scene-image": `url("${resolveImageUrl(backgroundAUrl)}")`, "--scene-rebuilt": `url("${resolveImageUrl(backgroundBUrl)}")`} as CSSProperties} aria-label={tr("记忆版本变化", "Memory version changes")}>
             <span data-version="A"><small>01 / STORE</small><b>A</b><em>{tr("接住照片", "CATCH PHOTOS")}</em></span><i aria-hidden="true">→</i><span data-version="B"><small>02 / RECHECK</small><b>B</b><em>{tr("躲开泡泡", "AVOID BUBBLES")}</em></span><i aria-hidden="true">→</i><span data-version="C"><small>03 / PROTECT</small><b>C</b><em>{tr("护住照片", "PROTECT PHOTOS")}</em></span>
           </div>}
           <p>{intro === 0 ? tr("先看照片，记住里面的人和景物。游戏中会问你几次，最后再看原图。", "Look at the people and surroundings in the photo. Answer a few questions as you play, then compare your answers with the original.") : intro === 1 ? tr("看好后，点“我看过了”。", "Take your time. Select Continue when you are ready.") : intro === 2 ? tr("选你记得的人数，也可以选“记不清了”。", "Choose a number, or select Not sure.") : intro === 3 ? tr("接下来还会问两次人数，以及位置和颜色。你可以改答案。", "You will be asked about the people twice more, and about position and color. You can change your answers.") : tr("左右移动接照片，躲开泡泡和障碍。长按下方按钮可挡一次碰撞。移动时间共 24 秒（1×速度），回答问题时暂停计时。", "Move left or right to catch photos. Dodge bubbles and obstacles. Hold the button below to block one hit. At 1× speed, movement lasts 24 seconds; questions pause the timer.")}</p>

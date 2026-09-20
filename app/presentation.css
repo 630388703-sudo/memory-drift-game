@@ -1,0 +1,138 @@
+/* Exhibition UI: the collage is the artwork; controls are its quiet captions.
+   Shared by the static website, server entry and offline desktop build. */
+.rush-page { background:#e5e4df; background-image:none; }
+.rush-game { --ui-paper:#faf9f4; --ui-ink:#20394a; --ui-rule:#c7d0d3; --ui-blue:#265b9c; box-shadow:0 8px 36px #20394a22; }
+.rush-game::before,.rush-game::after,.rush-hud::before,.rush-hud::after { display:none; }
+.rush-game .rush-hud { min-height:7.5cqh; background:var(--ui-paper); border-bottom:1px solid var(--ui-rule); backdrop-filter:none; padding-inline:4cqw; }
+.rush-game .rush-hud>div:first-child,.rush-game .rush-hud>div:last-child { border:0; padding:0; color:var(--ui-ink); }
+.rush-game .rush-hud span { font:600 clamp(9px,1.7cqw,12px)/1.3 system-ui,sans-serif; letter-spacing:.04em; }
+.rush-game .rush-hud strong { font-variant-numeric:tabular-nums; font-weight:600; }
+.rush-game .rush-hud .rush-title { border:0; background:none; box-shadow:none; clip-path:none; transform:none; backdrop-filter:none; }
+.rush-game .rush-hud .rush-title>* { transform:none; }
+.rush-game .rush-hud .rush-title strong { color:var(--ui-blue); font:600 clamp(10px,1.9cqw,14px)/1.4 system-ui,sans-serif; letter-spacing:.09em; }
+.rush-game[data-screen="intro"] .rush-hud>div:first-child,.rush-game[data-screen="intro"] .rush-hud>div:last-child { visibility:hidden; }
+.rush-game .rush-settings { top:8.8%; right:4%; gap:6px; }
+.rush-game .rush-settings .settings-toggle,.rush-game .rush-settings .pause-quick { width:44px; min-width:44px; height:44px; min-height:44px; border:1px solid var(--ui-rule); padding:10px; background:var(--ui-paper); box-shadow:none; color:var(--ui-ink); }
+.rush-game .device-pill { background:var(--ui-paper); color:#486071; padding:5px 8px; font:600 10px/1.2 system-ui,sans-serif; letter-spacing:.04em; }
+.rush-game .settings-popover { border:1px solid var(--ui-rule); background:var(--ui-paper); box-shadow:0 8px 24px #20394a24; }
+.rush-game .settings-popover button { box-shadow:none; }
+.rush-game .rush-settings .settings-toggle[data-open="true"] { background:var(--ui-blue); color:white; }
+.rush-game .combo-pill { display:none; }
+
+/* One reading order, sized to content rather than a stretched poster. */
+.rush-game .rush-intro { top:18%; bottom:auto; min-height:0; max-height:78%; left:5%; right:5%; padding:3cqh 5cqw 2.4cqh; display:flex; flex-direction:column; align-items:stretch; gap:1.5cqh; border:0; border-top:3px solid var(--ui-blue); border-radius:0; background:var(--ui-paper); box-shadow:0 8px 28px #1834541c; clip-path:none; backdrop-filter:none; animation:caption-arrive .38s ease-out both; }
+.rush-game .rush-intro::before,.rush-game .rush-intro::after,.rush-game .memory-result::before,.rush-game .memory-result::after { display:none; }
+.rush-game .rush-intro>* { animation:none; }
+.rush-game .rush-intro>span { align-self:flex-start; margin:0; padding:0; background:none; box-shadow:none; transform:none; color:#536978; font:600 clamp(10px,2cqw,13px)/1.4 system-ui,sans-serif; letter-spacing:.04em; }
+.rush-game .experience-route { margin:0 0 .7cqh; border:0; gap:1.3cqw; }
+.rush-game .experience-route i { min-height:3.7cqh; border:0; border-bottom:2px solid #d4dbdc; padding:.5cqh 0; background:none; color:#73838b; gap:.25cqh; font:500 clamp(8px,1.6cqw,11px)/1.3 system-ui,sans-serif; }
+.rush-game .experience-route i b { font-size:inherit; font-weight:600; }
+.rush-game .experience-route i[data-active="true"] { background:none; border-color:var(--ui-blue); color:var(--ui-blue); }
+.rush-game .experience-route i::after { display:none; }
+.rush-game .rush-intro h1,.rush-game[data-lang="en"] .rush-intro h1 { max-width:100%; margin:.3cqh 0 .5cqh; color:var(--ui-ink); font:600 clamp(26px,5.9cqw,42px)/1.12 "Bahnschrift","Microsoft YaHei",sans-serif; letter-spacing:-.025em; transform:none; text-shadow:none; background:none; padding:0; box-shadow:none; }
+.rush-game[data-lang="zh"] .rush-intro[data-step="0"] h1 { font-family:"STKaiti","KaiTi",serif; font-size:clamp(30px,7cqw,48px); }
+.rush-game .rush-intro p { max-width:100%; color:#3d5360; font:400 clamp(13px,2.5cqw,17px)/1.65 system-ui,"Microsoft YaHei",sans-serif; }
+.rush-game .intro-photo { align-self:center; filter:none; transform:none!important; clip-path:none; animation:none; }
+.rush-game .intro-photo-0 { width:42cqw; height:22cqh; max-height:none; margin:0; overflow:visible; }
+.rush-game .intro-photo-0 img { filter:drop-shadow(2px 5px 3px #20394a1a); }
+.rush-game .intro-photo-1 { width:100%; height:27cqh; margin:0; }
+.rush-game .intro-photo>i { display:none; }
+.rush-game .rush-intro .memory-figures img,.rush-game .memory-result .memory-figures img { animation:none; }
+.rush-game .previous-memory { transform:none; margin:.3cqh 0 0; padding:1cqh 0; border:0; border-top:1px solid var(--ui-rule); background:none; gap:1cqw; }
+.rush-game .previous-memory b { color:var(--ui-blue); font:600 clamp(10px,2cqw,13px)/1.4 system-ui,sans-serif; flex-shrink:0; }
+.rush-game .previous-memory span { color:#566d79; font:400 clamp(10px,1.9cqw,13px)/1.4 system-ui,sans-serif; }
+.rush-game .rush-intro>button,.rush-game .replay-memory { min-height:48px; margin:.5cqh 0 0; padding:1.3cqh 2cqw; border:1px solid var(--ui-blue); border-radius:0; background:var(--ui-blue); color:#fff; box-shadow:none; clip-path:none; font:600 clamp(15px,2.8cqw,19px)/1.3 system-ui,sans-serif; transition:background .18s,transform .18s; }
+.rush-game .rush-intro>button:hover,.rush-game .replay-memory:hover { background:#1b4578; }
+.rush-game .rush-intro>button:active,.rush-game .replay-memory:active { transform:translateY(1px); box-shadow:none; }
+.rush-game .rush-intro>button::before,.rush-game .recall-choice button::after,.rush-game .memory-result button::before { display:none; }
+.rush-game .rush-intro>small { font:400 clamp(10px,1.9cqw,12px)/1.4 system-ui,sans-serif; letter-spacing:.01em; }
+
+/* Readable sequences instead of decorative floating cards. */
+.rush-game .motive-loop { min-height:0; width:100%; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:3cqw; margin:1.2cqh 0; padding:1.5cqh 0; border:0; background:none; }
+.rush-game .motive-loop::before,.rush-game .motive-loop i,.rush-game .motive-loop span::before,.rush-game .motive-loop small { display:none; }
+.rush-game .motive-loop span { min-height:11cqh; padding:1.5cqh 0; display:grid; align-content:start; gap:1.3cqh; border:0; border-top:1px solid var(--ui-rule); background:none; box-shadow:none; clip-path:none; animation:none; transform:none; }
+.rush-game .motive-loop span b { color:var(--ui-blue); font:400 clamp(30px,7cqw,46px)/1 Georgia,serif; }
+.rush-game .motive-loop span em { color:var(--ui-ink); font:600 clamp(11px,2.2cqw,15px)/1.3 system-ui,sans-serif; }
+.rush-game .version-map { width:100%; min-height:0; grid-template-columns:repeat(3,minmax(0,1fr)); gap:2cqw; padding:0; margin:1cqh 0; border:0; background:none; }
+.rush-game .version-map>i,.rush-game .version-map::after,.rush-game .version-map span::after { display:none; }
+.rush-game .version-map span { min-height:0; padding:0 0 1cqh; display:grid; gap:.6cqh; border:0; border-bottom:1px solid var(--ui-rule); background:none; color:var(--ui-ink); box-shadow:none; clip-path:none; transform:none; filter:none; animation:none; }
+.rush-game .version-map span::before { content:""; position:static; width:100%; height:11cqh; background:var(--scene-image) center 37% / cover; box-shadow:none; opacity:1; transform:none; animation:none; }
+.rush-game .version-map span[data-version="B"]::before { filter:grayscale(1) contrast(1.5) brightness(.7); }
+.rush-game .version-map span[data-version="C"]::before { background-image:linear-gradient(135deg,#7455b8,#466ec6,#a766aa),var(--scene-rebuilt); background-blend-mode:color; }
+.rush-game .version-map span small { display:none; }
+.rush-game .version-map span b { color:var(--ui-blue); font:500 clamp(22px,4.3cqw,32px)/1.2 Georgia,serif; }
+.rush-game .version-map span em { color:var(--ui-ink); font:600 clamp(10px,2cqw,14px)/1.4 system-ui,sans-serif; letter-spacing:0; }
+.rush-game .recall-choice { width:100%; gap:1.5cqw; margin:.7cqh 0; }
+.rush-game .recall-choice button,.rush-game .rush-choice button { border:1px solid #8d9eaa; border-radius:0; background:#fff!important; color:var(--ui-ink); box-shadow:none; clip-path:none; transform:none; animation:none; min-height:9cqh; transition:background .15s,color .15s,border-color .15s; }
+.rush-game .recall-choice button[data-selected="true"],.rush-game .rush-choice button[data-selected="true"] { color:#fff; background:var(--ui-blue)!important; border-color:var(--ui-blue); box-shadow:inset 0 -3px #183f6c; transform:none; animation:none; }
+.rush-game .rush-choice { top:26%; padding:3cqh 4cqw; border:0; border-top:3px solid var(--ui-blue); border-radius:0; clip-path:none; background:var(--ui-paper); box-shadow:0 12px 40px #20394a33; animation:caption-arrive .28s ease-out; }
+.rush-game .rush-choice h2 { color:var(--ui-ink); font:600 clamp(23px,4.8cqw,34px)/1.22 system-ui,sans-serif; letter-spacing:-.025em; }
+.rush-game .rush-choice p { max-width:100%; font:400 clamp(12px,2.2cqw,15px)/1.55 system-ui,sans-serif; margin:.4cqh 0 1.2cqh; }
+.rush-game .rush-choice>span { color:#536978; }
+
+/* Gameplay has one status line and one footer. The traveler keeps the stage. */
+.rush-game .rush-journey { left:4%; right:4%; top:16%; padding:1cqh 1.8cqw; border:0; background:var(--ui-paper); box-shadow:none; backdrop-filter:none; font:500 clamp(10px,1.9cqw,13px)/1.35 system-ui,sans-serif; letter-spacing:0; }
+.rush-game .rush-journey progress { accent-color:var(--ui-blue); }
+.rush-game .rush-journey progress::-webkit-progress-bar { background:#d3dbde; }
+.rush-game .rush-journey progress::-webkit-progress-value { background:var(--ui-blue); }
+.rush-game .run-purpose { left:4%; right:4%; max-width:none; top:21.5%; border:0; box-shadow:none; background:var(--ui-paper); }
+.rush-game .run-purpose b { background:none; color:var(--ui-blue); border-right:1px solid var(--ui-rule); font:600 clamp(9px,1.8cqw,12px)/1.35 system-ui,sans-serif; }
+.rush-game .run-purpose span { font:400 clamp(10px,1.9cqw,13px)/1.4 system-ui,sans-serif; }
+.rush-game .shared-memory-event { top:27%; left:10%; width:80%; padding:1.4cqh 3cqw; border:0; border-top:2px solid var(--ui-blue); background:var(--ui-paper); box-shadow:0 6px 20px #20394a1a; }
+.rush-game .shared-memory-event header { align-items:baseline; flex-wrap:wrap; font:600 clamp(11px,2.2cqw,15px)/1.4 system-ui,sans-serif; }
+.rush-game .shared-memory-event p { font-weight:400; }
+.rush-game .reconstructed-preview { top:27%; border:1px solid var(--ui-rule); background:#faf9f4ed; box-shadow:none; animation:caption-arrive .3s ease-out; }
+.rush-game .bottom-console { left:4%; right:4%; bottom:2%; gap:.65cqh; padding:1cqh 1.6cqw; background:var(--ui-paper); border-top:2px solid var(--ui-blue); }
+.rush-game .bottom-console .memory-storage { padding:0; border:0; background:none; backdrop-filter:none; }
+.rush-game .memory-storage header { font:600 clamp(9px,1.7cqw,12px)/1.3 system-ui,sans-serif; margin-bottom:.6cqh; letter-spacing:0; }
+.rush-game .memory-storage i { min-height:1.8cqh; border-color:var(--ui-rule); font:500 clamp(9px,1.7cqw,11px)/1.3 system-ui,sans-serif; }
+.rush-game .memory-storage i[data-filled="true"] { background:var(--ui-blue); transform:none; box-shadow:none; }
+.rush-game .memory-storage i[data-locked="true"] { background:#cee9dd; color:#205343; box-shadow:none; }
+.rush-game .bottom-console .rush-feedback { min-height:3.2cqh; padding:.6cqh 0; border:0; border-bottom:1px solid var(--ui-rule); background:none; box-shadow:none; font:400 clamp(11px,2cqw,14px)/1.4 system-ui,sans-serif; }
+.rush-game .bottom-console .rush-feedback[data-fault="true"] { color:#a63c30; background:#fff0e9; }
+.rush-game .rush-feedback::before { display:none; }
+.rush-game .bottom-actions { grid-template-columns:minmax(0,1fr) minmax(32%,auto); gap:2cqw; align-items:center; }
+.rush-game .bottom-console .compact-legend { border:0; background:none; backdrop-filter:none; grid-template-columns:1fr; animation:none; }
+.rush-game .bottom-console .compact-legend span { min-height:0; padding:1px 0; justify-content:flex-start; text-align:left; border:0; font:400 clamp(9px,1.8cqw,12px)/1.4 system-ui,sans-serif; letter-spacing:0; }
+.rush-game .bottom-console .protect-memory { min-height:44px; padding:7px 10px; border:0; box-shadow:none; background:var(--ui-blue); }
+.rush-game .protect-memory strong { font:600 clamp(11px,2cqw,14px)/1.25 system-ui,sans-serif; }
+.rush-game .protect-memory small { font:500 clamp(9px,1.6cqw,11px)/1.4 system-ui,sans-serif; letter-spacing:.03em; }
+.rush-game .protect-memory[data-protected="true"] { color:#153e30; background:#cee9dd; }
+
+/* The result is a readable record, not another stack of ornamental panels. */
+.rush-game .memory-result { inset:16% 4% 3%; padding:3cqh 4.5cqw; gap:1.4cqh; border:0; border-top:3px solid var(--ui-blue); border-radius:0; clip-path:none; background:var(--ui-paper); backdrop-filter:none; box-shadow:0 8px 28px #18345426; scroll-padding-block:2cqh; animation:caption-arrive .38s ease-out; }
+.rush-game .memory-result>* { animation:none; }
+.rush-game .result-kicker { color:#536978; font:500 clamp(10px,1.9cqw,13px)/1.5 system-ui,sans-serif; letter-spacing:.05em; }
+.rush-game .memory-result>h2 { margin:0 0 1cqh; color:var(--ui-ink); font:600 clamp(27px,5.7cqw,40px)/1.1 system-ui,sans-serif; font-style:normal; letter-spacing:-.03em; }
+.rush-game[data-lang="en"] .memory-result { font-family:system-ui,sans-serif; }
+.rush-game[data-lang="en"] .memory-result>h2 { font:600 clamp(27px,5.7cqw,40px)/1.1 system-ui,sans-serif; letter-spacing:-.03em; }
+.rush-game[data-lang="en"] .result-kicker { font:500 clamp(10px,1.9cqw,13px)/1.5 system-ui,sans-serif; letter-spacing:.04em; }
+.rush-game .recall-evidence>strong { font:600 clamp(11px,2.2cqw,15px)/1.4 system-ui,sans-serif; }
+.rush-game .recall-evidence>p { font:400 clamp(12px,2.3cqw,16px)/1.55 system-ui,sans-serif; }
+.rush-game .recall-timeline { border:0; border-block:1px solid var(--ui-rule); margin:0; }
+.rush-game .recall-timeline>div { border-color:var(--ui-rule); padding:1.5cqh .6cqw; }
+.rush-game .recall-timeline>div[data-source="true"] { color:var(--ui-blue); background:#e9eef2; }
+.rush-game .recall-timeline strong { font:600 clamp(15px,3cqw,22px)/1.3 system-ui,sans-serif; }
+.rush-game .memory-changes h3,.rush-game .result-reflection h3 { color:var(--ui-ink); font:600 clamp(18px,3.6cqw,26px)/1.3 system-ui,sans-serif; }
+.rush-game .memory-changes .detail-evidence { border:0; gap:1cqh; }
+.rush-game .memory-changes .detail-evidence>span { padding:1.3cqh 2cqw; border:0; border-left:2px solid #9cafb9; background:#edf1ef; font-weight:400; }
+.rush-game .memory-changes .detail-evidence>span[data-comparison="different"] { border-left-color:#a34c39; background:#faf0e8; }
+.rush-game .memory-changes .detail-evidence>span[data-comparison="uncertain"] { border-left-color:#70648a; background:#f1eef5; }
+.rush-game .detail-evidence>span>span { display:block; border:0; padding:0; color:inherit; font:inherit; }
+.rush-game .shared-memory-reveal { border:0; border-bottom:1px solid var(--ui-rule); padding:0 0 2cqh; margin:0 0 2cqh; background:none; }
+.rush-game .result-reflection p { font:400 clamp(13px,2.4cqw,17px)/1.7 system-ui,sans-serif; }
+.rush-game .memory-result blockquote { margin:1.5cqh 0; padding:2.2cqh 0; border:0; border-block:1px solid var(--ui-rule); color:var(--ui-ink); background:none; box-shadow:none; transform:none; font:500 clamp(23px,4.7cqw,34px)/1.4 Georgia,"STKaiti","KaiTi",serif; }
+.rush-game .result-traces div { animation:none; background:none; }
+.rush-game .result-actions { grid-template-columns:1fr 1fr; gap:1.5cqw; }
+.rush-game .result-actions button { min-height:44px; border:1px solid #8d9eaa; background:none; box-shadow:none; transform:none; color:var(--ui-ink); font:500 clamp(12px,2.3cqw,16px)/1.4 system-ui,sans-serif; }
+.rush-game button:focus-visible { outline:3px solid #e5aa2e; outline-offset:3px; }
+@keyframes caption-arrive { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+@container (max-height:620px) {
+  .rush-game .rush-intro { top:20%; max-height:77%; }
+  .rush-game .rush-journey { top:18%; }
+  .rush-game .run-purpose { top:25%; }
+  .rush-game .shared-memory-event,.rush-game .reconstructed-preview { top:32%; }
+  .rush-game .memory-result { top:18%; }
+  .rush-game .bottom-console { padding:.6cqh 1.6cqw; gap:.4cqh; }
+}
+@media (prefers-reduced-motion:reduce) { .rush-game .rush-intro,.rush-game .rush-choice,.rush-game .memory-result,.rush-game .reconstructed-preview { animation:none; } }
