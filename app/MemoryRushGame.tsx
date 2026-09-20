@@ -785,16 +785,16 @@ export default function MemoryRushGame() {
     g.addColorStop(0, "#5ee0ff"); g.addColorStop(.48, "#fff0a8"); g.addColorStop(1, "#ff8c67"); c.fillStyle = g; c.fillRect(0, 0, 1080, 1440);
     c.fillStyle = "rgba(255,255,255,.84)"; c.roundRect(75, 80, 930, 1280, 52); c.fill(); c.fillStyle = "#173755";
     c.font = "800 34px sans-serif"; c.fillText(`YOUR ANSWERS · VISIT ${String(record.run).padStart(2,"0")}`, 130, 160);
-    c.font = "900 76px sans-serif"; c.fillText(tr("忘了自己是什么", "WHAT WAS I AGAIN?"), 130, 280); c.font = "700 38px sans-serif"; c.fillStyle = "#ef704f"; c.fillText(tr("你这次记得的样子", "How you remembered it this time"), 130, 360);
+    c.font = "900 76px sans-serif"; c.fillText(tr("忘了自己是什么", "WHAT WAS I AGAIN?"), 130, 280); c.font = "700 38px sans-serif"; c.fillStyle = "#ef704f"; c.fillText(tr("本次回答", "Your answers"), 130, 360);
     c.fillStyle = "#173755"; c.font = "800 42px sans-serif";
     [[tr("最初画面","FIRST IMAGE"),4],[tr("第一次回想","FIRST RECALL"),answerLabel(record.recalls?.[0])],[tr("第二次回想","SECOND RECALL"),answerLabel(record.recalls?.[1])],[tr("第三次回想","THIRD RECALL"),answerLabel(record.recalls?.[2])],[tr("留下的照片","PHOTOS KEPT"),record.retained ?? Math.min(SAVE_SLOT_COUNT, record.caught)],[tr("受到干扰","INTERRUPTIONS"),record.bumps]].forEach(([label,value],i)=>c.fillText(`${label}  ${value}`,130,500+i*105));
-    c.font = "800 38px sans-serif"; c.fillText(`CURRENT VERSION  ${record.version}`,130,1190); c.font = "600 28px sans-serif"; c.fillText(tr("照片留下了。你记得的呢？", "The photo is still here. What do you remember?"),130,1270);
+    c.font = "800 38px sans-serif"; c.fillText(`CURRENT VERSION  ${record.version}`,130,1190); c.font = "600 28px sans-serif"; c.fillText(tr("原图与本次回答", "The original photo and your answers"),130,1270);
     const a = document.createElement("a"); a.download = `memory-journey-${record.run}.png`; a.href = card.toDataURL("image/png"); a.click();
   }, [record, tr, answerLabel]);
 
   const shareCard = useCallback(async () => {
     if (!record) return;
-    const text = language === "zh" ? `最初画面：4 人｜我的回想：${(record.recalls ?? []).map(answerLabel).join(" → ")}｜照片留下了。你记得的呢？` : `FIRST IMAGE: 4 PEOPLE | MY RECALLS: ${(record.recalls ?? []).map(answerLabel).join(" → ")} | The photo is still here. What do you remember?`;
+    const text = language === "zh" ? `最初画面：4 人｜我的回想：${(record.recalls ?? []).map(answerLabel).join(" → ")}｜本次回答记录` : `FIRST IMAGE: 4 PEOPLE | MY RECALLS: ${(record.recalls ?? []).map(answerLabel).join(" → ")} | My answers`;
     try {
       if (navigator.share) await navigator.share({ title: tr("忘了自己是什么", "WHAT WAS I AGAIN?"), text, url: location.href });
       else { await navigator.clipboard.writeText(`${text} ${location.href}`); setShareMessage(tr("结果和链接已复制", "Result and link copied")); }
@@ -909,14 +909,13 @@ export default function MemoryRushGame() {
           <header>{tr("别人的留言", "OTHER PEOPLE’S COMMENTS")}<small>{tr("游戏虚构", "FICTIONAL")}</small></header>
           <p><b>A</b>{memoryEvent === "people" ? tr("“那张照片里有五个人吧？”", '“There were five people in that photo, right?”') : tr("“我记得天空是粉色的。”", '“I remember a pink sky.”')}</p>
           <p><b>B</b>{memoryEvent === "people" ? tr("“对，我也记得是五个。”", '“Yes, I remember five too.”') : tr("“我也记得，淡淡的粉色。”", '“Me too. A pale pink.”')}</p>
-          <footer>{tr("他们记得的，和你一样吗？", "Do you remember it the same way?")}</footer>
         </aside>}
         {started && !choice && !paused && !memoryEvent && hud.version !== "A" && <aside className="reconstructed-preview" data-version={hud.version} aria-label={tr("按你的回答画的，不是原图", "Drawn from your answer, not the original")}>
           <span>{versionCause.recall === 0 ? tr("人数记不清了", "The count is unclear") : tr(`你选了 ${versionCause.recall} 人`, `You chose ${versionCause.recall} people`)}<small>{tr("这是照你的回答画的，不是原图。", "Drawn from your answer, not the original.")}</small></span>
-          {versionCause.recall === 0 && <p className="uncertain-picture">{tr("人数未确定，暂不显示人像。", "No count selected; figures are not shown.")}</p>}<div className="memory-figures">{Array.from({length: versionCause.recall},(_,index)=><img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{"--figure-scale":1.05+(index%2)*.2} as CSSProperties}/>)}</div>
+          {versionCause.recall === 0 && <p className="uncertain-picture">{tr("你选了“记不清”，这里不显示人物。", "You chose “Not sure”, so no people are shown.")}</p>}<div className="memory-figures">{Array.from({length: versionCause.recall},(_,index)=><img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{"--figure-scale":1.05+(index%2)*.2} as CSSProperties}/>)}</div>
         </aside>}
         {started && <><div className="combo-pill" data-active={hud.checks > 0}>{hud.checks > 0 ? `×${hud.checks} ${tr("次回想", "recalls")}` : tr("再看一次", "Look again")}</div>
-          <div className="rush-journey"><span>{hud.version === "A" ? tr("01 / 彩色", "01 / COLOR") : hud.version === "B" ? tr("02 / 黑白", "02 / BLACK & WHITE") : tr("03 / 紫蓝", "03 / VIOLET")}</span><strong>{tr(`照片 ${hud.memories} 张 · ${seconds}s · ${gameSpeed}×`, `${hud.memories} photos · ${seconds}s · ${gameSpeed}×`)}</strong><progress max={RUN_DURATION_MS / 1000} value={RUN_DURATION_MS / 1000-seconds} aria-label={tr("本轮进度", "Round progress")} /></div>
+          <div className="rush-journey"><span>{hud.version === "A" ? tr("01 / 彩色", "01 / COLOR") : hud.version === "B" ? tr("02 / 黑白", "02 / BLACK & WHITE") : tr("03 / 紫蓝", "03 / VIOLET")}</span><strong>{tr(`照片 ${hud.memories} 张 · ${seconds}s · ${gameSpeed}×`, `${hud.memories} ${hud.memories === 1 ? "photo" : "photos"} · ${seconds}s · ${gameSpeed}×`)}</strong><progress max={RUN_DURATION_MS / 1000} value={RUN_DURATION_MS / 1000-seconds} aria-label={tr("本轮进度", "Round progress")} /></div>
           {!choice && !paused && <>
           <div className="run-purpose"><b>{hud.version === "A" ? tr("A / 保存", "A / STORE") : hud.version === "B" ? tr("B / 复盘", "B / RECHECK") : tr("C / 保护", "C / PROTECT")}</b><span>{hud.version === "A" ? tr("最多留 5 张，接满后会换掉最早的一张。", "Keep up to 5 photos. New ones replace the oldest.") : hud.version === "B" ? tr("躲开泡泡，别让假记忆混进来。", "Avoid bubbles. They slip false memories in.") : tr("按住下方按钮，可以挡住一次干扰。", "Hold the button below to block one hit.")}</span></div>
           <div className="bottom-console">
@@ -957,13 +956,13 @@ export default function MemoryRushGame() {
               return <i key={label} data-active={index <= active}><b>0{index + 1}</b>{label}</i>;
             })}
           </nav>
-          <h1>{intro === 0 ? tr("忘了自己是什么", "WHAT WAS I AGAIN?") : intro === 1 ? tr("看看这张照片", "Look at this photo") : intro === 2 ? tr("你刚才看见了几个人？", "HOW MANY PEOPLE DID YOU SEE?") : intro === 3 ? (recallAnswer === 0 ? tr("你选了“记不清”", "You chose “Not sure”") : tr(`你选了 ${recallAnswer} 人`, `You chose ${recallAnswer} people`)) : tr("接下来，边走边回想", "Keep moving. We will ask again.")}</h1>
+          <h1>{intro === 0 ? tr("忘了自己是什么", "WHAT WAS I AGAIN?") : intro === 1 ? tr("看看这张照片", "Look at this photo") : intro === 2 ? tr("你刚才看见了几个人？", "HOW MANY PEOPLE DID YOU SEE?") : intro === 3 ? (recallAnswer === 0 ? tr("你选了“记不清”", "You chose “Not sure”") : tr(`你选了 ${recallAnswer} 人`, `You chose ${recallAnswer} people`)) : tr("操作说明", "Controls")}</h1>
           {intro === 0 && <div className="intro-photo intro-photo-0">
             <img src={resolveImageUrl(photoUrl)} alt={tr("一只装着照片的相框", "A framed photo")} />
             <i />
           </div>}
-          {intro === 3 && <div className="motive-loop" aria-label={tr("反复回看的循环", "The cycle of repeated checking")}>
-            <span><b>01</b><em>{tr("怕忘记", "MIGHT FORGET")}</em><small>FORGET</small></span><i aria-hidden="true">↘</i><span><b>02</b><em>{tr("保存与搜索", "SAVE & SEARCH")}</em><small>SAVE</small></span><i aria-hidden="true">↗</i><span><b>03</b><em>{tr("反复确认", "CHECK AGAIN")}</em><small>CHECK</small></span><i aria-hidden="true">↺</i>
+          {intro === 3 && <div className="motive-loop" aria-label={tr("看照片后凭记忆回答", "Look at the photo, then answer from memory")}>
+            <span><b>01</b><em>{tr("看照片", "LOOK")}</em><small>01</small></span><i aria-hidden="true">↘</i><span><b>02</b><em>{tr("记住细节", "REMEMBER")}</em><small>02</small></span><i aria-hidden="true">↗</i><span><b>03</b><em>{tr("稍后回答", "ANSWER")}</em><small>03</small></span><i aria-hidden="true">↺</i>
           </div>}
           {intro === 1 && <div className="intro-photo intro-photo-1"><img src={resolveImageUrl(backgroundAUrl)} alt={tr("最初呈现的记忆场景", "The memory scene shown at the start")} /><div className="memory-figures" aria-label={tr("照片里有四个人", "Four people are visible in the photograph")}>{[.82,1,.7,.9].map((scale,index) => <img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{"--figure-scale":scale} as CSSProperties} />)}</div><i /></div>}
           {intro === 2 && <div className="recall-choice" role="group" aria-label={tr("选择记得的人数", "Choose the number you remember")}>
@@ -972,7 +971,7 @@ export default function MemoryRushGame() {
           {intro === 4 && <div className="version-map" aria-label={tr("记忆版本变化", "Memory version changes")}>
             <span data-version="A"><small>01 / STORE</small><b>A</b><em>{tr("接住照片", "CATCH PHOTOS")}</em></span><i aria-hidden="true">→</i><span data-version="B"><small>02 / RECHECK</small><b>B</b><em>{tr("躲开泡泡", "AVOID BUBBLES")}</em></span><i aria-hidden="true">→</i><span data-version="C"><small>03 / PROTECT</small><b>C</b><em>{tr("护住照片", "PROTECT PHOTOS")}</em></span>
           </div>}
-          <p>{intro === 0 ? tr("手机里存着很多照片，你还记得里面的细节吗？先看一张，稍后凭记忆回答几个问题。", "You have the photo saved. How much do you remember? Look at one now, then answer a few questions without looking back.") : intro === 1 ? tr("看看照片里的人和周围的景物。看好后，点下面的按钮。", "Look at the people and their surroundings. Continue when you are ready.") : intro === 2 ? tr("选你记得的人数。暂时不看原图，结束后再对照。", "Choose the number you remember. We will show the original at the end.") : intro === 3 ? tr(`你的回答是：${answerLabel(recallAnswer)}。游戏中还会问两次，也会问到位置和颜色。到时按你记得的选。`, `You answered: ${answerLabel(recallAnswer)}. You will be asked twice more, plus questions about position and color. Choose what you remember each time.`) : tr("左右移动接照片，躲开泡泡和障碍。长按下方按钮可挡一次碰撞。移动时间共 24 秒（1×速度），回答问题时暂停计时。", "Move left or right to catch photos. Dodge bubbles and obstacles. Hold the button below to block one hit. At 1× speed, movement lasts 24 seconds; questions pause the timer.")}</p>
+          <p>{intro === 0 ? tr("先看照片，记住里面的人和景物。游戏中会问你几次，最后再看原图。", "Look at the people and surroundings in the photo. Answer a few questions as you play, then compare your answers with the original.") : intro === 1 ? tr("看好后，点“我看过了”。", "Take your time. Select Continue when you are ready.") : intro === 2 ? tr("选你记得的人数，也可以选“记不清了”。", "Choose a number, or select Not sure.") : intro === 3 ? tr("接下来还会问两次人数，以及位置和颜色。你可以改答案。", "You will be asked about the people twice more, and about position and color. You can change your answers.") : tr("左右移动接照片，躲开泡泡和障碍。长按下方按钮可挡一次碰撞。移动时间共 24 秒（1×速度），回答问题时暂停计时。", "Move left or right to catch photos. Dodge bubbles and obstacles. Hold the button below to block one hit. At 1× speed, movement lasts 24 seconds; questions pause the timer.")}</p>
             {previous && intro === 0 && <div className="previous-memory"><b>{tr(`上次：VERSION ${previous.version}`, `LAST: VERSION ${previous.version}`)}</b><span>{tr(`上次留下 ${previous.retained ?? Math.min(SAVE_SLOT_COUNT, previous.caught)} 张照片 · 这次重新开始`, `You kept ${previous.retained ?? Math.min(SAVE_SLOT_COUNT, previous.caught)} photos last time · Start fresh`)}</span></div>}
           <button disabled={!ready} onClick={advanceIntro}>{loadError ? tr("图片没加载出来，请刷新重试", "The pictures did not load. Please refresh.") : !ready ? tr("正在加载照片…", "Loading photos…") : intro === 0 ? tr("开始看照片", "Start with the photo") : intro === 1 ? tr("我看过了", "Continue") : intro === 2 ? tr("选好了", "Keep this answer") : intro === 3 ? tr("接下来怎么玩", "How to play") : tr("开始", "Start")}</button>
           {loadError && <button onClick={() => location.reload()}>{tr("重新加载", "RELOAD")}</button>}
@@ -988,14 +987,14 @@ export default function MemoryRushGame() {
               : tr("最开始的照片里，天空是什么颜色？", "What color was the sky in the first photo?")
             : tr("已暂停", "Paused")}</h2>
           {choice ? <><p>{choicePhase === "count"
-            ? tr("想想最开始的那张照片，选你记得的人数。", "Think of the first photo. Choose the number you remember.")
-            : tr("凭记忆选一个，选完继续。", "Choose what you remember, then carry on.")}</p>
-          {checkpointOptions(choicePhase, choiceStage).map((value,index)=><button key={value} data-selected={choiceIndex === index} onFocus={()=>{choiceIndexRef.current=index;setChoiceIndex(index);}} onClick={()=>chooseCheckpointOption(value)}><strong>{typeof value === "number" && value !== 0 ? value : answerLabel(value)}</strong><span>{value === 0 || value === "unknown" ? tr("直接继续", "Continue") : typeof value === "number" ? tr("个人", "PEOPLE") : tr("我记得是这样", "As I remember it")}</span></button>)}</> : <button onClick={pauseGame}>{tr("继续", "RESUME")}</button>}
+            ? tr("选你记得的人数，记不清也可以。", "Choose a number, or select Not sure.")
+            : tr("选完继续；记不清也可以。", "Select an answer to continue. Not sure is also an option.")}</p>
+          {checkpointOptions(choicePhase, choiceStage).map((value,index)=><button key={value} data-selected={choiceIndex === index} onFocus={()=>{choiceIndexRef.current=index;setChoiceIndex(index);}} onClick={()=>chooseCheckpointOption(value)}><strong>{typeof value === "number" && value !== 0 ? value : answerLabel(value)}</strong><span>{value === 0 || value === "unknown" ? tr("直接继续", "Continue") : typeof value === "number" ? tr("个人", "PEOPLE") : tr("选择", "Select")}</span></button>)}</> : <button onClick={pauseGame}>{tr("继续", "RESUME")}</button>}
         </section>}
 
         {record && <section className="memory-result" aria-label={tr("这次的结果", "Your results")}>
           <div className="result-kicker">YOUR ANSWERS · VISIT {String(record.run).padStart(2,"0")} · VERSION {record.version}</div>
-          <h2>{tr("你的回答，\n和照片一样吗？", "HOW DO YOUR ANSWERS\nCOMPARE?")}</h2>
+          <h2>{tr("回答记录", "YOUR ANSWERS")}</h2>
           <div className="recall-timeline" aria-label={tr("原图与你的三次回答对照", "Source and your three answers")}>
             {[4, ...Array.from({length:3},(_,index) => record.recalls?.[index] ?? "—")].map((count,index) => <div key={index} data-source={index === 0}>
               <span>{index === 0 ? tr("原图", "SOURCE") : tr(`回想 ${index}`, `RECALL ${index}`)}</span>
@@ -1003,9 +1002,9 @@ export default function MemoryRushGame() {
               <em>{index === 0 ? tr("一开始看到的", "What you first saw") : index === 1 ? tr("首次判断", "FIRST ANSWER") : count === 0 ? tr("这次没有确定人数", "COUNT LEFT OPEN") : tr(`照此画成 ${index === 2 ? "B" : "C"}`, `Used for ${index === 2 ? "B" : "C"}`)}</em>
             </div>)}
           </div>
-          <div className="recall-evidence"><strong>{tr("现在，再看一次原图", "NOW LOOK AT THE SOURCE AGAIN")}</strong><div className="intro-photo intro-photo-1"><img src={resolveImageUrl(backgroundAUrl)} alt={tr("最初呈现的场景", "The scene shown at the start")} /><div className="memory-figures">{[.82,1,.7,.9].map((scale,index)=><img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{"--figure-scale":scale} as CSSProperties}/>)}</div></div><p>{(record.recalls ?? []).some(n=>n===0) ? tr("有的回答是“记不清了”，下面按原样保留。", "Some answers were marked Not sure. They are kept that way below.") : (record.recalls ?? []).some(n=>n!==4) ? tr("有的答案和原图不一样。看看上面的记录，你是从哪一次开始这样记的？", "Some answers differ from the original. Look at your answers above. When did you start remembering it that way?") : tr("你三次都选了 4 人，和原图一致。位置和颜色的回答在下面。", "You chose four people each time, matching the photo. Your answers about position and color are below.")}</p></div>
+          <div className="recall-evidence"><strong>{tr("原图", "ORIGINAL PHOTO")}</strong><div className="intro-photo intro-photo-1"><img src={resolveImageUrl(backgroundAUrl)} alt={tr("最初呈现的场景", "The scene shown at the start")} /><div className="memory-figures">{[.82,1,.7,.9].map((scale,index)=><img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{"--figure-scale":scale} as CSSProperties}/>)}</div></div><p>{(record.recalls ?? []).some(n=>n===0) ? tr("原图里有 4 人。“记不清”的回答也列在上方。", "The photo had four people. Any Not sure answers are shown above.") : (record.recalls ?? []).some(n=>n!==4) ? tr("原图里有 4 人。你的三次回答列在上方。", "The photo had four people. Your three answers are shown above.") : tr("你三次都选了 4 人，与原图一致。", "You chose four people each time, matching the photo.")}</p></div>
           <section className="memory-changes" aria-label={tr("变化发生在哪里", "Where answers changed")}>
-            <h3>{tr("你的回想记录", "Your recall history")}</h3>
+            <h3>{tr("三次回答", "Your three answers")}</h3>
             <ol>
               {[0,1,2].map(index => {
                 const value = record.recalls?.[index];
@@ -1013,7 +1012,7 @@ export default function MemoryRushGame() {
                 return <li key={index}>
                   <small>{index === 0 ? tr("看过原图后", "AFTER THE ORIGINAL") : index === 1 ? (record.sharedMemories?.includes("people") ? tr("“五个人”的虚构留言出现后", "AFTER THE FICTIONAL FIVE-PEOPLE COMMENTS") : tr("第二次回想", "SECOND RECALL")) : (record.sharedMemories?.includes("sky") ? tr("“粉色天空”的虚构留言出现后", "AFTER THE FICTIONAL PINK-SKY COMMENTS") : tr("第三次回想", "THIRD RECALL"))}</small>
                   <strong>{answerLabel(value)}</strong>
-                  <span>{index === 0 ? tr("这是你的第一次回答。", "Your first answer.") : value === undefined ? tr("没有记录", "Not recorded") : value === previousAnswer ? tr("人数答案没变。", "Your count stayed the same.") : value === 0 ? tr("这次，你选择了记不清。", "This time, you were not sure.") : previousAnswer === 0 ? tr("从记不清，变成了一个确定人数。", "From unsure to a definite count.") : tr(`人数从 ${previousAnswer} 改成了 ${value}。`, `Your count changed from ${previousAnswer} to ${value}.`)}</span>
+                  <span>{index === 0 ? tr("第一次回答", "First answer") : value === undefined ? tr("没有记录", "Not recorded") : value === previousAnswer ? tr("人数答案没变。", "Your count stayed the same.") : value === 0 ? tr("这次选了“记不清”", "You selected Not sure") : previousAnswer === 0 ? tr(`这次选了 ${value} 人`, `You selected ${value} people`) : tr(`人数从 ${previousAnswer} 改成了 ${value}。`, `Your count changed from ${previousAnswer} to ${value}.`)}</span>
                 </li>;
               })}
             </ol>
@@ -1026,19 +1025,19 @@ export default function MemoryRushGame() {
           </section>
           <div className="result-reflection">
             {(record.sharedMemories?.length ?? 0) > 0 && <section className="shared-memory-reveal" aria-label={tr("别人的留言与原图对照", "Other people’s comments and the original")}>
-              <h3>{tr("刚才的留言，可信吗？", "Were those comments right?")}</h3>
+              <h3>{tr("留言和原图", "Comments and the photo")}</h3>
               {record.sharedMemories?.includes("people") && <p>{tr("两条留言都说有五个人，原图里却只有四个。", "Both comments said five people. The original had four.")}</p>}
-              {record.sharedMemories?.includes("sky") && <p>{tr("他们还记得粉色的天空，原图里的天空却是蓝色。", "They also remembered a pink sky. The original sky was blue.")}</p>}
+              {record.sharedMemories?.includes("sky") && <p>{tr("留言说天空是粉色，原图是蓝色。", "The comments said pink. The original sky was blue.")}</p>}
               <p>{tr("这些留言是为游戏编写的，不是真实玩家的评论。", "These comments were written for the game, not posted by real players.")}</p>
-              <details><summary>{tr("这和曼德拉效应有什么关系？", "How does this relate to the Mandela effect?")}</summary>
+              <details><summary>{tr("关于曼德拉效应", "About the Mandela effect")}</summary>
                 <p>{tr("很多人对同一件事有相似的记忆，却与可核实的事实不符，这类现象通常被称为曼德拉效应。", "The Mandela effect describes shared memories that do not match verifiable facts.")}</p>
                 <a href="https://news.uchicago.edu/story/visual-mandela-effect-false-memories-psychology-neuroscience-pikachu-mr-monopoly-waldo" target="_blank" rel="noreferrer">{tr("相关研究：芝加哥大学", "Research: University of Chicago")}</a>
               </details>
             </section>}
-            <h3>{tr("有些事，\n你希望自己忘记吗？", "IS THERE SOMETHING\nYOU WOULD RATHER FORGET?")}</h3>
-            <p className="result-thesis">{tr("怕忘记，所以保存照片、翻看聊天记录，有时也一遍遍搜索，想确认自己没有记错。这些记录帮你想起了什么？又有没有让你反复想起不愿记住的事？", "Have you ever searched old photos or messages to check your memory? Sometimes they help. Sometimes they bring back something you would rather leave behind.")}</p>
+            <h3>{tr("照片和记忆", "Photos and memory")}</h3>
+            <p className="result-thesis">{tr("想不起一个细节时，我们常会翻照片、找聊天记录，或者重新搜索过去的事。", "When you cannot remember a detail, you might look through old photos, messages or posts to check it.")}</p>
           </div>
-          <blockquote>{tr("遗忘对你来说，是丢失，还是一种保护？", "For you, is forgetting a loss, or a form of protection?")}</blockquote>
+          <blockquote>{tr("遗忘是一种缺陷，还是一种自我保护？", "Is forgetting a flaw, or a way to protect yourself?")}</blockquote>
           <dl className="result-traces">
             <div><dt>{tr("留下的照片", "PHOTOS KEPT")}</dt><dd>{record.retained ?? Math.min(SAVE_SLOT_COUNT, record.caught)}</dd></div><div><dt>{tr("替换照片", "PHOTOS REPLACED")}</dt><dd>{record.overwritten ?? 0}</dd></div>
             <div><dt>{tr("保护次数", "TIMES PROTECTED")}</dt><dd>{record.protections ?? 0}</dd></div><div><dt>{tr("碰到几次", "HITS")}</dt><dd>{record.bumps}</dd></div>

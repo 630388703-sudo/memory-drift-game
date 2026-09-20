@@ -47,6 +47,17 @@ test('retired mechanic instructions cannot return to the active copy', () => {
   for (const phrase of ['旧磁带','停摆时钟','褪色票根','残影替你','装置正在把一次触碰转换','记忆能力已生效','记不清的，就先放一放']) assert.ok(!source.includes(phrase), phrase);
 });
 
+test('copy stays direct while preserving the core question and fictional labels', () => {
+  for (const phrase of ['边走边回想', '你是从哪一次开始这样记的', 'Were those comments right?', 'Sometimes they help.', 'MIGHT FORGET']) {
+    assert.ok(!source.includes(phrase), phrase);
+  }
+  assert.ok(source.includes('遗忘是一种缺陷，还是一种自我保护？'));
+  assert.ok(source.includes('Is forgetting a flaw, or a way to protect yourself?'));
+  assert.ok(source.includes('游戏虚构'));
+  assert.ok(source.includes('not posted by real players'));
+  assert.ok(source.includes('回答问题时暂停计时'));
+});
+
 const recallSource = readFileSync(new URL('../app/memory-recall.ts', import.meta.url), 'utf8');
 const recallCode = ts.transpileModule(recallSource.replaceAll('export ', ''), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
 const recall = vm.runInNewContext(`${recallCode};({COUNT_OPTIONS, moveCount, recallLabel, comparisonState})`);
