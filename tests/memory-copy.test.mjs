@@ -60,7 +60,17 @@ test('copy stays direct while preserving the core question and fictional labels'
 
 const recallSource = readFileSync(new URL('../app/memory-recall.ts', import.meta.url), 'utf8');
 const recallCode = ts.transpileModule(recallSource.replaceAll('export ', ''), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-const recall = vm.runInNewContext(`${recallCode};({COUNT_OPTIONS, moveCount, recallLabel, comparisonState})`);
+const recall = vm.runInNewContext(`${recallCode};({COUNT_OPTIONS, moveCount, moveChoiceIndex, recallLabel, comparisonState})`);
+
+test('an unanswered question starts without a selected count', () => {
+  assert.equal(recall.moveChoiceIndex(-1, 1), 0);
+  assert.equal(recall.moveChoiceIndex(-1, -1), 3);
+  assert.equal(recall.moveCount(-1, 1), 3);
+  assert.equal(recall.moveCount(-1, -1), 0);
+  assert.ok(source.includes('[recallAnswer, setRecallAnswer] = useState(-1)'));
+  assert.ok(!source.includes('setRecallAnswer(4)'));
+  assert.ok(!source.includes('setChoiceIndex(1)'));
+});
 test('uncertainty is reachable and never displayed as zero people', () => {
   assert.equal(recall.moveCount(5, 1), 0);
   assert.equal(recall.moveCount(3, -1), 0);

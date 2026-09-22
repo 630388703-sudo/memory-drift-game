@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import DormantVisual from "./DormantVisual";
 import { drawPhotoFault, photoFaultStrength } from "./photo-fault";
-import { COUNT_OPTIONS, moveCount, recallLabel, comparisonState } from "./memory-recall";
+import { COUNT_OPTIONS, moveCount, moveChoiceIndex, recallLabel, comparisonState } from "./memory-recall";
 import { MemoryAudio, type MemoryCue } from "./memory-audio";
 import backgroundAUrl from "../game/assets/grid-surreal-memory-a.webp";
 import backgroundBUrl from "../game/assets/grid-surreal-memory-b.webp";
@@ -205,7 +205,7 @@ export default function MemoryRushGame() {
   const bootTimerRef = useRef(0);
   const memoryVisualTime = useRef(5);
   const [intro, setIntro] = useState(0);
-  const [recallAnswer, setRecallAnswer] = useState(4);
+  const [recallAnswer, setRecallAnswer] = useState(-1);
   // Each launch starts in English; the language switch applies to this visit.
   const [language, setLanguage] = useState<"zh" | "en">("en");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -216,8 +216,8 @@ export default function MemoryRushGame() {
   const [choice, setChoice] = useState(false);
   const [choicePhase, setChoicePhase] = useState<CheckpointPhase>("count");
   const [choiceStage, setChoiceStage] = useState(0);
-  const [choiceIndex, setChoiceIndex] = useState(0);
-  const choiceIndexRef = useRef(0);
+  const [choiceIndex, setChoiceIndex] = useState(-1);
+  const choiceIndexRef = useRef(-1);
   const [paused, setPaused] = useState(false);
   const [seconds, setSeconds] = useState(RUN_DURATION_MS / 1000);
   const [gameSpeed, setGameSpeed] = useState<GameSpeed>(() => {
@@ -269,6 +269,8 @@ export default function MemoryRushGame() {
   const [versionPulse, setVersionPulse] = useState<MemoryVersion | null>(null);
   const [versionCause, setVersionCause] = useState<{ recall: number; detail: string }>({ recall: 4, detail: "" });
   const versionTimerRef = useRef(0);
+  const transitionRef = useRef(false);
+  const idleActivityRef = useRef<() => void>(() => {});
   const [hud, setHud] = useState({ score: 0, combo: 0, checks: 0, memories: 0, drift: 0, version: "A" as MemoryVersion, overwritten: 0, protections: 0, hold: 0, protected: false });
   const shownFeedback = language === "zh" ? feedback : feedbackEn(feedback);
 
@@ -311,6 +313,8 @@ export default function MemoryRushGame() {
   }, []);
 
   const begin = useCallback(() => {
+    if (!COUNT_OPTIONS.some(value => value === recallAnswer)) return;
+    transitionRef.current = false;
     unlockAudio();
     const fresh = makeRuntime();
     fresh.recalls = [recallAnswer];
@@ -342,7 +346,7 @@ export default function MemoryRushGame() {
 
   const movePointer = useCallback((clientX: number) => {
     const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
+    if (!rect || runtimeRef.current.paused) return;
     runtimeRef.current.targetX = Math.max(0.22, Math.min(0.78, (clientX - rect.left) / rect.width));
     runtimeRef.current.lastInteraction = runtimeRef.current.clock;
     runtimeRef.current.idleNotified = false;
@@ -386,14 +390,15 @@ export default function MemoryRushGame() {
     playCue("protect");
   }, [playCue]);
 
-  const chooseCheckpointOption = useCallback((answer: number | string) => {
+  const chooseCheckpointOption = useCallback((answer: number | string | undefined) => {
     const r = runtimeRef.current;
-    if (!r.started || !r.paused) return;
+    if (!r.started || !r.paused || transitionRef.current || answer === undefined) return;
+    if (!checkpointOptions(choicePhase, r.recallStage).includes(answer)) return;
     if (choicePhase === "count") {
       if (typeof answer !== "number" || r.recalls.length !== r.recallStage) return;
       r.recalls.push(answer);
-      choiceIndexRef.current = 1;
-      setChoiceIndex(1);
+      choiceIndexRef.current = -1;
+      setChoiceIndex(-1);
       setChoicePhase("detail");
       setFeedback("人数记下了，再选一个细节。");
       playCue("confirm");
@@ -408,24 +413,36 @@ export default function MemoryRushGame() {
     r.versionFade = 1;
     r.drift = Math.min(1, r.drift + .15);
     r.effectUntil = r.clock + 1650;
-    r.paused = false; setPaused(false); setChoice(false); setChoicePhase("count");
+    transitionRef.current = true;
+    r.paused = true; r.holdActive = false;
+    inputRef.current.left = false; inputRef.current.right = false;
+    setPaused(false); setChoice(false); setChoicePhase("count");
     setVersionCause({ recall: r.recalls[r.recalls.length - 1] ?? recallAnswer, detail: answer });
     setVersionPulse(nextVersion);
     window.clearTimeout(versionTimerRef.current);
-    versionTimerRef.current = window.setTimeout(() => setVersionPulse(null), 2200);
+    versionTimerRef.current = window.setTimeout(() => {
+      transitionRef.current = false;
+      setVersionPulse(null);
+      if (runtimeRef.current !== r || !r.started) return;
+      r.versionFade = 0;
+      r.paused = document.hidden;
+      setPaused(document.hidden);
+    }, 2200);
     setFeedback("记下了，继续接照片。");
     playCue("transition");
   }, [choicePhase, playCue, recallAnswer]);
 
   const advanceIntro = useCallback(() => {
+    if (intro === 2 && recallAnswer < 0) return;
     unlockAudio(); playCue("confirm");
-    if (intro < 4) setIntro(intro + 1); else begin();
-  }, [intro, begin, unlockAudio, playCue]);
+    if (intro === 2) setIntro(4);
+    else if (intro < 4) setIntro(intro + 1); else begin();
+  }, [intro, recallAnswer, begin, unlockAudio, playCue]);
 
   const restartObservation = useCallback(() => {
     recordRef.current = null;
     resultShownAtRef.current = 0;
-    setRecord(null); setIntro(1); setRecallAnswer(4); setShareMessage("");
+    setRecord(null); setIntro(1); setRecallAnswer(-1); setShareMessage("");
   }, []);
 
   const wake = useCallback(() => {
@@ -437,25 +454,38 @@ export default function MemoryRushGame() {
 
   const sleep = useCallback(() => {
     if (runtimeRef.current.started) return;
-    if (recordRef.current && performance.now() - resultShownAtRef.current < 44000) return;
     window.clearTimeout(bootTimerRef.current); bootingRef.current = false; setBooting(false);
     recordRef.current = null; resultShownAtRef.current = 0;
-    awakeRef.current = false; setAwake(false); setIntro(0); setRecord(null); setSettingsOpen(false);
+    awakeRef.current = false; setAwake(false); setIntro(0); setRecallAnswer(-1); setRecord(null); setSettingsOpen(false);
     audioRef.current?.setActive(false);
   }, []);
 
   useEffect(() => {
     if (!awake || started) return;
-    const timer = window.setTimeout(sleep, record ? 45000 : 90000);
-    return () => window.clearTimeout(timer);
+    let timer = 0;
+    const renew = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(sleep, record ? 45000 : 90000);
+    };
+    idleActivityRef.current = renew;
+    const events = ["pointerdown", "keydown", "wheel", "scroll"] as const;
+    events.forEach(name => window.addEventListener(name, renew, { capture: true, passive: true }));
+    renew();
+    return () => {
+      window.clearTimeout(timer);
+      idleActivityRef.current = () => {};
+      events.forEach(name => window.removeEventListener(name, renew, true));
+    };
   }, [awake, started, record, sleep, intro, recallAnswer, settingsOpen]);
 
   useEffect(() => {
       const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.target as HTMLElement)?.closest("button,input,select,textarea")) return;
+      if ((event.target as HTMLElement)?.closest("button,input,select,textarea,summary,a,[contenteditable]")) return;
       const key = event.key.toLowerCase();
       if (!awakeRef.current) { event.preventDefault(); wake(); return; }
       if (bootingRef.current) { event.preventDefault(); return; }
+      if (transitionRef.current) return;
+      if (event.repeat && ["enter", " ", "z", "x", "p", "escape"].includes(key)) return;
       if (["arrowleft","arrowright","arrowup"," "].includes(key)) event.preventDefault();
       if (deviceRef.current !== "keyboard") { deviceRef.current = "keyboard"; setLastDevice("keyboard"); }
       if (!runtimeRef.current.started && !record) {
@@ -463,11 +493,11 @@ export default function MemoryRushGame() {
         if (["arrowright","d","l"].includes(key) && intro === 2) { setRecallAnswer(value => moveCount(value, 1)); return; }
         if (key === "enter" || key === " ") { advanceIntro(); return; }
       }
-      if (record && ["enter", " ", "z", "x"].includes(key) && !event.repeat) { restartObservation(); return; }
+      if (record) return;
       if (!runtimeRef.current.started) return;
       if (choice) {
-        if (["arrowleft","a","j"].includes(key)) { choiceIndexRef.current = (choiceIndexRef.current + 3) % 4; setChoiceIndex(choiceIndexRef.current); }
-        else if (["arrowright","d","l"].includes(key)) { choiceIndexRef.current = (choiceIndexRef.current + 1) % 4; setChoiceIndex(choiceIndexRef.current); }
+        if (["arrowleft","a","j"].includes(key)) { choiceIndexRef.current = moveChoiceIndex(choiceIndexRef.current, -1); setChoiceIndex(choiceIndexRef.current); }
+        else if (["arrowright","d","l"].includes(key)) { choiceIndexRef.current = moveChoiceIndex(choiceIndexRef.current, 1); setChoiceIndex(choiceIndexRef.current); }
         else if ([" ","enter","z","x"].includes(key)) chooseCheckpointOption(checkpointOptions(choicePhase, runtimeRef.current.recallStage)[choiceIndexRef.current]);
         return;
       }
@@ -489,13 +519,13 @@ export default function MemoryRushGame() {
   }, [advanceIntro, record, choice, choicePhase, chooseCheckpointOption, wake, intro, restartObservation, beginProtectHold, endProtectHold]);
 
   useEffect(() => {
-    const markHardware = () => { if (deviceRef.current !== "gamepad") { deviceRef.current = "gamepad"; setLastDevice("gamepad"); } };
+    const markHardware = () => { idleActivityRef.current(); if (deviceRef.current !== "gamepad") { deviceRef.current = "gamepad"; setLastDevice("gamepad"); } };
     const control: HardwareControl = {
       wake: () => { markHardware(); wake(); },
-      move: (axis) => { markHardware(); const direction=Math.sign(axis); if (choice && direction) { choiceIndexRef.current=(choiceIndexRef.current+direction+4)%4; setChoiceIndex(choiceIndexRef.current); return; } if (!runtimeRef.current.started && intro===2 && direction) { setRecallAnswer(value=>moveCount(value,direction)); return; } const r=runtimeRef.current; r.targetX=Math.max(.22,Math.min(.78,r.targetX+Math.max(-1,Math.min(1,axis))*.075)); r.lastInteraction=r.clock; r.idleNotified=false; },
-      press: (pressure = 0) => { markHardware(); if (!awakeRef.current) wake(); else if (bootingRef.current) return; else if (choice) chooseCheckpointOption(checkpointOptions(choicePhase, runtimeRef.current.recallStage)[choiceIndexRef.current]); else if (runtimeRef.current.started) beginProtectHold(pressure); else if (record) restartObservation(); else advanceIntro(); },
+      move: (axis) => { markHardware(); if (transitionRef.current) return; const direction=Math.sign(axis); if (choice && direction) { choiceIndexRef.current=moveChoiceIndex(choiceIndexRef.current,direction); setChoiceIndex(choiceIndexRef.current); return; } if (!runtimeRef.current.started && intro===2 && direction) { setRecallAnswer(value=>moveCount(value,direction)); return; } const r=runtimeRef.current; r.targetX=Math.max(.22,Math.min(.78,r.targetX+Math.max(-1,Math.min(1,axis))*.075)); r.lastInteraction=r.clock; r.idleNotified=false; },
+      press: (pressure = 0) => { markHardware(); if (!awakeRef.current) wake(); else if (bootingRef.current || transitionRef.current) return; else if (choice) chooseCheckpointOption(checkpointOptions(choicePhase, runtimeRef.current.recallStage)[choiceIndexRef.current]); else if (runtimeRef.current.started) beginProtectHold(pressure); else if (record) restartObservation(); else advanceIntro(); },
       release: () => { markHardware(); endProtectHold(); },
-      pause: () => { markHardware(); const r=runtimeRef.current; if (r.started && !choice) { r.paused=!r.paused; setPaused(r.paused); } },
+      pause: () => { markHardware(); const r=runtimeRef.current; if (r.started && !choice && !transitionRef.current) { r.paused=!r.paused; setPaused(r.paused); } },
     };
     window.MemoryDriftInput = control;
     const onHardware = (event: Event) => { const detail=(event as CustomEvent<{action:string;value?:number}>).detail; if (!detail) return; if (detail.action==="wake") control.wake(); if (detail.action==="move") control.move(detail.value ?? 0); if (detail.action==="press") control.press(detail.value); if (detail.action==="release") control.release?.(); if (detail.action==="pause") control.pause(); };
@@ -532,11 +562,12 @@ export default function MemoryRushGame() {
         const actionPressed = shortPressed || lockPressed;
         const startPressed = Boolean(pad.buttons[9]?.pressed);
         if ((stick || actionPressed || startPressed) && deviceRef.current !== "gamepad") { deviceRef.current = "gamepad"; setLastDevice("gamepad"); }
+        if ((stick && !inputRef.current.gamepadHorizontal) || (actionPressed && !inputRef.current.gamepadDash) || (startPressed && !inputRef.current.gamepadStart)) idleActivityRef.current();
         if (!r.started && intro===2 && stick && !inputRef.current.gamepadHorizontal) setRecallAnswer(value=>moveCount(value,stick));
-        if (choice && stick && !inputRef.current.gamepadHorizontal) { choiceIndexRef.current = (choiceIndexRef.current + (stick > 0 ? 1 : 3)) % 4; setChoiceIndex(choiceIndexRef.current); playCue("confirm"); }
-        if (actionPressed && !inputRef.current.gamepadDash) { if (!awakeRef.current) wake(); else if (bootingRef.current) { /* wait for signal loading */ } else if (choice) chooseCheckpointOption(checkpointOptions(choicePhase, r.recallStage)[choiceIndexRef.current]); else if (r.started) beginProtectHold(); else if (record) restartObservation(); else advanceIntro(); }
+        if (choice && stick && !inputRef.current.gamepadHorizontal) { choiceIndexRef.current = moveChoiceIndex(choiceIndexRef.current, stick); setChoiceIndex(choiceIndexRef.current); playCue("confirm"); }
+        if (actionPressed && !inputRef.current.gamepadDash && !transitionRef.current) { if (!awakeRef.current) wake(); else if (bootingRef.current) { /* wait for signal loading */ } else if (choice) chooseCheckpointOption(checkpointOptions(choicePhase, r.recallStage)[choiceIndexRef.current]); else if (r.started) beginProtectHold(); else if (record) restartObservation(); else advanceIntro(); }
         if (!actionPressed && inputRef.current.gamepadDash && r.started) endProtectHold();
-        if (startPressed && !inputRef.current.gamepadStart) { if (!awakeRef.current) wake(); else if (choice) { /* keep the choice pause */ } else if (r.started) { r.paused = !r.paused; setPaused(r.paused); } else if (record) restartObservation(); else advanceIntro(); }
+        if (startPressed && !inputRef.current.gamepadStart && !transitionRef.current) { if (!awakeRef.current) wake(); else if (choice) { /* keep the choice pause */ } else if (r.started) { r.paused = !r.paused; setPaused(r.paused); } else if (record) restartObservation(); else advanceIntro(); }
         inputRef.current.gamepadDash = actionPressed; inputRef.current.gamepadStart = startPressed; inputRef.current.gamepadHorizontal = stick ? Math.sign(stick) : 0;
       }
 
@@ -632,7 +663,7 @@ export default function MemoryRushGame() {
           if (!r.idleNotified && r.drift > .04) { r.idleNotified = true; setFeedback("停一会儿，画面会慢慢恢复。"); }
         }
 
-        if (r.recallStage < RECALL_AT_MS.length && now >= RECALL_AT_MS[r.recallStage]) { r.recallStage += 1; r.paused = true; choiceIndexRef.current = 1; setChoiceIndex(1); setChoicePhase("count"); setChoiceStage(r.recallStage); setChoice(true); }
+        if (r.recallStage < RECALL_AT_MS.length && now >= RECALL_AT_MS[r.recallStage]) { r.recallStage += 1; r.paused = true; choiceIndexRef.current = -1; setChoiceIndex(-1); setChoicePhase("count"); setChoiceStage(r.recallStage); setChoice(true); }
         setSeconds((old) => { const value = Math.max(0, Math.ceil((RUN_DURATION_MS - now) / 1000)); return old === value ? old : value; });
 
         if (now - r.startedAt >= RUN_DURATION_MS) finishRun();
@@ -803,15 +834,15 @@ export default function MemoryRushGame() {
 
   const pauseGame = useCallback(() => {
     const r = runtimeRef.current;
-    if (!r.started || choice) return;
+    if (!r.started || choice || transitionRef.current) return;
     r.paused = !r.paused; setPaused(r.paused);
   }, [choice]);
 
   useEffect(() => {
-    const hide = () => { if (document.hidden && runtimeRef.current.started) { runtimeRef.current.paused = true; setPaused(true); } };
+    const hide = () => { if (document.hidden && runtimeRef.current.started) { runtimeRef.current.paused = true; if (!transitionRef.current && !choice) setPaused(true); } };
     document.addEventListener("visibilitychange", hide);
     return () => document.removeEventListener("visibilitychange", hide);
-  }, []);
+  }, [choice]);
 
   const liveDetailLabel = versionCause.detail === "unknown" ? tr("记不清了", "Not sure") : versionCause.detail === "left" ? tr("左侧", "LEFT")
     : versionCause.detail === "center" ? tr("中央", "CENTER")
@@ -949,7 +980,7 @@ export default function MemoryRushGame() {
         {awake && !booting && !started && !record && <div key={intro} className="rush-intro" data-step={intro}>
           <span>{intro === 0
             ? tr("先看一眼，再凭记忆回答", "Take a look, then answer from memory")
-            : tr(`开始之前 0${intro + 1} / 05`, `BEFORE YOU START 0${intro + 1} / 05`)}</span>
+            : tr(`开始之前 0${intro === 4 ? 4 : intro + 1} / 04`, `BEFORE YOU START 0${intro === 4 ? 4 : intro + 1} / 04`)}</span>
           <nav className="experience-route" aria-label={tr("游戏流程", "Game steps")}>
             {[tr("靠近", "APPROACH"),tr("观看", "OBSERVE"),tr("回想", "RECALL"),tr("穿行", "JOURNEY"),tr("对照", "COMPARE")].map((label,index) => {
               const active = intro === 0 ? 0 : intro === 1 ? 1 : intro < 4 ? 2 : 3;
@@ -966,14 +997,15 @@ export default function MemoryRushGame() {
           </div>}
           {intro === 1 && <div className="intro-photo intro-photo-1"><img src={resolveImageUrl(backgroundAUrl)} alt={tr("最初呈现的记忆场景", "The memory scene shown at the start")} /><div className="memory-figures" aria-label={tr("照片里有四个人", "Four people are visible in the photograph")}>{[.82,1,.7,.9].map((scale,index) => <img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{"--figure-scale":scale} as CSSProperties} />)}</div><i /></div>}
           {intro === 2 && <div className="recall-choice" role="group" aria-label={tr("选择记得的人数", "Choose the number you remember")}>
-            {COUNT_OPTIONS.map(value => <button key={value} data-selected={recallAnswer === value} onClick={() => { setRecallAnswer(value); playCue("confirm"); }}><strong>{value === 0 ? tr("记不清了", "Not sure") : value}</strong><span>{value === 0 ? tr("直接继续", "Continue") : tr("个人", "PEOPLE")}</span></button>)}
+            {COUNT_OPTIONS.map(value => <button key={value} aria-pressed={recallAnswer === value} data-selected={recallAnswer === value} onClick={() => { setRecallAnswer(value); playCue("confirm"); }}><strong>{value === 0 ? tr("记不清了", "Not sure") : value}</strong><span>{value === 0 ? tr("直接继续", "Continue") : tr("个人", "PEOPLE")}</span></button>)}
           </div>}
+          {intro === 4 && <p className="intro-answer">{tr("你刚才的回答：", "Your first answer: ")}{answerLabel(recallAnswer)}</p>}
           {intro === 4 && <div className="version-map" style={{"--scene-image": `url("${resolveImageUrl(backgroundAUrl)}")`, "--scene-rebuilt": `url("${resolveImageUrl(backgroundBUrl)}")`} as CSSProperties} aria-label={tr("记忆版本变化", "Memory version changes")}>
             <span data-version="A"><small>01 / STORE</small><b>A</b><em>{tr("接住照片", "CATCH PHOTOS")}</em></span><i aria-hidden="true">→</i><span data-version="B"><small>02 / RECHECK</small><b>B</b><em>{tr("躲开泡泡", "AVOID BUBBLES")}</em></span><i aria-hidden="true">→</i><span data-version="C"><small>03 / PROTECT</small><b>C</b><em>{tr("护住照片", "PROTECT PHOTOS")}</em></span>
           </div>}
           <p>{intro === 0 ? tr("先看照片，记住里面的人和景物。游戏中会问你几次，最后再看原图。", "Look at the people and surroundings in the photo. Answer a few questions as you play, then compare your answers with the original.") : intro === 1 ? tr("看好后，点“我看过了”。", "Take your time. Select Continue when you are ready.") : intro === 2 ? tr("选你记得的人数，也可以选“记不清了”。", "Choose a number, or select Not sure.") : intro === 3 ? tr("接下来还会问两次人数，以及位置和颜色。你可以改答案。", "You will be asked about the people twice more, and about position and color. You can change your answers.") : tr("左右移动接照片，躲开泡泡和障碍。长按下方按钮可挡一次碰撞。移动时间共 24 秒（1×速度），回答问题时暂停计时。", "Move left or right to catch photos. Dodge bubbles and obstacles. Hold the button below to block one hit. At 1× speed, movement lasts 24 seconds; questions pause the timer.")}</p>
             {previous && intro === 0 && <div className="previous-memory"><b>{tr(`上次：VERSION ${previous.version}`, `LAST: VERSION ${previous.version}`)}</b><span>{tr(`上次留下 ${previous.retained ?? Math.min(SAVE_SLOT_COUNT, previous.caught)} 张照片 · 这次重新开始`, `You kept ${previous.retained ?? Math.min(SAVE_SLOT_COUNT, previous.caught)} photos last time · Start fresh`)}</span></div>}
-          <button disabled={!ready} onClick={advanceIntro}>{loadError ? tr("图片没加载出来，请刷新重试", "The pictures did not load. Please refresh.") : !ready ? tr("正在加载照片…", "Loading photos…") : intro === 0 ? tr("开始看照片", "Start with the photo") : intro === 1 ? tr("我看过了", "Continue") : intro === 2 ? tr("选好了", "Keep this answer") : intro === 3 ? tr("接下来怎么玩", "How to play") : tr("开始", "Start")}</button>
+          <button disabled={!ready || (intro === 2 && recallAnswer < 0)} onClick={advanceIntro}>{loadError ? tr("图片没加载出来，请刷新重试", "The pictures did not load. Please refresh.") : !ready ? tr("正在加载照片…", "Loading photos…") : intro === 0 ? tr("开始看照片", "Start with the photo") : intro === 1 ? tr("我看过了", "Continue") : intro === 2 ? tr("选好了", "Keep this answer") : intro === 3 ? tr("接下来怎么玩", "How to play") : tr("开始", "Start")}</button>
           {loadError && <button onClick={() => location.reload()}>{tr("重新加载", "RELOAD")}</button>}
           <small>{tr("点击、回车或街机按钮继续", "CLICK · ENTER · OR ARCADE BUTTON")}</small>
         </div>}
@@ -989,7 +1021,7 @@ export default function MemoryRushGame() {
           {choice ? <><p>{choicePhase === "count"
             ? tr("选你记得的人数，记不清也可以。", "Choose a number, or select Not sure.")
             : tr("选完继续；记不清也可以。", "Select an answer to continue. Not sure is also an option.")}</p>
-          {checkpointOptions(choicePhase, choiceStage).map((value,index)=><button key={value} data-selected={choiceIndex === index} onFocus={()=>{choiceIndexRef.current=index;setChoiceIndex(index);}} onClick={()=>chooseCheckpointOption(value)}><strong>{typeof value === "number" && value !== 0 ? value : answerLabel(value)}</strong><span>{value === 0 || value === "unknown" ? tr("直接继续", "Continue") : typeof value === "number" ? tr("个人", "PEOPLE") : tr("选择", "Select")}</span></button>)}</> : <button onClick={pauseGame}>{tr("继续", "RESUME")}</button>}
+          {checkpointOptions(choicePhase, choiceStage).map((value,index)=><button key={value} data-focused={choiceIndex === index} onFocus={()=>{choiceIndexRef.current=index;setChoiceIndex(index);}} onClick={()=>chooseCheckpointOption(value)}><strong>{typeof value === "number" && value !== 0 ? value : answerLabel(value)}</strong><span>{value === 0 || value === "unknown" ? tr("直接继续", "Continue") : typeof value === "number" ? tr("个人", "PEOPLE") : tr("选择", "Select")}</span></button>)}</> : <button onClick={pauseGame}>{tr("继续", "RESUME")}</button>}
         </section>}
 
         {record && <section className="memory-result" aria-label={tr("这次的结果", "Your results")}>
@@ -1004,7 +1036,7 @@ export default function MemoryRushGame() {
           </div>
           <div className="recall-evidence"><strong>{tr("原图", "ORIGINAL PHOTO")}</strong><div className="intro-photo intro-photo-1"><img src={resolveImageUrl(backgroundAUrl)} alt={tr("最初呈现的场景", "The scene shown at the start")} /><div className="memory-figures">{[.82,1,.7,.9].map((scale,index)=><img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{"--figure-scale":scale} as CSSProperties}/>)}</div></div><p>{(record.recalls ?? []).some(n=>n===0) ? tr("原图里有 4 人。“记不清”的回答也列在上方。", "The photo had four people. Any Not sure answers are shown above.") : (record.recalls ?? []).some(n=>n!==4) ? tr("原图里有 4 人。你的三次回答列在上方。", "The photo had four people. Your three answers are shown above.") : tr("你三次都选了 4 人，与原图一致。", "You chose four people each time, matching the photo.")}</p></div>
           <section className="memory-changes" aria-label={tr("变化发生在哪里", "Where answers changed")}>
-            <h3>{tr("三次回答", "Your three answers")}</h3>
+            <details className="recall-history"><summary>{tr("查看三次回答的经过", "View answer history")}</summary>
             <ol>
               {[0,1,2].map(index => {
                 const value = record.recalls?.[index];
@@ -1016,6 +1048,7 @@ export default function MemoryRushGame() {
                 </li>;
               })}
             </ol>
+            </details>
             <div className="detail-evidence">
               {([{key:"count", title:tr("最后记得的人数","FINAL COUNT"), source:4, answer:record.recalls?.[2], comment:record.sharedMemories?.includes("people") ? 5 : undefined}, {key:"side", title:tr("旋转木马的位置","CAROUSEL POSITION"), source:"right", answer:record.details?.[0]}, {key:"sky", title:tr("天空的颜色","SKY COLOR"), source:"blue", answer:record.details?.[1], comment:record.sharedMemories?.includes("sky") ? "pink" : undefined}]).map(item => {
                 const state = comparisonState(item.answer, item.source);

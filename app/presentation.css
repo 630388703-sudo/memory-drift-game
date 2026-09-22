@@ -136,3 +136,14 @@
   .rush-game .bottom-console { padding:.6cqh 1.6cqw; gap:.4cqh; }
 }
 @media (prefers-reduced-motion:reduce) { .rush-game .rush-intro,.rush-game .rush-choice,.rush-game .memory-result,.rush-game .reconstructed-preview { animation:none; } }
+
+/* A focus ring is navigation, not a submitted answer. */
+.rush-game .rush-choice button[data-focused="true"] { outline:3px solid #b78222; outline-offset:2px; }
+.rush-game .rush-intro>button:disabled { opacity:.5; cursor:not-allowed; }
+.rush-game .rush-intro .intro-answer { margin:0; padding:.7em 0; border-bottom:1px solid var(--ui-rule); font-size:clamp(13px,2.4cqw,17px); }
+.rush-game .recall-history { margin:0 0 1.5cqh; border-block:1px solid var(--ui-rule); }
+.rush-game .recall-history summary { cursor:pointer; padding:14px 0; min-height:44px; color:var(--ui-blue); font:500 clamp(13px,2.5cqw,18px)/1.5 system-ui,sans-serif; }
+.rush-game .recall-history summary:focus-visible { outline:3px solid #b78222; outline-offset:2px; }
+.rush-game .recall-history ol { margin:0; padding:0; list-style:none; }
+.rush-game .recall-history li { display:grid; gap:6px; padding:12px 0; border-top:1px solid var(--ui-rule); font:400 14px/1.5 system-ui,sans-serif; }
+.rush-game .recall-history li small { color:#536978; }

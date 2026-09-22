@@ -1,6 +1,10 @@
 // Zero is an explicit unknown answer, never a claim that the photo has no people.
 export const COUNT_OPTIONS = [3, 4, 5, 0] as const;
-export const moveCount = (value: number, direction: number) => COUNT_OPTIONS[(COUNT_OPTIONS.indexOf(value as typeof COUNT_OPTIONS[number]) + Math.sign(direction) + COUNT_OPTIONS.length) % COUNT_OPTIONS.length];
+// -1 means no option has been reached yet, not the explicit Not sure answer.
+export const moveChoiceIndex = (index: number, direction: number) => index < 0
+  ? (direction < 0 ? COUNT_OPTIONS.length - 1 : 0)
+  : (index + Math.sign(direction) + COUNT_OPTIONS.length) % COUNT_OPTIONS.length;
+export const moveCount = (value: number, direction: number) => COUNT_OPTIONS[moveChoiceIndex(COUNT_OPTIONS.indexOf(value as typeof COUNT_OPTIONS[number]), direction)];
 export function recallLabel(value: number | string | undefined, language: "zh" | "en") {
   if (value === 0 || value === "unknown") return language === "zh" ? "记不清了" : "Not sure";
   if (value === undefined || value === "—") return "—";
