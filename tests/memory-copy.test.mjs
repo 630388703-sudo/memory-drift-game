@@ -76,6 +76,11 @@ test('fault styling matches the new plain-language feedback, not protection feed
   for (const text of ['挡住泡泡了，照片没变。','挡住了，照片还在。','接住一张照片。']) assert.equal(fault(text), false, text);
 });
 
+test('both languages explain the block action without a vague photo-protection label', () => {
+  for (const text of ['挡一次碰撞', 'BLOCK ONE HIT', '0.7 seconds', 'within 4 seconds', '接到照片后']) assert.ok(source.includes(text), text);
+  for (const text of ['护住照片', 'PROTECT PHOTOS', '护好了']) assert.ok(!source.includes(text), text);
+});
+
 test('every visit starts in English without reading a stale language preference', () => {
   assert.match(source, /const \[language, setLanguage\] = useState<"zh" \| "en">\("en"\)/);
   assert.ok(!source.includes('localStorage.getItem("memory-rush-language")'));
@@ -223,3 +228,4 @@ test('comparison reveals the original without changing stored answers or restart
   assert.ok(source.includes('showOriginal ? 4 : Math.max(0, record.recalls?.[2] ?? 0)'));
   assert.ok(source.includes('if (comparingRef.current) renew(); else sleep();'));
 });
+

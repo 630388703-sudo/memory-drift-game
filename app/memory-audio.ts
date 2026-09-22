@@ -26,7 +26,8 @@ export class MemoryAudio {
   private enabled = true;
   private active = true;
   private disposed = false;
-  private musicLevel = db(-19);
+  // Glitch Light measures about 8 dB louder than the previous track.
+  private musicLevel = db(-27);
   private musicPlaybackPending = false;
 
   constructor(context: AudioContext, baseURL: string) {
@@ -48,7 +49,7 @@ export class MemoryAudio {
     this.master.connect(compressor);
     compressor.connect(context.destination);
 
-    this.ambience = new Audio(new URL("audio/nostalgic-memories.mp3", baseURL).href);
+    this.ambience = new Audio(new URL("audio/glitch-light.mp3", baseURL).href);
     this.ambience.loop = true;
     this.ambience.preload = "auto";
     this.toneFilter = context.createBiquadFilter();
@@ -95,7 +96,7 @@ export class MemoryAudio {
 
   setScene(version: "A" | "B" | "C", paused: boolean) {
     const now = this.context.currentTime;
-    this.musicLevel = db(paused ? -27 : -19);
+    this.musicLevel = db(paused ? -35 : -27);
     this.music.gain.cancelScheduledValues(now);
     this.music.gain.setTargetAtTime(this.musicLevel, now, .2);
     this.toneFilter.frequency.setTargetAtTime(version === "B" ? 1600 : version === "C" ? 5200 : 14000, now, .35);
@@ -235,3 +236,4 @@ export class MemoryAudio {
     void this.context.close().catch(() => undefined);
   }
 }
+

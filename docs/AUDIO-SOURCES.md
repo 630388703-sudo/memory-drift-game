@@ -4,12 +4,21 @@
 
 ## 背景音乐
 
-- 项目文件：`public/audio/nostalgic-memories.mp3`
-- 标题：Minimal Idm Ambient Works - Drumless Loop
-- 作者：Musinova
-- 时长：1:33
-- 来源：<https://pixabay.com/music/ambient-minimal-idm-ambient-works-drumless-loop-518244/>
-- Pixabay 素材编号：518244
+- 项目文件：`public/audio/glitch-light.mp3`
+- 标题：Glitch Light
+- 作者：BerryDeep
+- 时长：3:04（文件解码约 184.2 秒）
+- 来源：<https://pixabay.com/music/abstract-glitch-light-592315/>
+- Pixabay 素材编号：592315
+- 获取：用户于 2026-09-22 从上述页面下载并提供原始 MP3。
+- 许可：来源页面标注 Pixabay Content License；仅作为本互动作品的配乐使用，不作为独立音频素材提供再分发。
+- 页面标注 Content ID Registered。发布带音乐的视频前应保留下载记录及许可凭证；此来源记录不是平台签发的许可证书。
+
+## 2026-09-22 配乐更换
+
+按用户选择，以 Glitch Light 替换 Musinova 的旧配乐。使用新文件名防止旧音频缓存；旧曲仅保留在旧版归档中。
+
+原始文件响度分析约为 -9.60 LUFS、真峰值 +0.84 dBTP；旧文件约为 -17.37 LUFS。游戏音乐总线相应降低 8 dB（游玩 -27 dB，答题/暂停 -35 dB），补偿源文件响度差，不改变音效音量。保留分阶段滤波、碰撞压低背景 12 dB、静音与离开页面暂停。以上是数字测量与混音设置，不能代替现场音箱试听。
 
 ## 碰撞音
 
@@ -37,3 +46,4 @@
 - 设置内可单独试听收集和碰撞，不改变游戏状态。倍速不改变音效音高。
 
 自动测试覆盖声音结构、触发限流、背景避让、静音与清理。实际展场仍需用现场音箱校准总体音量，不能以代码增益代替实际声压或响度测量。
+

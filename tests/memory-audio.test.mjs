@@ -38,7 +38,7 @@ function setup(t) {
   const oldAudio = globalThis.Audio;
   globalThis.Audio = class {
     paused = true;
-    constructor() { media.push(this); }
+    constructor(src) { this.src = src; media.push(this); }
     async play() { this.paused = false; }
     pause() { this.paused = true; }
     removeAttribute() {}
@@ -49,6 +49,18 @@ function setup(t) {
   t.after(() => { mixer.dispose(); globalThis.Audio = oldAudio; });
   return { context, mixer, media };
 }
+
+test('selected music uses a fresh URL, loops, and compensates its louder source', t => {
+  const { context, mixer, media } = setup(t);
+  assert.equal(media[0].src, 'https://example.test/memory-drift-game/audio/glitch-light.mp3');
+  assert.equal(media[0].loop, true);
+  assert.equal(media[0].preload, 'auto');
+  assert.equal(context.gains[2].gain.value, 10 ** (-27 / 20));
+  mixer.setScene('B', true);
+  assert.equal(context.gains[2].gain.events.at(-1)[1], 10 ** (-35 / 20));
+  mixer.setScene('C', false);
+  assert.equal(context.gains[2].gain.events.at(-1)[1], 10 ** (-27 / 20));
+});
 
 test('collect rises as a two-note motif; collision falls with noise even offline', t => {
   const { context, mixer } = setup(t);
@@ -107,3 +119,4 @@ test('mute, hidden state and disposal stop sources, with no delayed replay', asy
   assert.equal(context.state, 'closed');
   assert.equal(context.oscillators.length, 7);
 });
+
