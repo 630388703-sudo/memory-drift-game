@@ -62,7 +62,10 @@ test('every live feedback sentence has an English translation', () => {
     assert.notEqual(feedbackEn(sentence), sentence, sentence);
     assert.ok(!/[\u3400-\u9fff]/.test(feedbackEn(sentence)), sentence);
   }
-  assert.equal(feedbackEn('连续接住 ×4'), 'Caught in a row ×4');
+  assert.ok(!source.includes('Caught in a row'));
+  assert.ok(!source.includes('连续接住'));
+  assert.ok(!source.includes('navigator.share'));
+  assert.ok(!source.includes('SHARE RESULT'));
 });
 
 test('fault styling matches the new plain-language feedback, not protection feedback', () => {
@@ -165,4 +168,58 @@ test('photo faults stay clipped to the image and restore canvas state', () => {
   assert.ok(calls.findIndex(c=>c[0]==='clip') < calls.findIndex(c=>c[0]==='drawImage'));
   const clip = calls.find(c=>c[0]==='rect');
   assert.deepEqual(clip, ['rect',166,255,68,87]);
+});
+
+const storageSource = readFileSync(new URL('../app/memory-storage.ts', import.meta.url), 'utf8');
+const storageCode = ts.transpileModule(storageSource.replaceAll('export ', ''), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+const storage = vm.runInNewContext(`${storageCode};({emptyPhotoSlots,storePhoto,alterPhoto,losePhoto,photoCount})`);
+const photo = (id, at=id) => Object.freeze({id,at,version:'A',altered:false});
+
+test('photo slots retain positions and replace the oldest photo, not a fixed square', () => {
+  let slots=storage.emptyPhotoSlots();
+  for (let id=1;id<=5;id++) slots=storage.storePhoto(slots,photo(id));
+  assert.equal(storage.photoCount(slots),5);
+  const before=slots;
+  slots=storage.storePhoto(slots,photo(6));
+  assert.equal(slots[0].id,6);
+  assert.equal(before[0].id,1);
+  slots=storage.losePhoto(slots);
+  assert.equal(slots[0],null);
+  assert.equal(slots[1].id,2);
+  slots=storage.storePhoto(slots,photo(7));
+  slots=storage.storePhoto(slots,photo(8));
+  assert.equal(slots[0].id,7);
+  assert.equal(slots[1].id,8);
+  assert.equal(storage.photoCount(slots),5);
+});
+
+test('bubble alteration changes an existing photo only and never fills an empty collection', () => {
+  const empty=storage.emptyPhotoSlots();
+  assert.equal(storage.alterPhoto(empty),empty);
+  assert.equal(storage.losePhoto(empty),empty);
+  let slots=storage.storePhoto(empty,photo(1));
+  slots=storage.storePhoto(slots,photo(2));
+  const before=slots;
+  slots=storage.alterPhoto(slots);
+  assert.equal(slots[0].altered,true);
+  assert.equal(before[0].altered,false);
+  assert.equal(slots[1].altered,false);
+  assert.equal(storage.photoCount(slots),2);
+});
+
+test('equal collection times use item order and preserve the input array', () => {
+  let slots=storage.emptyPhotoSlots();
+  for(let id=1;id<=5;id++) slots=storage.storePhoto(slots,photo(id,100));
+  Object.freeze(slots);
+  assert.equal(storage.storePhoto(slots,photo(6,101))[0].id,6);
+  assert.equal(storage.losePhoto(slots)[4],null);
+  assert.equal(slots[4].id,5);
+});
+
+test('comparison reveals the original without changing stored answers or restarting', () => {
+  assert.ok(source.includes('else if (record) compareOriginal(true)'));
+  assert.ok(source.includes('onPointerCancel={() => compareOriginal(false)}'));
+  assert.ok(source.includes('window.addEventListener("blur", resetComparison)'));
+  assert.ok(source.includes('showOriginal ? 4 : Math.max(0, record.recalls?.[2] ?? 0)'));
+  assert.ok(source.includes('if (comparingRef.current) renew(); else sleep();'));
 });

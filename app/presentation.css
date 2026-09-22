@@ -171,3 +171,32 @@
 @keyframes print-figures { 0%,20% { opacity:0; transform:translateY(10px); } 65%,100% { opacity:1; transform:none; } }
 .rush-game[data-quiet="true"] .version-transition,.rush-game[data-quiet="true"] .version-art,.rush-game[data-quiet="true"] .version-print,.rush-game[data-quiet="true"] .version-figures { animation:none!important; transform:none; }
 @media (prefers-reduced-motion:reduce) { .rush-game .version-transition,.rush-game .version-art,.rush-game .version-print,.rush-game .version-figures { animation:none!important; transform:none; } }
+
+/* Five fixed places, not a progress meter. Images never enlarge the existing dock. */
+.rush-game .memory-storage .photo-slot { position:relative; overflow:hidden; isolation:isolate; }
+.rush-game .memory-storage .photo-slot img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:50% 54%; opacity:.85; animation:trace-arrive .28s ease-out; }
+.rush-game .memory-storage .photo-slot span { position:relative; z-index:1; padding:0 3px; color:var(--ui-ink); background:#f4f3ebdd; font-size:9px; line-height:1.35; }
+.rush-game .memory-storage .photo-slot[data-version="B"] img { filter:grayscale(1); }
+.rush-game .memory-storage .photo-slot[data-version="C"] img { filter:hue-rotate(28deg) saturate(.8); }
+.rush-game .memory-storage .photo-slot[data-altered="true"] img { filter:hue-rotate(100deg) contrast(1.4); transform:scaleX(-1); }
+.rush-game .memory-storage .photo-slot[data-altered="true"]::after { content:""; position:absolute; inset:40% 0 35%; z-index:2; background:#987cc266; border-block:1px solid #b2699566; }
+.rush-game .memory-storage[data-protected="true"]>div { outline:1px solid #357b62; outline-offset:2px; }
+.rush-game .memory-storage[data-protected="true"] .photo-slot { animation:none; }
+@keyframes trace-arrive { from { opacity:0; } to { opacity:.85; } }
+
+/* The two views share one frame. The original is unchanged, including its four figures. */
+.rush-game .final-comparison .comparison-photo { isolation:isolate; clip-path:none; animation:none; }
+.rush-game .comparison-photo .comparison-scene { position:absolute; inset:0; filter:saturate(.82) contrast(1.06); }
+.rush-game .comparison-photo .comparison-scene[data-visible="false"] { visibility:hidden; }
+.rush-game .comparison-photo[data-version="B"] .comparison-scene { filter:grayscale(1) contrast(1.5) brightness(.7); }
+.rush-game .comparison-photo[data-version="B"] .memory-figures { filter:grayscale(1); }
+.rush-game .comparison-photo[data-version="C"] .comparison-scene { filter:grayscale(.78) contrast(1.22) brightness(.82); }
+.rush-game .comparison-photo[data-version="C"]::after { content:""; position:absolute; inset:0; z-index:1; opacity:.82; mix-blend-mode:color; background:linear-gradient(#43218f,#1759b8,#742778); pointer-events:none; }
+.rush-game .comparison-photo[data-version="C"] .memory-figures { filter:hue-rotate(25deg); }
+.rush-game .final-comparison .compare-original { width:100%; min-height:44px; padding:10px 12px; margin:0; border:1px solid var(--ui-blue); border-radius:0; background:transparent; color:var(--ui-blue); font:500 clamp(12px,2.4cqw,17px)/1.4 system-ui,sans-serif; cursor:pointer; touch-action:none; user-select:none; }
+.rush-game .final-comparison .compare-original[aria-pressed="true"] { color:#fff; background:var(--ui-blue); }
+.rush-game .result-actions { display:flex; flex-wrap:wrap; justify-content:space-between; gap:4px 16px; border-top:1px solid var(--ui-rule); padding-top:8px; }
+.rush-game .result-actions button,.rush-game .result-actions .replay-memory { flex:0 1 auto; width:auto; min-height:44px; margin:0; padding:10px 0; border:0; background:none; color:#435d6b; font:400 clamp(12px,2.3cqw,16px)/1.4 system-ui,sans-serif; text-decoration:underline; text-underline-offset:4px; transform:none; clip-path:none; box-shadow:none; }
+.rush-game .result-actions button:hover { color:var(--ui-blue); background:none; }
+.rush-game[data-quiet="true"] .memory-storage .photo-slot img { animation:none; }
+@media (prefers-reduced-motion:reduce) { .rush-game .memory-storage .photo-slot img { animation:none; } }

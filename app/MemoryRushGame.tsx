@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import DormantVisual from "./DormantVisual";
+import { emptyPhotoSlots, storePhoto, alterPhoto, losePhoto, photoCount, type PhotoSlots } from "./memory-storage";
 import { addMemoryGesture, drawMemoryGestures, GESTURE_DURATION, type MemoryGesture } from "./memory-feedback";
 import { drawPhotoFault, photoFaultStrength } from "./photo-fault";
 import { COUNT_OPTIONS, moveCount, moveChoiceIndex, recallLabel, comparisonState } from "./memory-recall";
@@ -57,6 +58,7 @@ type Runtime = {
   combo: number;
   checks: number;
   memories: number;
+  photos: PhotoSlots;
   version: MemoryVersion;
   previousVersion: MemoryVersion;
   versionFade: number;
@@ -80,7 +82,7 @@ const emptyStats = (): RunStats => ({ caught: 0, missed: 0, bumps: 0 });
 const makeRuntime = (): Runtime => ({
   clock: 0, paused: false, drift: 0, effectUntil: 0, impactUntil: 0, recallStage: 0, recalls: [], details: [], sharedMemories: [],
   started: false, x: 0.5, targetX: 0.5, items: [], nextId: 1, lastSpawn: 0,
-  score: 0, combo: 0, checks: 0, memories: 0, version: "A", previousVersion: "A", versionFade: 0,
+  score: 0, combo: 0, checks: 0, memories: 0, photos: emptyPhotoSlots(), version: "A", previousVersion: "A", versionFade: 0,
   shakeUntil: 0, shield: 0, overwritten: 0, protections: 0, holdActive: false, holdStartedAt: 0, holdTriggered: false, protectUntil: 0,
   startedAt: 0, lastInteraction: 0, idleNotified: false,
   stats: emptyStats(),
@@ -88,7 +90,6 @@ const makeRuntime = (): Runtime => ({
 });
 
 const feedbackEn = (text: string) => {
-  if (text.startsWith("连续接住")) return text.replace("连续接住", "Caught in a row");
   const table: Record<string, string> = {
     "左右移动，接住照片。": "Move left and right to catch photos.",
     "存满了，最早的一张被换掉了。": "Full. The oldest photo was replaced.",
@@ -98,6 +99,7 @@ const feedbackEn = (text: string) => {
     "挡住泡泡了，照片没变。": "Bubble blocked. Your photos are unchanged.",
     "挡住了，照片还在。": "Hit blocked. You kept your photos.",
     "碰到泡泡，混进了一段假记忆。": "You hit a bubble. A false memory was added.",
+    "碰到泡泡，画面被干扰了。": "You hit a bubble. The picture was distorted.",
     "人数记下了，再选一个细节。": "Answer saved. One more detail.",
     "记下了，继续接照片。": "Answer saved. Keep catching photos.",
     "漏掉了一张。": "Missed a photo.",
@@ -231,7 +233,13 @@ export default function MemoryRushGame() {
   const [quiet, setQuiet] = useState(false);
   const quietRef = useRef(false);
   const [loadError, setLoadError] = useState(false);
-  const [shareMessage, setShareMessage] = useState("");
+  const [photoSlots, setPhotoSlots] = useState<PhotoSlots>(emptyPhotoSlots);
+  const [showOriginal, setShowOriginal] = useState(false);
+  const comparingRef = useRef(false);
+  const compareOriginal = useCallback((show: boolean) => {
+    comparingRef.current = show;
+    setShowOriginal(show);
+  }, []);
   const audioRef = useRef<MemoryAudio | null>(null);
   const [sound, setSound] = useState(true);
   const soundRef = useRef(true);
@@ -324,6 +332,8 @@ export default function MemoryRushGame() {
     fresh.lastSpawn = 0; fresh.startedAt = 0;
     fresh.items = [{ id: fresh.nextId++, kind: "photo", x: .5, y: .6, speed: .12, size: 1.28 }, { id: fresh.nextId++, kind: "bubble", x: .38, y: .3, speed: .12, size: 1 }];
     runtimeRef.current = fresh;
+    setPhotoSlots(fresh.photos);
+    compareOriginal(false);
     memoryEventRef.current = null; setMemoryEvent(null);
     recordRef.current = null;
     resultShownAtRef.current = 0;
@@ -331,7 +341,7 @@ export default function MemoryRushGame() {
     window.clearTimeout(versionTimerRef.current);
     setRecord(null); setStarted(true); setChoice(false); setChoicePhase("count"); setChoiceStage(0); setPaused(false); setVersionPulse(null); setVersionCause({ recall: recallAnswer, detail: "" }); setSeconds(RUN_DURATION_MS / 1000);
     setFeedback("左右移动，接住照片。");
-  }, [recallAnswer, unlockAudio]);
+  }, [recallAnswer, unlockAudio, compareOriginal]);
 
   const finishRun = useCallback(() => {
     const r = runtimeRef.current;
@@ -342,9 +352,9 @@ export default function MemoryRushGame() {
     recordRef.current = next;
     resultShownAtRef.current = performance.now();
     setPrevious(next); setRecord(next); setStarted(false);
-    setShareMessage("");
+    compareOriginal(false);
     playCue("finish");
-  }, [previous, playCue]);
+  }, [previous, playCue, compareOriginal]);
 
   const movePointer = useCallback((clientX: number) => {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -445,8 +455,8 @@ export default function MemoryRushGame() {
   const restartObservation = useCallback(() => {
     recordRef.current = null;
     resultShownAtRef.current = 0;
-    setRecord(null); setIntro(1); setRecallAnswer(-1); setShareMessage("");
-  }, []);
+    setRecord(null); setIntro(1); setRecallAnswer(-1); compareOriginal(false);
+  }, [compareOriginal]);
 
   const wake = useCallback(() => {
     if (awakeRef.current) return;
@@ -461,17 +471,18 @@ export default function MemoryRushGame() {
     recordRef.current = null; resultShownAtRef.current = 0;
     awakeRef.current = false; setAwake(false); setIntro(0); setRecallAnswer(-1); setRecord(null); setSettingsOpen(false);
     audioRef.current?.setActive(false);
-  }, []);
+    compareOriginal(false);
+  }, [compareOriginal]);
 
   useEffect(() => {
     if (!awake || started) return;
     let timer = 0;
     const renew = () => {
       window.clearTimeout(timer);
-      timer = window.setTimeout(sleep, record ? 45000 : 90000);
+      timer = window.setTimeout(() => { if (comparingRef.current) renew(); else sleep(); }, record ? 45000 : 90000);
     };
     idleActivityRef.current = renew;
-    const events = ["pointerdown", "keydown", "wheel", "scroll"] as const;
+    const events = ["pointerdown", "pointerup", "keydown", "keyup", "wheel", "scroll"] as const;
     events.forEach(name => window.addEventListener(name, renew, { capture: true, passive: true }));
     renew();
     return () => {
@@ -496,7 +507,10 @@ export default function MemoryRushGame() {
         if (["arrowright","d","l"].includes(key) && intro === 2) { setRecallAnswer(value => moveCount(value, 1)); return; }
         if (key === "enter" || key === " ") { advanceIntro(); return; }
       }
-      if (record) return;
+      if (record) {
+        if (["enter", " ", "z", "x"].includes(key)) { event.preventDefault(); compareOriginal(true); }
+        return;
+      }
       if (!runtimeRef.current.started) return;
       if (choice) {
         if (["arrowleft","a","j"].includes(key)) { choiceIndexRef.current = moveChoiceIndex(choiceIndexRef.current, -1); setChoiceIndex(choiceIndexRef.current); }
@@ -515,26 +529,26 @@ export default function MemoryRushGame() {
       const key = event.key.toLowerCase();
       if (key === "arrowleft" || key === "a" || key === "j") inputRef.current.left = false;
       if (key === "arrowright" || key === "d" || key === "l") inputRef.current.right = false;
-      if ([" ","arrowup","z","enter","x"].includes(key)) endProtectHold();
+      if ([" ","arrowup","z","enter","x"].includes(key)) { endProtectHold(); compareOriginal(false); }
     };
     window.addEventListener("keydown", onKeyDown); window.addEventListener("keyup", onKeyUp);
     return () => { window.removeEventListener("keydown", onKeyDown); window.removeEventListener("keyup", onKeyUp); };
-  }, [advanceIntro, record, choice, choicePhase, chooseCheckpointOption, wake, intro, restartObservation, beginProtectHold, endProtectHold]);
+  }, [advanceIntro, record, choice, choicePhase, chooseCheckpointOption, wake, intro, restartObservation, beginProtectHold, endProtectHold, compareOriginal]);
 
   useEffect(() => {
     const markHardware = () => { idleActivityRef.current(); if (deviceRef.current !== "gamepad") { deviceRef.current = "gamepad"; setLastDevice("gamepad"); } };
     const control: HardwareControl = {
       wake: () => { markHardware(); wake(); },
       move: (axis) => { markHardware(); if (transitionRef.current) return; const direction=Math.sign(axis); if (choice && direction) { choiceIndexRef.current=moveChoiceIndex(choiceIndexRef.current,direction); setChoiceIndex(choiceIndexRef.current); return; } if (!runtimeRef.current.started && intro===2 && direction) { setRecallAnswer(value=>moveCount(value,direction)); return; } const r=runtimeRef.current; r.targetX=Math.max(.22,Math.min(.78,r.targetX+Math.max(-1,Math.min(1,axis))*.075)); r.lastInteraction=r.clock; r.idleNotified=false; },
-      press: (pressure = 0) => { markHardware(); if (!awakeRef.current) wake(); else if (bootingRef.current || transitionRef.current) return; else if (choice) chooseCheckpointOption(checkpointOptions(choicePhase, runtimeRef.current.recallStage)[choiceIndexRef.current]); else if (runtimeRef.current.started) beginProtectHold(pressure); else if (record) restartObservation(); else advanceIntro(); },
-      release: () => { markHardware(); endProtectHold(); },
+      press: (pressure = 0) => { markHardware(); if (!awakeRef.current) wake(); else if (bootingRef.current || transitionRef.current) return; else if (choice) chooseCheckpointOption(checkpointOptions(choicePhase, runtimeRef.current.recallStage)[choiceIndexRef.current]); else if (runtimeRef.current.started) beginProtectHold(pressure); else if (record) compareOriginal(true); else advanceIntro(); },
+      release: () => { markHardware(); endProtectHold(); compareOriginal(false); },
       pause: () => { markHardware(); const r=runtimeRef.current; if (r.started && !choice && !transitionRef.current) { r.paused=!r.paused; setPaused(r.paused); } },
     };
     window.MemoryDriftInput = control;
     const onHardware = (event: Event) => { const detail=(event as CustomEvent<{action:string;value?:number}>).detail; if (!detail) return; if (detail.action==="wake") control.wake(); if (detail.action==="move") control.move(detail.value ?? 0); if (detail.action==="press") control.press(detail.value); if (detail.action==="release") control.release?.(); if (detail.action==="pause") control.pause(); };
     window.addEventListener("memory-control", onHardware);
     return () => { window.removeEventListener("memory-control", onHardware); delete window.MemoryDriftInput; };
-  }, [advanceIntro, choice, choicePhase, chooseCheckpointOption, record, wake, intro, restartObservation, beginProtectHold, endProtectHold]);
+  }, [advanceIntro, choice, choicePhase, chooseCheckpointOption, record, wake, intro, restartObservation, beginProtectHold, endProtectHold, compareOriginal]);
 
   useEffect(() => {
     let frame = 0;
@@ -568,10 +582,14 @@ export default function MemoryRushGame() {
         if ((stick && !inputRef.current.gamepadHorizontal) || (actionPressed && !inputRef.current.gamepadDash) || (startPressed && !inputRef.current.gamepadStart)) idleActivityRef.current();
         if (!r.started && intro===2 && stick && !inputRef.current.gamepadHorizontal) setRecallAnswer(value=>moveCount(value,stick));
         if (choice && stick && !inputRef.current.gamepadHorizontal) { choiceIndexRef.current = moveChoiceIndex(choiceIndexRef.current, stick); setChoiceIndex(choiceIndexRef.current); playCue("confirm"); }
-        if (actionPressed && !inputRef.current.gamepadDash && !transitionRef.current) { if (!awakeRef.current) wake(); else if (bootingRef.current) { /* wait for signal loading */ } else if (choice) chooseCheckpointOption(checkpointOptions(choicePhase, r.recallStage)[choiceIndexRef.current]); else if (r.started) beginProtectHold(); else if (record) restartObservation(); else advanceIntro(); }
-        if (!actionPressed && inputRef.current.gamepadDash && r.started) endProtectHold();
+        if (actionPressed && !inputRef.current.gamepadDash && !transitionRef.current) { if (!awakeRef.current) wake(); else if (bootingRef.current) { /* wait for signal loading */ } else if (choice) chooseCheckpointOption(checkpointOptions(choicePhase, r.recallStage)[choiceIndexRef.current]); else if (r.started) beginProtectHold(); else if (record) compareOriginal(true); else advanceIntro(); }
+        if (!actionPressed && inputRef.current.gamepadDash) { endProtectHold(); compareOriginal(false); }
         if (startPressed && !inputRef.current.gamepadStart && !transitionRef.current) { if (!awakeRef.current) wake(); else if (choice) { /* keep the choice pause */ } else if (r.started) { r.paused = !r.paused; setPaused(r.paused); } else if (record) restartObservation(); else advanceIntro(); }
         inputRef.current.gamepadDash = actionPressed; inputRef.current.gamepadStart = startPressed; inputRef.current.gamepadHorizontal = stick ? Math.sign(stick) : 0;
+      } else if (inputRef.current.gamepadDash) {
+        inputRef.current.gamepadDash = false;
+        endProtectHold();
+        compareOriginal(false);
       }
 
       if (r.started && !r.paused && !document.hidden) {
@@ -616,12 +634,14 @@ export default function MemoryRushGame() {
             r.combo += 1;
             const storageWasFull = r.memories >= SAVE_SLOT_COUNT;
             if (storageWasFull) r.overwritten += 1;
-            else r.memories += 1;
+            r.photos = storePhoto(r.photos, { id: item.id, at: now, version: r.version, altered: false });
+            r.memories = photoCount(r.photos);
+            setPhotoSlots(r.photos);
             r.score += (echoHit ? 80 : 100) * Math.min(8, r.combo);
             r.stats.caught += 1;
             r.drift = Math.min(1, r.drift + (storageWasFull ? .11 : .055)); playCue(storageWasFull ? "overwrite" : "collect");
             addMemoryGesture(r.gestures, { kind: storageWasFull ? "replace" : "collect", x: item.x * W, y: item.y * H, at: now, seed: item.id });
-            setFeedback(storageWasFull ? "存满了，最早的一张被换掉了。" : echoHit ? "接住一张照片。" : r.combo > 2 ? `连续接住 ×${r.combo}` : "接住一张照片。");
+            setFeedback(storageWasFull ? "存满了，最早的一张被换掉了。" : "接住一张照片。");
           } else if (item.kind === "bubble" && playerHit && r.shield > 0) {
             item.hit = true;
             r.shield = 0;
@@ -631,13 +651,17 @@ export default function MemoryRushGame() {
             setFeedback("挡住泡泡了，照片没变。"); playCue("block");
           } else if (item.kind === "bubble" && playerHit) {
             item.hit = true;
-            r.overwritten += 1;
+            if (r.memories > 0) {
+              r.photos = alterPhoto(r.photos);
+              setPhotoSlots(r.photos);
+              r.overwritten += 1;
+            }
             r.stats.bumps += 1;
             r.combo = 0;
             r.shakeUntil = now + 430; r.effectUntil = now + 980; r.impactUntil = now + 480; r.drift = Math.min(1, r.drift + .14);
             setImpactPulse(value => value === "a" ? "b" : "a");
             addMemoryGesture(r.gestures, { kind: "bubble", x: item.x * W, y: item.y * H, at: now, seed: item.id });
-            setFeedback("碰到泡泡，混进了一段假记忆。"); playCue("bubble");
+            setFeedback(r.memories > 0 ? "碰到泡泡，混进了一段假记忆。" : "碰到泡泡，画面被干扰了。"); playCue("bubble");
           } else if (item.kind === "cart" && playerHit && r.shield > 0) {
             item.hit = true;
             r.shield = 0;
@@ -649,7 +673,11 @@ export default function MemoryRushGame() {
             item.hit = true;
             r.stats.bumps += 1;
             const lostPhoto = r.memories > 0;
-            if (lostPhoto) r.memories -= 1;
+            if (lostPhoto) {
+              r.photos = losePhoto(r.photos);
+              r.memories = photoCount(r.photos);
+              setPhotoSlots(r.photos);
+            }
             r.combo = 0; r.shakeUntil = now + 760; r.effectUntil = now + 1250; r.impactUntil = now + 840; r.drift = Math.min(1, r.drift + .2);
             setImpactPulse(value => value === "a" ? "b" : "a");
             addMemoryGesture(r.gestures, { kind: "hit", x: item.x * W, y: item.y * H, at: now, seed: item.id });
@@ -822,30 +850,21 @@ export default function MemoryRushGame() {
     };
     frame = requestAnimationFrame(tick);
     return () => { active = false; cancelAnimationFrame(frame); };
-  }, [finishRun, playCue, advanceIntro, record, choice, choicePhase, chooseCheckpointOption, wake, intro, restartObservation, beginProtectHold, endProtectHold, engageProtection]);
+  }, [finishRun, playCue, advanceIntro, record, choice, choicePhase, chooseCheckpointOption, wake, intro, restartObservation, beginProtectHold, endProtectHold, engageProtection, compareOriginal]);
 
   const saveCard = useCallback(() => {
     if (!record) return;
     const card = document.createElement("canvas"); card.width = 1080; card.height = 1440;
-    const c = card.getContext("2d")!; const g = c.createLinearGradient(0, 0, 1080, 1440);
-    g.addColorStop(0, "#5ee0ff"); g.addColorStop(.48, "#fff0a8"); g.addColorStop(1, "#ff8c67"); c.fillStyle = g; c.fillRect(0, 0, 1080, 1440);
-    c.fillStyle = "rgba(255,255,255,.84)"; c.roundRect(75, 80, 930, 1280, 52); c.fill(); c.fillStyle = "#173755";
+    const c = card.getContext("2d")!;
+    c.fillStyle = "#f4f3eb"; c.fillRect(0, 0, 1080, 1440);
+    c.fillStyle = "#2459a6"; c.fillRect(130, 200, 820, 2); c.fillStyle = "#173755";
     c.font = "800 34px sans-serif"; c.fillText(`YOUR ANSWERS · VISIT ${String(record.run).padStart(2,"0")}`, 130, 160);
-    c.font = "900 76px sans-serif"; c.fillText(tr("忘了自己是什么", "WHAT WAS I AGAIN?"), 130, 280); c.font = "700 38px sans-serif"; c.fillStyle = "#ef704f"; c.fillText(tr("本次回答", "Your answers"), 130, 360);
+    c.font = "600 62px sans-serif"; c.fillText(tr("忘了自己是什么", "WHAT WAS I AGAIN?"), 130, 280); c.font = "700 38px sans-serif"; c.fillStyle = "#ef704f"; c.fillText(tr("本次回答", "Your answers"), 130, 360);
     c.fillStyle = "#173755"; c.font = "800 42px sans-serif";
     [[tr("最初画面","FIRST IMAGE"),4],[tr("第一次回想","FIRST RECALL"),answerLabel(record.recalls?.[0])],[tr("第二次回想","SECOND RECALL"),answerLabel(record.recalls?.[1])],[tr("第三次回想","THIRD RECALL"),answerLabel(record.recalls?.[2])],[tr("留下的照片","PHOTOS KEPT"),record.retained ?? Math.min(SAVE_SLOT_COUNT, record.caught)],[tr("受到干扰","INTERRUPTIONS"),record.bumps]].forEach(([label,value],i)=>c.fillText(`${label}  ${value}`,130,500+i*105));
     c.font = "800 38px sans-serif"; c.fillText(`CURRENT VERSION  ${record.version}`,130,1190); c.font = "600 28px sans-serif"; c.fillText(tr("原图与本次回答", "The original photo and your answers"),130,1270);
     const a = document.createElement("a"); a.download = `memory-journey-${record.run}.png`; a.href = card.toDataURL("image/png"); a.click();
   }, [record, tr, answerLabel]);
-
-  const shareCard = useCallback(async () => {
-    if (!record) return;
-    const text = language === "zh" ? `最初画面：4 人｜我的回想：${(record.recalls ?? []).map(answerLabel).join(" → ")}｜本次回答记录` : `FIRST IMAGE: 4 PEOPLE | MY RECALLS: ${(record.recalls ?? []).map(answerLabel).join(" → ")} | My answers`;
-    try {
-      if (navigator.share) await navigator.share({ title: tr("忘了自己是什么", "WHAT WAS I AGAIN?"), text, url: location.href });
-      else { await navigator.clipboard.writeText(`${text} ${location.href}`); setShareMessage(tr("结果和链接已复制", "Result and link copied")); }
-    } catch { setShareMessage(tr("没能分享出去，可以先保存图片。", "Sharing did not work. Try saving the image instead.")); }
-  }, [record, language, tr, answerLabel]);
 
   const pauseGame = useCallback(() => {
     const r = runtimeRef.current;
@@ -854,10 +873,12 @@ export default function MemoryRushGame() {
   }, [choice]);
 
   useEffect(() => {
-    const hide = () => { if (document.hidden && runtimeRef.current.started) { runtimeRef.current.paused = true; if (!transitionRef.current && !choice) setPaused(true); } };
+    const resetComparison = () => compareOriginal(false);
+    const hide = () => { if (document.hidden) resetComparison(); if (document.hidden && runtimeRef.current.started) { runtimeRef.current.paused = true; if (!transitionRef.current && !choice) setPaused(true); } };
     document.addEventListener("visibilitychange", hide);
-    return () => document.removeEventListener("visibilitychange", hide);
-  }, [choice]);
+    window.addEventListener("blur", resetComparison);
+    return () => { document.removeEventListener("visibilitychange", hide); window.removeEventListener("blur", resetComparison); };
+  }, [choice, compareOriginal]);
 
   const liveDetailLabel = versionCause.detail === "unknown" ? tr("记不清了", "Not sure") : versionCause.detail === "left" ? tr("左侧", "LEFT")
     : versionCause.detail === "center" ? tr("中央", "CENTER")
@@ -967,9 +988,12 @@ export default function MemoryRushGame() {
           <div className="bottom-console">
             <div className="memory-storage" data-overwritten={hud.overwritten > 0} data-protected={hud.protected}>
               <header><b>{tr("留下的照片", "PHOTOS KEPT")}</b><span>{tr(`换过 ${hud.overwritten} 次`, `${hud.overwritten} replaced`)}</span></header>
-              <div>{Array.from({ length: SAVE_SLOT_COUNT }, (_, index) => <i key={index} data-filled={index < hud.memories} data-locked={hud.protected && index === 0}>{hud.protected && index === 0 ? "▣" : String(index + 1).padStart(2,"0")}</i>)}</div>
+              <div>{photoSlots.map((photo, index) => <i key={index} className="photo-slot" data-filled={Boolean(photo)} data-version={photo?.version} data-altered={photo?.altered || undefined} data-photo-id={photo?.id} aria-label={photo ? tr(`第 ${index + 1} 格：${photo.altered ? "被泡泡改写的照片" : "留下的照片"}`, `Slot ${index + 1}: ${photo.altered ? "photo altered by a bubble" : "saved photo"}`) : tr(`第 ${index + 1} 格：空`, `Slot ${index + 1}: empty`)}>
+                {photo && <img key={`${photo.id}-${photo.altered}`} src={resolveImageUrl(photoUrl)} alt="" />}
+                <span aria-hidden="true">{String(index + 1).padStart(2,"0")}</span>
+              </i>)}</div>
             </div>
-            <div className="rush-feedback" data-fault={feedback.includes("撞到了") || feedback.includes("假记忆") || feedback.includes("被换掉")} role="status">{shownFeedback}</div>
+            <div className="rush-feedback" data-fault={feedback.includes("撞到了") || feedback.includes("假记忆") || feedback.includes("被换掉") || feedback.includes("被干扰")} role="status">{shownFeedback}</div>
             <div className="bottom-actions">
               <div className="pickup-legend compact-legend"><span>{tr("照片 · 保存", "PHOTO · SAVE")}</span><span>{tr("泡泡 · 假记忆", "BUBBLE · FALSE MEMORY")}</span><span>{tr("碰撞 · 打断", "IMPACT · INTERRUPT")}</span></div>
               <button className="protect-memory" type="button" disabled={choice || paused || hud.memories < 1} data-holding={hud.hold > 0} data-protected={hud.protected} aria-pressed={hud.protected} style={{"--hold":`${hud.hold * 100}%`} as CSSProperties}
@@ -1053,7 +1077,25 @@ export default function MemoryRushGame() {
               <em>{index === 0 ? tr("一开始看到的", "What you first saw") : index === 1 ? tr("首次判断", "FIRST ANSWER") : count === 0 ? tr("这次没有确定人数", "COUNT LEFT OPEN") : tr(`照此画成 ${index === 2 ? "B" : "C"}`, `Used for ${index === 2 ? "B" : "C"}`)}</em>
             </div>)}
           </div>
-          <div className="recall-evidence"><strong>{tr("原图", "ORIGINAL PHOTO")}</strong><div className="intro-photo intro-photo-1"><img src={resolveImageUrl(backgroundAUrl)} alt={tr("最初呈现的场景", "The scene shown at the start")} /><div className="memory-figures">{[.82,1,.7,.9].map((scale,index)=><img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{"--figure-scale":scale} as CSSProperties}/>)}</div></div><p>{(record.recalls ?? []).some(n=>n===0) ? tr("原图里有 4 人。“记不清”的回答也列在上方。", "The photo had four people. Any Not sure answers are shown above.") : (record.recalls ?? []).some(n=>n!==4) ? tr("原图里有 4 人。你的三次回答列在上方。", "The photo had four people. Your three answers are shown above.") : tr("你三次都选了 4 人，与原图一致。", "You chose four people each time, matching the photo.")}</p></div>
+          <div className="recall-evidence final-comparison" data-view={showOriginal ? "original" : "reconstructed"}>
+            <strong aria-live="polite">{showOriginal ? tr("原图 · 4 人", "ORIGINAL · 4 PEOPLE") : tr(`最后画面 · VERSION ${record.version}`, `LAST VERSION · ${record.version}`)}</strong>
+            <div className="intro-photo intro-photo-1 comparison-photo" data-version={showOriginal ? "A" : record.version}>
+              <img className="comparison-scene" data-visible={showOriginal || record.version !== "C"} aria-hidden={!showOriginal && record.version === "C"} src={resolveImageUrl(backgroundAUrl)} alt={tr("一开始看到的原图", "The original scene")} />
+              <img className="comparison-scene" data-visible={!showOriginal && record.version === "C"} aria-hidden={showOriginal || record.version !== "C"} src={resolveImageUrl(backgroundBUrl)} alt={tr("按最后一次人数回答重构的场景", "The scene reconstructed with your final count")} />
+              <div className="memory-figures">{Array.from({ length: showOriginal ? 4 : Math.max(0, record.recalls?.[2] ?? 0) }, (_, index) => <img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{ "--figure-scale": [.82,1,.7,.9,.82][index] ?? .82 } as CSSProperties} />)}</div>
+            </div>
+            <button className="compare-original" type="button" aria-pressed={showOriginal}
+              onPointerDown={event => { event.preventDefault(); event.currentTarget.focus(); event.currentTarget.setPointerCapture(event.pointerId); compareOriginal(true); }}
+              onPointerUp={() => compareOriginal(false)} onPointerCancel={() => compareOriginal(false)} onLostPointerCapture={() => compareOriginal(false)} onBlur={() => compareOriginal(false)}
+              onKeyDown={event => { if (["Enter", " "].includes(event.key)) { event.preventDefault(); compareOriginal(true); } }}
+              onKeyUp={event => { if (["Enter", " "].includes(event.key)) { event.preventDefault(); compareOriginal(false); } }}
+              onClick={event => { if (event.detail === 0) compareOriginal(!comparingRef.current); }}>
+              {tr("按住查看原图", "Hold to view original")}
+            </button>
+            <p>{record.recalls?.[2] === 0
+              ? tr("最后一次选了“记不清”，所以这一版没有补入人物。按住按钮看原图，松开返回。", "You chose Not sure at the end, so no people were added to this version. Hold to see the original; release to return.")
+              : tr(`最后一次回答是 ${record.recalls?.[2] ?? "—"} 人，这一版按这个人数绘制。按住按钮看原图，松开返回。`, `Your final answer was ${record.recalls?.[2] ?? "—"} people; this version uses that count. Hold to see the original; release to return.`)}</p>
+          </div>
           <section className="memory-changes" aria-label={tr("变化发生在哪里", "Where answers changed")}>
             <details className="recall-history"><summary>{tr("查看三次回答的经过", "View answer history")}</summary>
             <ol>
@@ -1094,9 +1136,7 @@ export default function MemoryRushGame() {
             <div><dt>{tr("留下的照片", "PHOTOS KEPT")}</dt><dd>{record.retained ?? Math.min(SAVE_SLOT_COUNT, record.caught)}</dd></div><div><dt>{tr("替换照片", "PHOTOS REPLACED")}</dt><dd>{record.overwritten ?? 0}</dd></div>
             <div><dt>{tr("保护次数", "TIMES PROTECTED")}</dt><dd>{record.protections ?? 0}</dd></div><div><dt>{tr("碰到几次", "HITS")}</dt><dd>{record.bumps}</dd></div>
           </dl>
-          <p role="status">{shareMessage}</p>
-          <div className="result-actions"><button onClick={saveCard}>{tr("保存这次记录", "Save this record")}</button><button onClick={shareCard}>{tr("分享结果", "SHARE RESULT")}</button></div>
-          <button className="replay-memory" onClick={restartObservation}>{tr("再看一次", "Look again")}</button>
+          <div className="result-actions"><button onClick={saveCard}>{tr("保存回答记录", "Save answer record")}</button><button className="replay-memory" onClick={restartObservation}>{tr("回到原图", "Back to the first photo")}</button></div>
         </section>}
       </section>
     </main>
