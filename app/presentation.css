@@ -147,3 +147,27 @@
 .rush-game .recall-history ol { margin:0; padding:0; list-style:none; }
 .rush-game .recall-history li { display:grid; gap:6px; padding:12px 0; border-top:1px solid var(--ui-rule); font:400 14px/1.5 system-ui,sans-serif; }
 .rush-game .recall-history li small { color:#536978; }
+
+/* A brief contact print: the next scene is assembled from misregistered strips. */
+.rush-game .version-transition { padding:16cqh 7cqw; gap:1.8cqh; background:#121b25ee; animation:print-envelope 2.2s ease both; }
+.rush-game .version-transition[data-version="C"] { background:#211e37ee; }
+.rush-game .version-transition::before,.rush-game .version-transition::after { content:none; }
+.rush-game .version-transition>span { font:500 clamp(10px,2cqw,14px)/1.5 ui-monospace,monospace; letter-spacing:.04em; }
+.rush-game .version-transition>strong { font:500 clamp(32px,8cqw,60px)/1.1 Georgia,serif; letter-spacing:.06em; text-shadow:none; }
+.rush-game .version-transition>p { max-width:64cqw; margin:auto; padding:0; border:0; font:400 clamp(12px,2.5cqw,17px)/1.5 system-ui,sans-serif; }
+.rush-game .version-art { position:relative; width:78cqw; height:32cqh; margin:1cqh auto; border:9px solid #eeeade; border-bottom-width:23px; background:#17232d; overflow:hidden; transform:rotate(-2deg); box-shadow:10px 12px 0 #060d1855; }
+.rush-game .version-print { position:absolute; inset:0; background-image:var(--recall-scene); background-size:cover; background-position:center; clip-path:inset(0 calc((4 - var(--print-index))*20%) 0 calc(var(--print-index)*20%)); animation:print-register 1.7s cubic-bezier(.2,.7,.2,1) both; animation-delay:calc(var(--print-index)*65ms); }
+.rush-game .version-transition[data-version="B"] .version-print { filter:grayscale(1) contrast(1.15); }
+.rush-game .version-transition[data-version="C"] .version-print { filter:saturate(1.2); }
+.rush-game .version-figures { position:absolute; inset:52% 12% 8%; display:flex; justify-content:center; align-items:end; gap:1%; animation:print-figures 1.8s ease both; }
+.rush-game .version-figures img { height:100%; width:19%; object-fit:contain; }
+.rush-game .version-transition[data-version="B"] .version-figures { filter:grayscale(1); }
+.rush-game .version-registration { position:absolute; inset:8%; border:1px solid #ffffff55; pointer-events:none; }
+.rush-game .version-registration::before,.rush-game .version-registration::after { content:""; position:absolute; width:16px; height:16px; border:1px solid #ef7657; }
+.rush-game .version-registration::before { left:-9px; top:-9px; }
+.rush-game .version-registration::after { right:-9px; bottom:-9px; border-color:#38c3d0; }
+@keyframes print-envelope { 0% { opacity:0; } 8%,88% { opacity:1; } 100% { opacity:0; } }
+@keyframes print-register { 0% { opacity:.3; transform:translateY(calc((var(--print-index) - 2)*28px)) scale(1.14); } 68%,100% { opacity:1; transform:none; } }
+@keyframes print-figures { 0%,20% { opacity:0; transform:translateY(10px); } 65%,100% { opacity:1; transform:none; } }
+.rush-game[data-quiet="true"] .version-transition,.rush-game[data-quiet="true"] .version-art,.rush-game[data-quiet="true"] .version-print,.rush-game[data-quiet="true"] .version-figures { animation:none!important; transform:none; }
+@media (prefers-reduced-motion:reduce) { .rush-game .version-transition,.rush-game .version-art,.rush-game .version-print,.rush-game .version-figures { animation:none!important; transform:none; } }

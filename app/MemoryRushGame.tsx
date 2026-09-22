@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import DormantVisual from "./DormantVisual";
+import { addMemoryGesture, drawMemoryGestures, GESTURE_DURATION, type MemoryGesture } from "./memory-feedback";
 import { drawPhotoFault, photoFaultStrength } from "./photo-fault";
 import { COUNT_OPTIONS, moveCount, moveChoiceIndex, recallLabel, comparisonState } from "./memory-recall";
 import { MemoryAudio, type MemoryCue } from "./memory-audio";
@@ -72,6 +73,7 @@ type Runtime = {
   idleNotified: boolean;
   stats: RunStats;
   trail: Trail[];
+  gestures: MemoryGesture[];
 };
 
 const emptyStats = (): RunStats => ({ caught: 0, missed: 0, bumps: 0 });
@@ -82,7 +84,7 @@ const makeRuntime = (): Runtime => ({
   shakeUntil: 0, shield: 0, overwritten: 0, protections: 0, holdActive: false, holdStartedAt: 0, holdTriggered: false, protectUntil: 0,
   startedAt: 0, lastInteraction: 0, idleNotified: false,
   stats: emptyStats(),
-  trail: [],
+  trail: [], gestures: [],
 });
 
 const feedbackEn = (text: string) => {
@@ -385,6 +387,7 @@ export default function MemoryRushGame() {
     r.shield = 1;
     r.protections += 1;
     r.protectUntil = r.clock + PROTECTION_MS;
+    addMemoryGesture(r.gestures, { kind: "protect", x: r.x * W, y: PLAYER_Y * H, at: r.clock, seed: r.protections });
     r.effectUntil = r.clock + 560;
     setFeedback("护好了，能挡住一次干扰。");
     playCue("protect");
@@ -617,13 +620,14 @@ export default function MemoryRushGame() {
             r.score += (echoHit ? 80 : 100) * Math.min(8, r.combo);
             r.stats.caught += 1;
             r.drift = Math.min(1, r.drift + (storageWasFull ? .11 : .055)); playCue(storageWasFull ? "overwrite" : "collect");
-            if (r.stats.caught % 4 === 0) r.effectUntil = now + 750;
+            addMemoryGesture(r.gestures, { kind: storageWasFull ? "replace" : "collect", x: item.x * W, y: item.y * H, at: now, seed: item.id });
             setFeedback(storageWasFull ? "存满了，最早的一张被换掉了。" : echoHit ? "接住一张照片。" : r.combo > 2 ? `连续接住 ×${r.combo}` : "接住一张照片。");
           } else if (item.kind === "bubble" && playerHit && r.shield > 0) {
             item.hit = true;
             r.shield = 0;
             r.protectUntil = 0;
             r.effectUntil = now + 460;
+            addMemoryGesture(r.gestures, { kind: "block", x: item.x * W, y: item.y * H, at: now, seed: item.id });
             setFeedback("挡住泡泡了，照片没变。"); playCue("block");
           } else if (item.kind === "bubble" && playerHit) {
             item.hit = true;
@@ -632,12 +636,14 @@ export default function MemoryRushGame() {
             r.combo = 0;
             r.shakeUntil = now + 430; r.effectUntil = now + 980; r.impactUntil = now + 480; r.drift = Math.min(1, r.drift + .14);
             setImpactPulse(value => value === "a" ? "b" : "a");
+            addMemoryGesture(r.gestures, { kind: "bubble", x: item.x * W, y: item.y * H, at: now, seed: item.id });
             setFeedback("碰到泡泡，混进了一段假记忆。"); playCue("bubble");
           } else if (item.kind === "cart" && playerHit && r.shield > 0) {
             item.hit = true;
             r.shield = 0;
             r.protectUntil = 0;
             r.effectUntil = now + 460;
+            addMemoryGesture(r.gestures, { kind: "block", x: item.x * W, y: item.y * H, at: now, seed: item.id });
             setFeedback("挡住了，照片还在。"); playCue("block");
           } else if (item.kind === "cart" && playerHit) {
             item.hit = true;
@@ -646,6 +652,7 @@ export default function MemoryRushGame() {
             if (lostPhoto) r.memories -= 1;
             r.combo = 0; r.shakeUntil = now + 760; r.effectUntil = now + 1250; r.impactUntil = now + 840; r.drift = Math.min(1, r.drift + .2);
             setImpactPulse(value => value === "a" ? "b" : "a");
+            addMemoryGesture(r.gestures, { kind: "hit", x: item.x * W, y: item.y * H, at: now, seed: item.id });
             setFeedback(lostPhoto ? "撞到了，少了一张照片。" : "撞到了，画面晃了一下。"); playCue("collision");
           }
         });
@@ -655,6 +662,7 @@ export default function MemoryRushGame() {
             setFeedback("漏掉了一张。");
           }
         });
+        r.gestures = r.gestures.filter(event => now - event.at < GESTURE_DURATION);
         r.items = r.items.filter((item) => !item.hit && item.y < 1.08);
         r.versionFade = Math.max(0, r.versionFade - dt * .58);
         if (now - r.lastInteraction > 1100) {
@@ -715,6 +723,12 @@ export default function MemoryRushGame() {
           if (item.kind === "photo" && (item.id % 3 === 0 || r.drift > .65)) ctx.filter = `grayscale(${Math.min(1, r.drift * 1.6)})`;
           const scale = 0.46 + item.y * 0.72;
           if (item.kind === "photo") {
+            // Tilt only the drawing; the collection lane and hit box remain unchanged.
+            if (!quietRef.current) {
+              ctx.translate(item.x * W, item.y * H);
+              ctx.rotate(Math.sin(now * .0018 + item.id * 1.7) * .075);
+              ctx.translate(-item.x * W, -item.y * H);
+            }
             const photoWidth = 148 * scale * item.size;
             const photoHeight = 164 * scale * item.size;
             drawContained(ctx, assets.photo, item.x * W, item.y * H, photoWidth, photoHeight);
@@ -723,7 +737,7 @@ export default function MemoryRushGame() {
           }
           if (item.kind === "cart") drawContained(ctx, assets.cart, item.x * W, item.y * H, 250 * scale, 275 * scale);
           if (item.kind === "bubble") {
-            const pulse = 1 + Math.sin(now * .008 + item.id) * .045;
+            const pulse = quietRef.current ? 1 : 1 + Math.sin(now * .008 + item.id) * .045;
             ctx.globalCompositeOperation = "screen";
             ctx.globalAlpha = .88;
             ctx.shadowColor = "#58e8ff";
@@ -740,8 +754,9 @@ export default function MemoryRushGame() {
           ctx.drawImage(assets.bubble, r.x * W - 198 * pulse, PLAYER_Y * H - 232 * pulse, 396 * pulse, 396 * pulse);
           ctx.restore();
         }
-        const bob = Math.sin(now * 0.012) * 5;
+        const bob = quietRef.current ? 0 : Math.sin(now * 0.012) * 5;
         cropDraw(ctx, assets.player, [312, 99, 680, 1015], r.x * W, PLAYER_Y * H + bob, 242, 360);
+        if (!r.paused) drawMemoryGestures(ctx, assets.photo, r.gestures, now, quietRef.current);
       }
       ctx.restore();
       if (r.started && r.version === "B" && r.versionFade <= .02) {
@@ -854,7 +869,7 @@ export default function MemoryRushGame() {
 
   return (
     <main className="rush-page">
-      <section className="rush-game" data-lang={language} data-screen={record ? "result" : !awake ? "dormant" : booting ? "loading" : started ? "playing" : "intro"} data-impact={impactPulse ?? undefined} aria-label={tr("记忆与遗忘竖屏游戏", "Vertical game about memory and forgetting")}>
+      <section className="rush-game" data-lang={language} data-quiet={quiet} data-screen={record ? "result" : !awake ? "dormant" : booting ? "loading" : started ? "playing" : "intro"} data-impact={impactPulse ?? undefined} aria-label={tr("记忆与遗忘竖屏游戏", "Vertical game about memory and forgetting")}>
         <canvas
           ref={canvasRef}
           width={W}
@@ -971,10 +986,14 @@ export default function MemoryRushGame() {
         {versionPulse && <div className="version-transition" data-version={versionPulse} role="status" aria-live="assertive">
           <span>{tr(`你的回答：${answerLabel(versionCause.recall)} · ${liveDetailLabel}`, `YOUR RECALL: ${answerLabel(versionCause.recall)} · ${liveDetailLabel}`)}</span>
           <strong>VERSION {versionPulse}</strong>
-          <div className="rewrite-equation" aria-label={tr("画面随回答变化", "The picture changes to match your answer")}>
-            <span><small>{tr("你的回想", "YOUR RECALL")}</small><b>{answerLabel(versionCause.recall)}</b></span><i>→</i><span><small>{versionCause.recall === 0 ? tr("暂不补画", "LEFT OPEN") : tr("现在画里也有", "NOW IN THE PICTURE")}</small><b>{answerLabel(versionCause.recall)}</b></span>
+          <div className="version-art" aria-hidden="true" style={{ "--recall-scene": `url("${resolveImageUrl(versionPulse === "B" ? backgroundAUrl : backgroundBUrl)}")` } as CSSProperties}>
+            {[0,1,2,3,4].map(index => <i className="version-print" key={index} style={{ "--print-index": index } as CSSProperties} />)}
+            <div className="version-figures">{Array.from({length: versionCause.recall > 0 ? versionCause.recall : 0}, (_, index) => <img key={index} src={resolveImageUrl(playerUrl)} alt="" />)}</div>
+            <span className="version-registration" />
           </div>
-          <p>{versionCause.recall === 0 ? tr("你选了“记不清”，这里不显示人物。画面仍会换色。", "You chose “Not sure”, so no people are shown here. The colors still change.") : tr(`画面里现在有 ${versionCause.recall} 个人，和你的答案一样。这不是原图。`, `There are now ${versionCause.recall} people, matching your answer. This is not the original photo.`)}</p>
+          <p>{versionCause.recall === 0
+            ? tr("这次没有确定人数。画面里暂不补入人物。", "No count chosen. This version leaves the people out.")
+            : tr(`这一版有 ${versionCause.recall} 人。原图没有变。`, `This version has ${versionCause.recall} people. The original is unchanged.`)}</p>
         </div>}
 
         {awake && !booting && !started && !record && <div key={intro} className="rush-intro" data-step={intro}>

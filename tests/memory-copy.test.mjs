@@ -5,6 +5,42 @@ import vm from 'node:vm';
 import ts from 'typescript';
 
 const source = readFileSync(new URL('../app/MemoryRushGame.tsx', import.meta.url), 'utf8');
+const gestureSource = readFileSync(new URL('../app/memory-feedback.ts', import.meta.url), 'utf8');
+const gestureCode = ts.transpileModule(gestureSource.replaceAll('export ', ''), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+const gestures = vm.runInNewContext(`${gestureCode};({gestureProgress,addMemoryGesture,drawMemoryGestures,GESTURE_DURATION})`);
+
+test('drawing gestures expire and never accumulate beyond eight events', () => {
+  const events = [];
+  for (let index=0; index<100; index++) gestures.addMemoryGesture(events,{kind:'collect',x:100,y:200,at:index,seed:index});
+  assert.equal(events.length,8);
+  assert.equal(events[0].seed,92);
+  assert.equal(gestures.gestureProgress(99,100),0);
+  assert.equal(gestures.gestureProgress(480,100),.5);
+  assert.equal(gestures.gestureProgress(860,100),1);
+});
+
+test('all six drawing gestures balance canvas state and leave game coordinates untouched', () => {
+  for (const kind of ['collect','replace','bubble','hit','block','protect']) {
+    const calls=[];
+    const ctx=new Proxy({}, {get:(_,key)=>(...args)=>calls.push([key,...args]),set:()=>true});
+    const event=Object.freeze({kind,x:100,y:200,at:0,seed:2});
+    gestures.drawMemoryGestures(ctx,{naturalWidth:400,naturalHeight:600},[event],240,false);
+    assert.equal(calls.filter(c=>c[0]==='save').length,calls.filter(c=>c[0]==='restore').length);
+    assert.ok(calls.flat().filter(v=>typeof v==='number').every(Number.isFinite));
+    assert.equal(event.x,100);assert.equal(event.y,200);
+  }
+});
+
+test('soft mode uses only a stationary fading mark; expired gestures do not draw', () => {
+  const calls=[];
+  const ctx=new Proxy({}, {get:(_,key)=>(...args)=>calls.push([key,...args]),set:()=>true});
+  const event={kind:'hit',x:100,y:200,at:0,seed:2};
+  gestures.drawMemoryGestures(ctx,{naturalWidth:400,naturalHeight:600},[event],240,true);
+  assert.deepEqual(calls.map(c=>c[0]),['save','translate','strokeRect','restore']);
+  calls.length=0;
+  gestures.drawMemoryGestures(ctx,{naturalWidth:400,naturalHeight:600},[event],760,false);
+  assert.equal(calls.length,0);
+});
 const file = ts.createSourceFile('MemoryRushGame.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 const feedbackSource = source.slice(source.indexOf('const feedbackEn ='), source.indexOf('const checkpointOptions'));
 const translated = ts.transpileModule(feedbackSource, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
