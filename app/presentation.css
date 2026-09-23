@@ -200,3 +200,18 @@
 .rush-game .result-actions button:hover { color:var(--ui-blue); background:none; }
 .rush-game[data-quiet="true"] .memory-storage .photo-slot img { animation:none; }
 @media (prefers-reduced-motion:reduce) { .rush-game .memory-storage .photo-slot img { animation:none; } }
+
+/* Layout refinement only: retain the existing palette, images and stage filters. */
+.rush-game .rush-journey { align-items:baseline; column-gap:2cqw; }
+.rush-game .rush-journey strong { white-space:nowrap; font-weight:500; font-variant-numeric:tabular-nums; }
+.rush-game .run-purpose { padding:.7cqh 1.8cqw; }
+.rush-game .run-purpose span { padding:0; text-wrap:pretty; }
+.rush-game .bottom-console .compact-legend { gap:3px; align-content:center; }
+.rush-game .bottom-console .compact-legend span { line-height:1.5; text-transform:none; }
+.rush-game .bottom-console .rush-feedback { text-wrap:pretty; }
+.rush-game .memory-storage header span { font-weight:400; font-variant-numeric:tabular-nums; }
+.rush-game .rush-choice h2,.rush-game .rush-intro h1 { text-wrap:balance; }
+.rush-game .recall-choice button,.rush-game .rush-choice button { font-variant-numeric:tabular-nums; }
+.rush-game .rush-settings .pause-quick:focus-visible,
+.rush-game .rush-settings .settings-toggle:focus-visible,
+.rush-game .protect-memory:focus-visible { outline-offset:3px; }

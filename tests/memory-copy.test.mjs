@@ -229,3 +229,13 @@ test('comparison reveals the original without changing stored answers or restart
   assert.ok(source.includes('if (comparingRef.current) renew(); else sleep();'));
 });
 
+test('playing captions do not repeat the photo count or a second stage badge', () => {
+  const journey=source.slice(source.indexOf('<div className="rush-journey">'),source.indexOf('<div className="bottom-console">'));
+  assert.ok(!journey.includes('hud.memories'));
+  assert.ok(!journey.includes('A / STORE'));
+  assert.ok(journey.includes('Round progress'));
+  assert.ok(source.includes('Photos · catch to keep'));
+  assert.ok(source.includes('Bubbles · alter photos'));
+  assert.ok(source.includes('Obstacles · lose a photo'));
+  assert.ok(!source.includes('createPrintSurfaces'));
+});

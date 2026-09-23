@@ -982,9 +982,9 @@ export default function MemoryRushGame() {
           {versionCause.recall === 0 && <p className="uncertain-picture">{tr("你选了“记不清”，这里不显示人物。", "You chose “Not sure”, so no people are shown.")}</p>}<div className="memory-figures">{Array.from({length: versionCause.recall},(_,index)=><img key={index} src={resolveImageUrl(playerUrl)} alt="" style={{"--figure-scale":1.05+(index%2)*.2} as CSSProperties}/>)}</div>
         </aside>}
         {started && <><div className="combo-pill" data-active={hud.checks > 0}>{hud.checks > 0 ? `×${hud.checks} ${tr("次回想", "recalls")}` : tr("再看一次", "Look again")}</div>
-          <div className="rush-journey"><span>{hud.version === "A" ? tr("01 / 彩色", "01 / COLOR") : hud.version === "B" ? tr("02 / 黑白", "02 / BLACK & WHITE") : tr("03 / 紫蓝", "03 / VIOLET")}</span><strong>{tr(`照片 ${hud.memories} 张 · ${seconds}s · ${gameSpeed}×`, `${hud.memories} ${hud.memories === 1 ? "photo" : "photos"} · ${seconds}s · ${gameSpeed}×`)}</strong><progress max={RUN_DURATION_MS / 1000} value={RUN_DURATION_MS / 1000-seconds} aria-label={tr("本轮进度", "Round progress")} /></div>
+          <div className="rush-journey"><span>{hud.version === "A" ? tr("01 / 彩色", "01 / COLOR") : hud.version === "B" ? tr("02 / 黑白", "02 / BLACK & WHITE") : tr("03 / 紫蓝", "03 / VIOLET")}</span><strong>{`${seconds}s · ${gameSpeed}×`}</strong><progress max={RUN_DURATION_MS / 1000} value={RUN_DURATION_MS / 1000-seconds} aria-label={tr("本轮进度", "Round progress")} /></div>
           {!choice && !paused && <>
-          <div className="run-purpose"><b>{hud.version === "A" ? tr("A / 保存", "A / STORE") : hud.version === "B" ? tr("B / 复盘", "B / RECHECK") : tr("C / 抵挡", "C / BLOCK")}</b><span>{hud.version === "A" ? tr("最多留 5 张，接满后会换掉最早的一张。", "Keep up to 5 photos. New ones replace the oldest.") : hud.version === "B" ? tr("躲开泡泡，别让假记忆混进来。", "Avoid bubbles. They slip false memories in.") : tr("长按下方按钮，可挡住一次泡泡或障碍碰撞。", "Hold the button to block the next bubble or obstacle.")}</span></div>
+          <div className="run-purpose"><span>{hud.version === "A" ? tr("最多留 5 张，接满后会换掉最早的一张。", "Keep up to 5 photos. New ones replace the oldest.") : hud.version === "B" ? tr("躲开泡泡，别让假记忆混进来。", "Avoid bubbles. They slip false memories in.") : tr("长按下方按钮，可挡住一次泡泡或障碍碰撞。", "Hold the button to block the next bubble or obstacle.")}</span></div>
           <div className="bottom-console">
             <div className="memory-storage" data-overwritten={hud.overwritten > 0} data-protected={hud.protected}>
               <header><b>{tr("留下的照片", "PHOTOS KEPT")}</b><span>{tr(`换过 ${hud.overwritten} 次`, `${hud.overwritten} replaced`)}</span></header>
@@ -995,7 +995,7 @@ export default function MemoryRushGame() {
             </div>
             <div className="rush-feedback" data-fault={feedback.includes("撞到了") || feedback.includes("假记忆") || feedback.includes("被换掉") || feedback.includes("被干扰")} role="status">{shownFeedback}</div>
             <div className="bottom-actions">
-              <div className="pickup-legend compact-legend"><span>{tr("照片 · 接住保存", "PHOTOS · CATCH TO KEEP")}</span><span>{tr("泡泡 · 改写照片", "BUBBLES · ALTER PHOTOS")}</span><span>{tr("障碍 · 丢失照片", "OBSTACLES · LOSE A PHOTO")}</span></div>
+              <div className="pickup-legend compact-legend"><span>{tr("照片 · 接住保存", "Photos · catch to keep")}</span><span>{tr("泡泡 · 改写照片", "Bubbles · alter photos")}</span><span>{tr("障碍 · 丢失照片", "Obstacles · lose a photo")}</span></div>
               <button className="protect-memory" type="button" disabled={choice || paused || hud.memories < 1} data-holding={hud.hold > 0} data-protected={hud.protected} aria-pressed={hud.protected} style={{"--hold":`${hud.hold * 100}%`} as CSSProperties}
                 onPointerDown={(event)=>{ event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); beginProtectHold(); }}
                 onPointerUp={endProtectHold} onPointerCancel={endProtectHold} onPointerLeave={endProtectHold}
@@ -1142,4 +1142,3 @@ export default function MemoryRushGame() {
     </main>
   );
 }
-
