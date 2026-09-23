@@ -72,7 +72,7 @@ test('fault styling matches the new plain-language feedback, not protection feed
   const expression = source.match(/data-fault=\{([^}]+)\}/)?.[1];
   assert.ok(expression);
   const fault = text => vm.runInNewContext(expression, {feedback:text});
-  for (const text of ['撞到了，少了一张照片。','撞到了，画面晃了一下。','碰到泡泡，混进了一段假记忆。','存满了，最早的一张被换掉了。']) assert.equal(fault(text), true, text);
+  for (const text of ['撞到了，少了一张照片。','撞到了，画面晃了一下。','泡泡把一张照片改了。','存满了，最早的一张被换掉了。']) assert.equal(fault(text), true, text);
   for (const text of ['挡住泡泡了，照片没变。','挡住了，照片还在。','接住一张照片。']) assert.equal(fault(text), false, text);
 });
 
@@ -280,3 +280,13 @@ test('slot feedback expires without affecting game timing and respects reduced m
   assert.ok(css.includes('.photo-slot .slot-previous { display:none; }'));
   assert.ok(source.includes('className="title-phrase"'));
 });
+
+test('intro uses one route instead of competing numbered progress labels', () => {
+  assert.ok(!source.includes('BEFORE YOU START 0'));
+  assert.ok(!source.includes('<b>0{index + 1}</b>'));
+  assert.ok(source.includes('First recall'));
+  assert.ok(source.includes('A bubble changed one of your photos.'));
+  const css=readFileSync(new URL('../app/presentation.css',import.meta.url),'utf8');
+  assert.ok(css.includes('animation:none; background:var(--ui-paper); color:var(--ui-ink); box-shadow:none; border-left:2px solid var(--ui-blue)'));
+});
+

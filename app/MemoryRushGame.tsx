@@ -99,7 +99,7 @@ const feedbackEn = (text: string) => {
     "先接一张照片。": "Catch a photo first.",
     "挡住泡泡了，照片没变。": "Bubble blocked. Your photos are unchanged.",
     "挡住了，照片还在。": "Hit blocked. You kept your photos.",
-    "碰到泡泡，混进了一段假记忆。": "You hit a bubble. A false memory was added.",
+    "泡泡把一张照片改了。": "A bubble changed one of your photos.",
     "碰到泡泡，画面被干扰了。": "You hit a bubble. The picture was distorted.",
     "人数记下了，再选一个细节。": "Got it. Now think back to one detail.",
     "记下了，继续接照片。": "Got it. Keep catching photos.",
@@ -675,7 +675,7 @@ export default function MemoryRushGame() {
             r.shakeUntil = now + 430; r.effectUntil = now + 980; r.impactUntil = now + 480; r.drift = Math.min(1, r.drift + .14);
             setImpactPulse(value => value === "a" ? "b" : "a");
             addMemoryGesture(r.gestures, { kind: "bubble", x: item.x * W, y: item.y * H, at: now, seed: item.id });
-            setFeedback(r.memories > 0 ? "碰到泡泡，混进了一段假记忆。" : "碰到泡泡，画面被干扰了。"); playCue("bubble");
+            setFeedback(r.memories > 0 ? "泡泡把一张照片改了。" : "碰到泡泡，画面被干扰了。"); playCue("bubble");
           } else if (item.kind === "cart" && playerHit && r.shield > 0) {
             item.hit = true;
             r.shield = 0;
@@ -1011,7 +1011,7 @@ export default function MemoryRushGame() {
                 <span aria-hidden="true">{String(index + 1).padStart(2,"0")}</span>
               </i>)}</div>
             </div>
-            <div className="rush-feedback" data-fault={feedback.includes("撞到了") || feedback.includes("假记忆") || feedback.includes("被换掉") || feedback.includes("被干扰")} role="status">{shownFeedback}</div>
+            <div className="rush-feedback" data-fault={feedback.includes("撞到了") || feedback.includes("照片改了") || feedback.includes("被换掉") || feedback.includes("被干扰")} role="status">{shownFeedback}</div>
             <div className="bottom-actions">
               <div className="pickup-legend compact-legend"><span>{tr("照片 · 接住保存", "Photos · catch to keep")}</span><span>{tr("泡泡 · 改写照片", "Bubbles · alter photos")}</span><span>{tr("障碍 · 丢失照片", "Obstacles · lose a photo")}</span></div>
               <button className="protect-memory" type="button" disabled={choice || paused || hud.memories < 1} data-holding={hud.hold > 0} data-protected={hud.protected} aria-pressed={hud.protected} style={{"--hold":`${hud.hold * 100}%`} as CSSProperties}
@@ -1041,11 +1041,11 @@ export default function MemoryRushGame() {
         {awake && !booting && !started && !record && <div key={intro} className="rush-intro" data-step={intro}>
           <span>{intro === 0
             ? tr("先看一眼，再凭记忆回答", "Take a look, then answer from memory")
-            : tr(`开始之前 0${intro === 4 ? 4 : intro + 1} / 04`, `BEFORE YOU START 0${intro === 4 ? 4 : intro + 1} / 04`)}</span>
+            : intro === 1 ? tr("原图", "Original") : intro === 2 ? tr("第一次回想", "First recall") : intro === 3 ? tr("你的回答", "Your answer") : tr("开始穿行之前", "Before you move")}</span>
           <nav className="experience-route" aria-label={tr("游戏流程", "Game steps")}>
             {[tr("靠近", "APPROACH"),tr("观看", "OBSERVE"),tr("回想", "RECALL"),tr("穿行", "JOURNEY"),tr("对照", "COMPARE")].map((label,index) => {
               const active = intro === 0 ? 0 : intro === 1 ? 1 : intro < 4 ? 2 : 3;
-              return <i key={label} data-active={index <= active}><b>0{index + 1}</b>{label}</i>;
+              return <i key={label} data-active={index <= active}>{label}</i>;
             })}
           </nav>
           <h1>{intro === 0 ? tr("忘了自己是什么", "WHAT WAS I AGAIN?") : intro === 1 ? tr("看看这张照片", "Look at this photo") : intro === 2 ? <><span className="title-phrase">{tr("你刚才看见了", "How many people")}</span>{language === "en" ? " " : ""}<span className="title-phrase">{tr("几个人？", "did you see?")}</span></> : intro === 3 ? (recallAnswer === 0 ? tr("你选了“记不清”", "You chose “Not sure”") : tr(`你选了 ${recallAnswer} 人`, `You chose ${recallAnswer} people`)) : tr("操作说明", "Controls")}</h1>
@@ -1160,3 +1160,4 @@ export default function MemoryRushGame() {
     </main>
   );
 }
+

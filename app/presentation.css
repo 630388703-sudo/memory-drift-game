@@ -216,6 +216,9 @@
 .rush-game .rush-settings .settings-toggle:focus-visible,
 .rush-game .protect-memory:focus-visible { outline-offset:3px; }
 
+/* The scene carries the impact. Keep its caption still and readable. */
+.rush-game .bottom-console .rush-feedback[data-fault="true"] { animation:none; background:var(--ui-paper); color:var(--ui-ink); box-shadow:none; border-left:2px solid var(--ui-blue); padding-inline:1.2cqw; }
+
 /* Each slot shows the same photo entering, being overwritten, or leaving. */
 .rush-game .memory-storage .photo-slot .slot-current,
 .rush-game .memory-storage .photo-slot .slot-previous { position:absolute; inset:0; pointer-events:none; }
@@ -251,3 +254,4 @@
   .rush-game .photo-slot .slot-current { animation:none!important; }
   .rush-game .photo-slot .slot-previous { display:none; }
 }
+
