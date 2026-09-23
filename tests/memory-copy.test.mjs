@@ -239,3 +239,44 @@ test('playing captions do not repeat the photo count or a second stage badge', (
   assert.ok(source.includes('Obstacles · lose a photo'));
   assert.ok(!source.includes('createPrintSurfaces'));
 });
+
+const slotFeedbackSource=readFileSync(new URL('../app/photo-slot-feedback.ts',import.meta.url),'utf8');
+const slotFeedbackCode=ts.transpileModule(slotFeedbackSource.replace(/^import type[^\n]+\n/,'').replaceAll('export ',''),{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
+const {photoSlotChanges}=vm.runInNewContext(`${slotFeedbackCode};({photoSlotChanges})`);
+
+test('slot feedback identifies collection, replacement, alteration and loss without changing photos', () => {
+  const first=Object.freeze({id:1,at:10,version:'A',altered:false});
+  const second=Object.freeze({id:2,at:20,version:'B',altered:false});
+  const before=Object.freeze([first,null,null,null,null]);
+  assert.equal(photoSlotChanges(before,[first,second,null,null,null],100)[1].kind,'collect');
+  assert.equal(photoSlotChanges(before,[second,null,null,null,null],100)[0].kind,'replace');
+  const changed=photoSlotChanges(before,[{...first,altered:true},null,null,null,null],100)[0];
+  assert.equal(changed.kind,'alter');
+  assert.equal(changed.previous.altered,false);
+  assert.notEqual(changed.previous,first);
+  assert.equal(photoSlotChanges(before,[null,null,null,null,null],100)[0].kind,'lose');
+  assert.equal(first.altered,false);
+  assert.ok(photoSlotChanges(before,before,100).every(x=>x===null));
+});
+
+test('repeated interference gets a fresh visual event but keeps the same photo identity', () => {
+  const original={id:1,at:10,version:'A',altered:true};
+  const before=[original,null,null,null,null];
+  const after=[{...original},null,null,null,null];
+  const a=photoSlotChanges(before,after,100)[0];
+  const b=photoSlotChanges(before,after,200)[0];
+  assert.equal(a.kind,'alter');
+  assert.notEqual(a.key,b.key);
+  assert.equal(a.previous.id,original.id);
+  assert.equal(after[0].at,original.at);
+});
+
+test('slot feedback expires without affecting game timing and respects reduced motion', () => {
+  const css=readFileSync(new URL('../app/presentation.css',import.meta.url),'utf8');
+  assert.ok(source.includes('setSlotChanges(Array(5).fill(null)), 600)'));
+  assert.ok(source.includes('const RUN_DURATION_MS = 24000'));
+  assert.ok(source.includes('}, 2200)'));
+  assert.ok(css.includes('.photo-slot .slot-current { animation:none!important; }'));
+  assert.ok(css.includes('.photo-slot .slot-previous { display:none; }'));
+  assert.ok(source.includes('className="title-phrase"'));
+});

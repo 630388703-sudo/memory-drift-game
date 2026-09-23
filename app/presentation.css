@@ -215,3 +215,39 @@
 .rush-game .rush-settings .pause-quick:focus-visible,
 .rush-game .rush-settings .settings-toggle:focus-visible,
 .rush-game .protect-memory:focus-visible { outline-offset:3px; }
+
+/* Each slot shows the same photo entering, being overwritten, or leaving. */
+.rush-game .memory-storage .photo-slot .slot-current,
+.rush-game .memory-storage .photo-slot .slot-previous { position:absolute; inset:0; pointer-events:none; }
+.rush-game .memory-storage .photo-slot .slot-current img,
+.rush-game .memory-storage .photo-slot .slot-previous img { animation:none; }
+.rush-game .memory-storage .photo-slot[data-change="collect"] .slot-current { animation:slot-arrive .28s cubic-bezier(.16,.8,.3,1) both; }
+.rush-game .memory-storage .photo-slot[data-change="replace"] .slot-current { animation:slot-replace .52s cubic-bezier(.2,.7,.3,1) both; }
+.rush-game .memory-storage .photo-slot[data-change="alter"] .slot-current { animation:slot-rewrite .52s ease-out both; }
+.rush-game .memory-storage .photo-slot .slot-previous { animation:slot-old-away .42s ease-out both; }
+.rush-game .memory-storage .photo-slot[data-change="lose"] .slot-previous { animation:slot-lost .24s ease-in both; }
+.rush-game .memory-storage .photo-slot .slot-previous img { filter:none; transform:none; }
+.rush-game .memory-storage .photo-slot .slot-previous[data-version="B"] img { filter:grayscale(1); }
+.rush-game .memory-storage .photo-slot .slot-previous[data-version="C"] img { filter:hue-rotate(28deg) saturate(.8); }
+.rush-game .memory-storage .photo-slot .slot-previous[data-altered="true"] img { filter:hue-rotate(100deg) contrast(1.4); transform:scaleX(-1); }
+@keyframes slot-arrive { from { opacity:0; transform:translateY(28%); } to { opacity:1; transform:none; } }
+@keyframes slot-replace { 0%,24% { opacity:0; transform:translateY(18%); } 100% { opacity:1; transform:none; } }
+@keyframes slot-rewrite { 0% { clip-path:inset(36% 0 36%); transform:translateX(-8%); } 38% { clip-path:inset(12% 0 18%); transform:translateX(4%); } 100% { clip-path:inset(0); transform:none; } }
+@keyframes slot-old-away { 0%,22% { opacity:1; } 100% { opacity:0; transform:translateY(-18%); } }
+@keyframes slot-lost { from { opacity:1; } to { opacity:0; transform:translateY(40%); } }
+
+/* Let the answer register before the existing strips settle; total time stays 2.2 s. */
+@keyframes print-register { 0%,16% { opacity:.3; transform:translateY(calc((var(--print-index) - 2)*28px)) scale(1.14); } 68%,100% { opacity:1; transform:none; } }
+.rush-game .rush-intro .title-phrase { display:inline-block; max-width:100%; }
+.rush-game[data-lang="en"] .rush-intro[data-step="2"] h1 { text-transform:none; }
+.rush-game[data-lang="zh"] .rush-intro p,
+.rush-game[data-lang="zh"] .rush-choice h2,
+.rush-game[data-lang="zh"] .rush-choice p { line-break:strict; word-break:normal; }
+.rush-game[data-lang="en"] .rush-intro p,
+.rush-game[data-lang="en"] .rush-choice p { text-wrap:pretty; }
+.rush-game[data-quiet="true"] .photo-slot .slot-current { animation:none!important; }
+.rush-game[data-quiet="true"] .photo-slot .slot-previous { display:none; }
+@media(prefers-reduced-motion:reduce) {
+  .rush-game .photo-slot .slot-current { animation:none!important; }
+  .rush-game .photo-slot .slot-previous { display:none; }
+}

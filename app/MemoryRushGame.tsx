@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 import DormantVisual from "./DormantVisual";
 import { emptyPhotoSlots, storePhoto, alterPhoto, losePhoto, photoCount, type PhotoSlots } from "./memory-storage";
 import { addMemoryGesture, drawMemoryGestures, GESTURE_DURATION, type MemoryGesture } from "./memory-feedback";
+import { photoSlotChanges, type SlotChange } from "./photo-slot-feedback";
 import { drawPhotoFault, photoFaultStrength } from "./photo-fault";
 import { COUNT_OPTIONS, moveCount, moveChoiceIndex, recallLabel, comparisonState } from "./memory-recall";
 import { MemoryAudio, type MemoryCue } from "./memory-audio";
@@ -234,6 +235,12 @@ export default function MemoryRushGame() {
   const quietRef = useRef(false);
   const [loadError, setLoadError] = useState(false);
   const [photoSlots, setPhotoSlots] = useState<PhotoSlots>(emptyPhotoSlots);
+  const [slotChanges, setSlotChanges] = useState<Array<SlotChange | null>>(() => Array(5).fill(null));
+  useEffect(() => {
+    if (!slotChanges.some(Boolean)) return;
+    const timer = window.setTimeout(() => setSlotChanges(Array(5).fill(null)), 600);
+    return () => window.clearTimeout(timer);
+  }, [slotChanges]);
   const [showOriginal, setShowOriginal] = useState(false);
   const comparingRef = useRef(false);
   const compareOriginal = useCallback((show: boolean) => {
@@ -333,6 +340,7 @@ export default function MemoryRushGame() {
     fresh.items = [{ id: fresh.nextId++, kind: "photo", x: .5, y: .6, speed: .12, size: 1.28 }, { id: fresh.nextId++, kind: "bubble", x: .38, y: .3, speed: .12, size: 1 }];
     runtimeRef.current = fresh;
     setPhotoSlots(fresh.photos);
+    setSlotChanges(Array(5).fill(null));
     compareOriginal(false);
     memoryEventRef.current = null; setMemoryEvent(null);
     recordRef.current = null;
@@ -634,7 +642,10 @@ export default function MemoryRushGame() {
             r.combo += 1;
             const storageWasFull = r.memories >= SAVE_SLOT_COUNT;
             if (storageWasFull) r.overwritten += 1;
-            r.photos = storePhoto(r.photos, { id: item.id, at: now, version: r.version, altered: false });
+            const nextPhotos = storePhoto(r.photos, { id: item.id, at: now, version: r.version, altered: false });
+            const changes = photoSlotChanges(r.photos, nextPhotos, now);
+            setSlotChanges(previous => changes.map((change, index) => change ?? previous[index]));
+            r.photos = nextPhotos;
             r.memories = photoCount(r.photos);
             setPhotoSlots(r.photos);
             r.score += (echoHit ? 80 : 100) * Math.min(8, r.combo);
@@ -652,7 +663,10 @@ export default function MemoryRushGame() {
           } else if (item.kind === "bubble" && playerHit) {
             item.hit = true;
             if (r.memories > 0) {
-              r.photos = alterPhoto(r.photos);
+              const nextPhotos = alterPhoto(r.photos);
+              const changes = photoSlotChanges(r.photos, nextPhotos, now);
+              setSlotChanges(previous => changes.map((change, index) => change ?? previous[index]));
+              r.photos = nextPhotos;
               setPhotoSlots(r.photos);
               r.overwritten += 1;
             }
@@ -674,7 +688,10 @@ export default function MemoryRushGame() {
             r.stats.bumps += 1;
             const lostPhoto = r.memories > 0;
             if (lostPhoto) {
-              r.photos = losePhoto(r.photos);
+              const nextPhotos = losePhoto(r.photos);
+              const changes = photoSlotChanges(r.photos, nextPhotos, now);
+              setSlotChanges(previous => changes.map((change, index) => change ?? previous[index]));
+              r.photos = nextPhotos;
               r.memories = photoCount(r.photos);
               setPhotoSlots(r.photos);
             }
@@ -988,8 +1005,9 @@ export default function MemoryRushGame() {
           <div className="bottom-console">
             <div className="memory-storage" data-overwritten={hud.overwritten > 0} data-protected={hud.protected}>
               <header><b>{tr("留下的照片", "PHOTOS KEPT")}</b><span>{tr(`换过 ${hud.overwritten} 次`, `${hud.overwritten} replaced`)}</span></header>
-              <div>{photoSlots.map((photo, index) => <i key={index} className="photo-slot" data-filled={Boolean(photo)} data-version={photo?.version} data-altered={photo?.altered || undefined} data-photo-id={photo?.id} aria-label={photo ? tr(`第 ${index + 1} 格：${photo.altered ? "被泡泡改写的照片" : "留下的照片"}`, `Slot ${index + 1}: ${photo.altered ? "photo altered by a bubble" : "saved photo"}`) : tr(`第 ${index + 1} 格：空`, `Slot ${index + 1}: empty`)}>
-                {photo && <img key={`${photo.id}-${photo.altered}`} src={resolveImageUrl(photoUrl)} alt="" />}
+              <div>{photoSlots.map((photo, index) => <i key={index} className="photo-slot" data-change={slotChanges[index]?.kind} data-filled={Boolean(photo)} data-version={photo?.version} data-altered={photo?.altered || undefined} data-photo-id={photo?.id} aria-label={photo ? tr(`第 ${index + 1} 格：${photo.altered ? "被泡泡改写的照片" : "留下的照片"}`, `Slot ${index + 1}: ${photo.altered ? "photo altered by a bubble" : "saved photo"}`) : tr(`第 ${index + 1} 格：空`, `Slot ${index + 1}: empty`)}>
+                {photo && <div className="slot-current" key={slotChanges[index]?.key ?? photo.id}><img src={resolveImageUrl(photoUrl)} alt="" /></div>}
+                {slotChanges[index]?.previous && <div className="slot-previous" key={`previous-${slotChanges[index]?.key}`} data-version={slotChanges[index]?.previous?.version} data-altered={slotChanges[index]?.previous?.altered} aria-hidden="true"><img src={resolveImageUrl(photoUrl)} alt="" /></div>}
                 <span aria-hidden="true">{String(index + 1).padStart(2,"0")}</span>
               </i>)}</div>
             </div>
@@ -1030,7 +1048,7 @@ export default function MemoryRushGame() {
               return <i key={label} data-active={index <= active}><b>0{index + 1}</b>{label}</i>;
             })}
           </nav>
-          <h1>{intro === 0 ? tr("忘了自己是什么", "WHAT WAS I AGAIN?") : intro === 1 ? tr("看看这张照片", "Look at this photo") : intro === 2 ? tr("你刚才看见了几个人？", "HOW MANY PEOPLE DID YOU SEE?") : intro === 3 ? (recallAnswer === 0 ? tr("你选了“记不清”", "You chose “Not sure”") : tr(`你选了 ${recallAnswer} 人`, `You chose ${recallAnswer} people`)) : tr("操作说明", "Controls")}</h1>
+          <h1>{intro === 0 ? tr("忘了自己是什么", "WHAT WAS I AGAIN?") : intro === 1 ? tr("看看这张照片", "Look at this photo") : intro === 2 ? <><span className="title-phrase">{tr("你刚才看见了", "How many people")}</span>{language === "en" ? " " : ""}<span className="title-phrase">{tr("几个人？", "did you see?")}</span></> : intro === 3 ? (recallAnswer === 0 ? tr("你选了“记不清”", "You chose “Not sure”") : tr(`你选了 ${recallAnswer} 人`, `You chose ${recallAnswer} people`)) : tr("操作说明", "Controls")}</h1>
           {intro === 0 && <div className="intro-photo intro-photo-0">
             <img src={resolveImageUrl(photoUrl)} alt={tr("一只装着照片的相框", "A framed photo")} />
             <i />
