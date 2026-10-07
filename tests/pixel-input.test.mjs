@@ -19,19 +19,20 @@ function fixture() {
     removeEventListener(type, fn) { listeners.get(type)?.delete(fn); },
   };
   vm.runInNewContext(code, { exports, window, navigator: { getGamepads() { if (denied) throw new Error('Policy denied'); return pads; } } });
-  const actions = [], navigation = [], devices = [], rebinds = [];
+  const actions = [], navigation = [], devices = [], rebinds = [], connections = [], buttons = [];
   let disconnects = 0;
   const input = exports.createPixelInput({
     onAction: (...args) => actions.push(args), onNavigate: dir => navigation.push(dir),
     onDevice: name => devices.push(name), onRebind: (...args) => rebinds.push(args),
     onDisconnect: () => disconnects++,
+    onConnection: connection => connections.push(connection), onButton: (...args) => buttons.push(args),
   });
   const fire = (type, data = {}) => {
     const event = { code: '', key: '', repeat: false, preventDefault() {}, ...data };
     for (const listener of listeners.get(type) || []) listener(event);
   };
-  const pad = { index: 0, connected: true, axes: [0, 0], buttons: Array.from({ length: 16 }, () => ({ pressed: false, value: 0 })) };
-  return { input, exports, actions, navigation, devices, rebinds, saved, listeners, fire, pad,
+  const pad = { index: 0, id: 'Test USB arcade', connected: true, axes: [0, 0], buttons: Array.from({ length: 16 }, () => ({ pressed: false, value: 0 })) };
+  return { input, exports, actions, navigation, devices, rebinds, connections, buttons, saved, listeners, fire, pad,
     connect: () => { pads = [pad]; }, disconnect: () => { pads = []; }, deny: () => { denied = true; },
     disconnects: () => disconnects,
   };
@@ -75,7 +76,7 @@ test('movement and menu navigation require recentering, not held-axis repeat', (
 });
 
 test('all six gamepad bindings emit press and release; jump pressed is consumed', () => {
-  const f = fixture(); f.connect(); f.input.read();
+  const f = fixture(); assert.equal(f.input.getLayout(), 6); f.connect(); f.input.read();
   for (const button of f.pad.buttons.slice(0, 6)) button.pressed = true;
   assert.equal(f.input.read().jumpPressed, true);
   assert.equal(f.input.read().jumpPressed, false);
@@ -84,6 +85,99 @@ test('all six gamepad bindings emit press and release; jump pressed is consumed'
   f.input.read();
   assert.deepEqual(f.actions, ['jump', 'protect', 'confirm', 'pause', 'compare', 'help'].map(action => [action, true])
     .concat(['jump', 'protect', 'confirm', 'pause', 'compare', 'help'].map(action => [action, false])));
+});
+
+test('legacy four-button layout remains supported; extra actions remain keyboard-accessible', () => {
+  const f = fixture(); f.input.setLayout(4); f.connect(); f.input.read();
+  assert.equal(f.input.getLayout(), 4);
+  for (const button of f.pad.buttons.slice(0, 6)) button.pressed = true;
+  f.input.read();
+  assert.deepEqual(f.actions, ['jump', 'protect', 'confirm', 'pause'].map(action => [action, true]));
+  f.fire('keydown', { code: 'KeyC' }); f.fire('keydown', { code: 'KeyH' });
+  assert.deepEqual(f.actions.slice(-2), [['compare', true], ['help', true]]);
+});
+
+test('layout selection persists separately from bindings and blocks held buttons on a switch', () => {
+  const f = fixture(); f.connect(); f.input.setLayout(6);
+  assert.equal(f.exports.loadPixelLayout(), 6);
+  f.pad.buttons[4].pressed = true; f.input.read();
+  f.input.setLayout(4); f.input.read();
+  assert.deepEqual(f.actions, [['compare', true], ['compare', false]]);
+  assert.equal(f.exports.loadPixelLayout(), 4);
+  f.input.setLayout(6); f.input.read();
+  assert.equal(f.actions.length, 2);
+  f.pad.buttons[4].pressed = false; f.input.read(); f.pad.buttons[4].pressed = true; f.input.read();
+  assert.deepEqual(f.actions.at(-1), ['compare', true]);
+  assert.equal(f.exports.createPixelInput().getLayout(), 6);
+  assert.equal(f.input.getBindings().help, 5);
+  f.input.setLayout(8); assert.equal(f.input.getLayout(), 6);
+});
+
+test('layout storage rejects malformed values and tolerates denied storage', () => {
+  const f = fixture();
+  for (const value of ['null', 'broken', '8', '"6"', '{}']) {
+    f.saved.set(f.exports.PIXEL_LAYOUT_KEY, value);
+    assert.equal(f.exports.loadPixelLayout(), 6);
+  }
+  assert.equal(f.exports.loadPixelLayout({ getItem() { throw Error('blocked'); } }), 6);
+  assert.equal(f.exports.savePixelLayout(6, { setItem() { throw Error('full'); } }), false);
+  assert.equal(f.exports.savePixelLayout(8), false);
+});
+
+test('connection and actual button notifications fire only on change and release on disconnect', () => {
+  const f = fixture(); f.input.read(); assert.equal(f.connections.length, 0);
+  f.connect(); f.input.read(); f.input.read();
+  assert.equal(f.connections.length, 1);
+  assert.equal(f.connections[0].id, 'Test USB arcade'); assert.equal(f.connections[0].buttons, 16);
+  const snapshot = f.input.getConnection(); snapshot.id = 'changed';
+  assert.equal(f.input.getConnection().id, 'Test USB arcade');
+  f.pad.buttons[7].pressed = true; f.input.read(); f.input.read();
+  assert.deepEqual(f.buttons, [[7, true]]); assert.equal(f.actions.length, 0);
+  f.disconnect(); f.input.read(); f.input.read();
+  assert.deepEqual(f.buttons, [[7, true], [7, false]]);
+  assert.equal(f.connections.length, 2); assert.equal(f.connections[1].connected, false);
+  assert.equal(f.disconnects(), 1);
+});
+
+test('up/down stick and d-pad navigate once per neutral without horizontal movement', () => {
+  const f = fixture(); f.connect();
+  f.pad.axes[1] = 0.18; f.input.read(); assert.equal(f.navigation.length, 0);
+  f.pad.axes[1] = 1; assert.equal(f.input.read().axis, 0);
+  f.input.read(); f.pad.axes[1] = -1; f.input.read();
+  assert.deepEqual(f.navigation, [1]);
+  f.pad.axes[1] = 0; f.input.read(); f.pad.buttons[12].pressed = true;
+  assert.equal(f.input.read().axis, 0); assert.deepEqual(f.navigation, [1, -1]);
+  f.input.clear(); f.input.read(); assert.deepEqual(f.navigation, [1, -1]);
+  f.pad.buttons[12].pressed = false; f.input.read(); f.pad.buttons[13].pressed = true; f.input.read();
+  assert.deepEqual(f.navigation, [1, -1, 1]);
+});
+
+test('keyboard up/down navigation also waits for neutral and does not move the player', () => {
+  const f = fixture();
+  f.fire('keydown', { code: 'ArrowDown' }); f.fire('keydown', { code: 'ArrowDown', repeat: true });
+  assert.equal(f.input.read().axis, 0); assert.deepEqual(f.navigation, [1]);
+  f.fire('keyup', { code: 'ArrowDown' }); f.fire('keydown', { code: 'ArrowUp' });
+  assert.deepEqual(f.navigation, [1, -1]);
+});
+
+test('capture suppresses vertical menu movement and reports real remapped button without an action', () => {
+  const f = fixture(); f.connect(); f.input.read(); f.input.capture('protect');
+  f.pad.axes[1] = 1; f.input.read(); assert.equal(f.navigation.length, 0);
+  f.pad.buttons[7].pressed = true; f.input.read();
+  assert.equal(f.input.getBindings().protect, 7); assert.equal(f.input.read().protect, false);
+  assert.deepEqual(f.buttons, [[7, true]]); assert.equal(f.actions.length, 0);
+  assert.equal(f.navigation.length, 0);
+  f.pad.axes[1] = 0; f.input.read(); f.pad.axes[1] = -1; f.input.read();
+  assert.deepEqual(f.navigation, [-1]);
+});
+
+test('four-key mode uses action membership, not the physical button index', () => {
+  const f = fixture(); f.input.setLayout(4); f.connect(); f.input.read(); f.input.capture('jump');
+  f.pad.buttons[5].pressed = true; f.input.read();
+  f.pad.buttons[5].pressed = false; f.input.read(); f.pad.buttons[5].pressed = true;
+  assert.equal(f.input.read().jumpPressed, true); assert.equal(f.input.getBindings().help, 0);
+  f.pad.buttons[0].pressed = true; f.input.read();
+  assert.equal(f.actions.some(([action]) => action === 'help'), false);
 });
 
 test('clear blocks already-held pad buttons and axis until release/recenter', () => {

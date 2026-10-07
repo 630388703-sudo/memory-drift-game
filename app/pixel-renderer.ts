@@ -2,8 +2,9 @@ import backgroundAsset from '../game/assets/pixel/background.png';
 import atlasAsset from '../game/assets/pixel/atlas.png';
 import {
   CHECKPOINTS, GOAL_X, GROUND_Y, LEVEL_BUBBLES, LEVEL_HAZARDS,
-  LEVEL_PHOTOS, LEVEL_PLATFORMS, PLAYER_HEIGHT, PLAYER_WIDTH,
-  VIEW_HEIGHT, VIEW_WIDTH, WORLD_WIDTH, bubblePosition, type WorldState,
+  LEVEL_PHOTOS, LEVEL_PLATFORMS, LEVEL_SPRINGS, PRACTICE_PHOTOS, PRACTICE_PLATFORMS,
+  PLAYER_HEIGHT, PLAYER_WIDTH, VIEW_HEIGHT, VIEW_WIDTH, WORLD_WIDTH,
+  bubblePosition, hazardPosition, type WorldState,
 } from './pixel-world';
 
 type SpriteFrame = { x: number; y: number; width: number; height: number };
@@ -156,6 +157,21 @@ function shieldCorners(ctx: CanvasRenderingContext2D, x: number, y: number, widt
   }
 }
 
+function routeArrow(ctx: CanvasRenderingContext2D, x: number, y: number, direction: 'up' | 'left' | 'right') {
+  ctx.save();
+  ctx.translate(pixel(x), pixel(y));
+  if (direction === 'up') ctx.rotate(-Math.PI / 2);
+  else if (direction === 'left') ctx.scale(-1, 1);
+  ctx.fillStyle = '#21364e';
+  ctx.fillRect(-12, -4, 18, 8);
+  ctx.fillRect(2, -10, 6, 20);
+  ctx.fillRect(8, -6, 6, 12);
+  ctx.fillRect(14, -2, 4, 4);
+  ctx.fillStyle = '#a8f5db';
+  ctx.fillRect(-10, -2, 18, 4);
+  ctx.restore();
+}
+
 /** Draw into a 480×270 backing canvas; the simulation remains 960×540 logical pixels. */
 export function drawPixelWorld(
   ctx: CanvasRenderingContext2D, world: WorldState, art: PixelArt, options: PixelWorldOptions = {},
@@ -172,29 +188,55 @@ export function drawPixelWorld(
   ctx.translate(-camera, 0);
   const firstTile = Math.floor(camera / 48) * 48;
   tiles(ctx, art, firstTile, GROUND_Y, VIEW_WIDTH + 96, VIEW_HEIGHT - GROUND_Y);
-  for (const platform of LEVEL_PLATFORMS) {
+  const practice = world.mode === 'practice';
+  for (const platform of practice ? PRACTICE_PLATFORMS : LEVEL_PLATFORMS) {
     if (platform.x + platform.width < camera || platform.x > camera + VIEW_WIDTH) continue;
     tiles(ctx, art, platform.x, platform.y, platform.width, 30);
   }
-  CHECKPOINTS.forEach((x, index) => {
-    if (x > camera - 90 && x < camera + VIEW_WIDTH) marker(ctx, art, x, `0${index + 1}`, world.checkpoint > index);
-  });
-  if (GOAL_X > camera - 90 && GOAL_X < camera + VIEW_WIDTH) marker(ctx, art, GOAL_X, 'EXIT', world.finished);
+  if (!practice) {
+    CHECKPOINTS.forEach((x, index) => {
+      if (x > camera - 90 && x < camera + VIEW_WIDTH) marker(ctx, art, x, `0${index + 1}`, world.checkpoint > index);
+    });
+    if (GOAL_X > camera - 90 && GOAL_X < camera + VIEW_WIDTH) marker(ctx, art, GOAL_X, 'EXIT', world.finished);
+    for (const spring of LEVEL_SPRINGS) {
+      if (spring.x + spring.width < camera || spring.x > camera + VIEW_WIDTH) continue;
+      tiles(ctx, art, spring.x, GROUND_Y - 8, spring.width, 12);
+      ctx.fillStyle = '#21364e'; ctx.fillRect(spring.x + 4, GROUND_Y - 10, spring.width - 8, 4);
+      ctx.fillStyle = '#a8f5db'; ctx.fillRect(spring.x + 6, GROUND_Y - 12, spring.width - 12, 4);
+      routeArrow(ctx, spring.x + spring.width / 2, GROUND_Y - 32, 'up');
+    }
+  } else if (world.collected.size === 0) {
+    routeArrow(ctx, 235, GROUND_Y - 24, 'right');
+    routeArrow(ctx, 337, GROUND_Y - 38, 'up');
+    shieldCorners(ctx, 402, 298, 46, 46);
+  }
 
-  for (const photo of LEVEL_PHOTOS) {
+  for (const photo of practice ? PRACTICE_PHOTOS : LEVEL_PHOTOS) {
     if (world.collected.has(photo.id) || photo.x < camera - 40 || photo.x > camera + VIEW_WIDTH + 40) continue;
     const bob = options.reducedMotion ? 0 : pixel(Math.sin(world.time * 2.4 + photo.x) * 2);
     drawAtlasSprite(ctx, art, 4, photo.x - 16, photo.y - 16 + bob, 32, 32);
   }
-  for (const bubble of LEVEL_BUBBLES) {
+  for (const bubble of practice ? [] : LEVEL_BUBBLES) {
     // The visual follows the same trajectory as the collider, including reduced-motion mode.
     const point = bubblePosition(bubble, world.time);
     if (point.x < camera - 50 || point.x > camera + VIEW_WIDTH + 50) continue;
     drawAtlasSprite(ctx, art, 5, point.x - bubble.radius, point.y - bubble.radius, bubble.radius * 2, bubble.radius * 2);
   }
-  for (const hazard of LEVEL_HAZARDS) {
-    if (hazard.x + hazard.width < camera || hazard.x > camera + VIEW_WIDTH) continue;
-    drawAtlasSprite(ctx, art, 7, hazard.x, hazard.y, hazard.width, hazard.height);
+  for (const hazard of practice ? [] : LEVEL_HAZARDS) {
+    const point = hazardPosition(hazard, world.time);
+    if (point.x + hazard.width < camera || point.x > camera + VIEW_WIDTH) continue;
+    if (hazard.patrol) {
+      ctx.fillStyle = '#21364e';
+      ctx.globalAlpha = .3;
+      ctx.fillRect(pixel(hazard.x - hazard.patrol), GROUND_Y - 2, hazard.patrol * 2 + hazard.width, 2);
+      ctx.globalAlpha = 1;
+    }
+    drawAtlasSprite(ctx, art, 7, point.x, point.y, hazard.width, hazard.height);
+  }
+  if (practice && world.practiceSignal) {
+    const signal = world.practiceSignal;
+    drawAtlasSprite(ctx, art, 5, signal.x - 17, signal.y - 17, 34, 34);
+    routeArrow(ctx, signal.x - signal.direction * 35, signal.y, signal.direction < 0 ? 'left' : 'right');
   }
 
   const running = !options.idle && Math.abs(world.vx) > 14;

@@ -2,11 +2,14 @@ export type PixelAction = 'jump' | 'protect' | 'confirm' | 'pause' | 'compare' |
 export type PixelBindings = Record<PixelAction, number>;
 export type PixelDevice = 'keyboard' | 'gamepad' | 'touch';
 export type PixelTouchAction = PixelAction | 'left' | 'right';
+export type PixelLayout = 4 | 6;
+export interface PixelConnection { connected: boolean; id: string; buttons: number }
 
 export const DEFAULT_BUTTONS: Readonly<PixelBindings> = Object.freeze({
   jump: 0, protect: 1, confirm: 2, pause: 3, compare: 4, help: 5,
 });
 export const PIXEL_BINDINGS_KEY = 'memory-drift.pixel-buttons.v1';
+export const PIXEL_LAYOUT_KEY = 'memory-drift.pixel-layout.v1';
 const ACTIONS = Object.keys(DEFAULT_BUTTONS) as PixelAction[];
 const DEADZONE = 0.2;
 const KEY_ACTIONS: Record<string, PixelAction> = {
@@ -15,6 +18,8 @@ const KEY_ACTIONS: Record<string, PixelAction> = {
 };
 const LEFT = new Set(['ArrowLeft', 'KeyA']);
 const RIGHT = new Set(['ArrowRight', 'KeyD']);
+const UP = new Set(['ArrowUp', 'KeyW']);
+const DOWN = new Set(['ArrowDown', 'KeyS']);
 
 function validBindings(value: unknown): value is PixelBindings {
   if (!value || typeof value !== 'object') return false;
@@ -44,17 +49,33 @@ export function savePixelBindings(bindings: PixelBindings, storage: Pick<Storage
   } catch { return false; }
 }
 
+export function loadPixelLayout(storage: Pick<Storage, 'getItem'> | null = browserStorage()): PixelLayout {
+  try { return storage?.getItem(PIXEL_LAYOUT_KEY) === '4' ? 4 : 6; }
+  catch { return 6; }
+}
+
+export function savePixelLayout(layout: PixelLayout, storage: Pick<Storage, 'setItem'> | null = browserStorage()): boolean {
+  if ((layout !== 4 && layout !== 6) || !storage) return false;
+  try { storage.setItem(PIXEL_LAYOUT_KEY, String(layout)); return true; }
+  catch { return false; }
+}
+
 export interface PixelInputOptions {
   onAction?: (action: PixelAction, pressed: boolean) => void;
   onNavigate?: (direction: -1 | 1) => void;
   onDevice?: (device: PixelDevice) => void;
   onRebind?: (action: PixelAction, index: number, bindings: PixelBindings) => void;
   onDisconnect?: () => void;
+  onConnection?: (connection: PixelConnection) => void;
+  /** Real device indices, reported on changes only; not cabinet positions. */
+  onButton?: (index: number, pressed: boolean) => void;
 }
 
 /** Poll read() once each animation frame, including while a menu is open. */
 export function createPixelInput(options: PixelInputOptions = {}) {
   let bindings = loadPixelBindings();
+  let layout = loadPixelLayout();
+  let connection: PixelConnection = { connected: false, id: '', buttons: 0 };
   const keys = new Set<string>();
   const touches = new Set<PixelTouchAction>();
   const padActions = new Set<PixelAction>();
@@ -63,6 +84,8 @@ export function createPixelInput(options: PixelInputOptions = {}) {
   const blockedButtons = new Set<number>();
   let padAxis = 0;
   let previousRawAxis = 0;
+  let padVertical = 0;
+  let previousRawVertical = 0;
   let blockAxis = false;
   let navDirection = 0;
   let jumpPressed = false;
@@ -101,7 +124,9 @@ export function createPixelInput(options: PixelInputOptions = {}) {
   }
 
   function syncNavigation() {
-    const direction = Math.sign(axis());
+    const up = [...keys].some(code => UP.has(code));
+    const down = [...keys].some(code => DOWN.has(code));
+    const direction = capturedAction ? 0 : Math.sign(up || down ? Number(down) - Number(up) : padVertical || axis());
     const before = navDirection;
     navDirection = direction;
     // A held stick cannot scroll repeatedly through a recall answer.
@@ -113,23 +138,32 @@ export function createPixelInput(options: PixelInputOptions = {}) {
     touches.clear();
     padActions.clear();
     for (const index of previousButtons) blockedButtons.add(index);
-    blockAxis = Boolean(previousRawAxis);
-    padAxis = 0;
+    blockAxis = Boolean(previousRawAxis || previousRawVertical);
+    padAxis = padVertical = 0;
     navDirection = 0;
     jumpPressed = false;
     syncActions();
+  }
+
+  function updateConnection(next: PixelConnection) {
+    if (next.connected === connection.connected && next.id === connection.id && next.buttons === connection.buttons) return;
+    connection = next;
+    options.onConnection?.({ ...next });
   }
 
   function forgetPad(notify: boolean) {
     const wasConnected = padIndex !== null;
     padIndex = null;
     padActions.clear();
+    for (const index of previousButtons) options.onButton?.(index, false);
     previousButtons.clear();
     blockedButtons.clear();
     padAxis = previousRawAxis = 0;
+    padVertical = previousRawVertical = 0;
     blockAxis = false;
     syncActions();
     syncNavigation();
+    updateConnection({ connected: false, id: '', buttons: 0 });
     if (notify && wasConnected) options.onDisconnect?.();
   }
 
@@ -141,24 +175,32 @@ export function createPixelInput(options: PixelInputOptions = {}) {
     const available = pads.filter((pad): pad is Gamepad => Boolean(pad?.connected));
     const pad = available.find(item => item.index === padIndex) || available[0];
     if (!pad) { forgetPad(true); return; }
-    if (padIndex !== null && padIndex !== pad.index) forgetPad(true);
+    if (padIndex !== null && (padIndex !== pad.index || connection.id !== (pad.id || ''))) forgetPad(true);
     padIndex = pad.index;
+    updateConnection({ connected: true, id: pad.id || '', buttons: pad.buttons.length });
     const pressed = new Set<number>();
     pad.buttons.forEach((button, index) => {
       if (button.pressed || button.value > 0.5) pressed.add(index);
     });
     const newlyPressed = [...pressed].filter(index => index < 64 && !previousButtons.has(index));
     const released = [...previousButtons].some(index => !pressed.has(index));
+    for (const index of previousButtons) if (!pressed.has(index)) options.onButton?.(index, false);
+    for (const index of pressed) if (!previousButtons.has(index)) options.onButton?.(index, true);
     previousButtons = pressed;
     for (const index of blockedButtons) if (!pressed.has(index)) blockedButtons.delete(index);
     const raw = Number.isFinite(pad.axes[0]) ? Math.max(-1, Math.min(1, pad.axes[0])) : 0;
     const stick = Math.abs(raw) <= DEADZONE ? 0 : Math.sign(raw) * (Math.abs(raw) - DEADZONE) / (1 - DEADZONE);
     const dpad = Number(pressed.has(15)) - Number(pressed.has(14));
     const nextAxis = pressed.has(14) || pressed.has(15) ? dpad : stick;
-    if (newlyPressed.length || released || Math.abs(nextAxis - previousRawAxis) > 0.05) useDevice('gamepad');
+    const rawVertical = Number.isFinite(pad.axes[1]) ? Math.max(-1, Math.min(1, pad.axes[1])) : 0;
+    const verticalStick = Math.abs(rawVertical) <= DEADZONE ? 0 : Math.sign(rawVertical) * (Math.abs(rawVertical) - DEADZONE) / (1 - DEADZONE);
+    const nextVertical = pressed.has(12) || pressed.has(13) ? Number(pressed.has(13)) - Number(pressed.has(12)) : verticalStick;
+    if (newlyPressed.length || released || Math.abs(nextAxis - previousRawAxis) > 0.05 || Math.abs(nextVertical - previousRawVertical) > 0.05) useDevice('gamepad');
     previousRawAxis = nextAxis;
-    if (!nextAxis) blockAxis = false;
+    previousRawVertical = nextVertical;
+    if (!nextAxis && !nextVertical) blockAxis = false;
     padAxis = blockAxis || capturedAction ? 0 : nextAxis;
+    padVertical = blockAxis || capturedAction ? 0 : nextVertical;
 
     if (capturedAction) {
       padActions.clear();
@@ -171,12 +213,14 @@ export function createPixelInput(options: PixelInputOptions = {}) {
         if (other) bindings[other] = oldIndex;
         capturedAction = null;
         for (const heldIndex of pressed) blockedButtons.add(heldIndex);
+        blockAxis = Boolean(nextAxis || nextVertical);
         savePixelBindings(bindings);
         options.onRebind?.(action, index, { ...bindings });
       }
     } else {
       padActions.clear();
       for (const action of ACTIONS) {
+        if (layout === 4 && (action === 'compare' || action === 'help')) continue;
         const index = bindings[action];
         if (pressed.has(index) && !blockedButtons.has(index)) padActions.add(action);
       }
@@ -199,7 +243,7 @@ export function createPixelInput(options: PixelInputOptions = {}) {
   function keyDown(event: KeyboardEvent) {
     const code = eventCode(event);
     if (disposed || !focused || isEditing(event) || event.ctrlKey || event.altKey || event.metaKey) return;
-    if (!KEY_ACTIONS[code] && !LEFT.has(code) && !RIGHT.has(code)) return;
+    if (!KEY_ACTIONS[code] && !LEFT.has(code) && !RIGHT.has(code) && !UP.has(code) && !DOWN.has(code)) return;
     event.preventDefault();
     if (event.repeat || keys.has(code)) return;
     useDevice('keyboard');
@@ -250,6 +294,15 @@ export function createPixelInput(options: PixelInputOptions = {}) {
       savePixelBindings(bindings);
     },
     getBindings(): PixelBindings { return { ...bindings }; },
+    setLayout(next: PixelLayout) {
+      if ((next !== 4 && next !== 6) || layout === next) return;
+      clear();
+      capturedAction = null;
+      layout = next;
+      savePixelLayout(layout);
+    },
+    getLayout(): PixelLayout { return layout; },
+    getConnection(): PixelConnection { return { ...connection }; },
     capture(action: PixelAction | null) {
       clear();
       capturedAction = action;

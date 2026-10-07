@@ -16,8 +16,20 @@ export const AREA_STARTS = [90, 1290, 2540] as const;
 
 export type Platform = { id: string; x: number; y: number; width: number };
 export type Photo = { id: string; x: number; y: number; area: number };
-export type Hazard = { id: string; x: number; y: number; width: number; height: number };
+export type Hazard = {
+  id: string; x: number; y: number; width: number; height: number;
+  patrol?: number; speed?: number; phase?: number;
+};
 export type Bubble = { id: string; x: number; y: number; radius: number; phase: number };
+export type Spring = { id: string; x: number; width: number };
+export type PracticeSignal = { x: number; y: number; direction: -1 | 1 };
+
+export const PRACTICE_PLATFORMS: readonly Platform[] = [
+  { id: 'practice-shelf', x: 360, y: 355, width: 150 },
+];
+export const PRACTICE_PHOTOS: readonly Photo[] = [
+  { id: 'practice-photo', x: 425, y: 321, area: 0 },
+];
 
 // Elevated paths are optional: the ground remains continuous from entrance to exit.
 export const LEVEL_PLATFORMS: readonly Platform[] = [
@@ -49,12 +61,24 @@ export const LEVEL_PHOTOS: readonly Photo[] = [
 
 export const LEVEL_HAZARDS: readonly Hazard[] = [
   { id: 'noise-a', x: 605, y: 402, width: 28, height: 28 },
-  { id: 'noise-b', x: 1070, y: 398, width: 32, height: 32 },
+  { id: 'noise-b', x: 1070, y: 398, width: 32, height: 32, patrol: 45, speed: .65 },
   { id: 'noise-c', x: 1770, y: 402, width: 32, height: 28 },
-  { id: 'noise-d', x: 2290, y: 398, width: 34, height: 32 },
+  { id: 'noise-d', x: 2290, y: 398, width: 34, height: 32, patrol: 50, speed: .55, phase: 1.2 },
   { id: 'noise-e', x: 3040, y: 402, width: 32, height: 28 },
-  { id: 'noise-f', x: 3555, y: 398, width: 36, height: 32 },
+  { id: 'noise-f', x: 3555, y: 398, width: 36, height: 32, patrol: 55, speed: .65, phase: 2.1 },
 ];
+
+// An optional shortcut up to shelf-d. Walking past it never gates the main route.
+export const LEVEL_SPRINGS: readonly Spring[] = [
+  { id: 'spring-d', x: 2015, width: 46 },
+];
+
+export function hazardPosition(hazard: Hazard, time: number) {
+  return {
+    x: hazard.x + Math.sin(time * (hazard.speed ?? 0) + (hazard.phase ?? 0)) * (hazard.patrol ?? 0),
+    y: hazard.y,
+  };
+}
 
 export const LEVEL_BUBBLES: readonly Bubble[] = [
   { id: 'echo-a', x: 790, y: 365, radius: 17, phase: 0 },
@@ -86,10 +110,12 @@ export type WorldEvent = LocatedEvent & (
   | { type: 'checkpoint'; index: number }
   | { type: 'finish' }
   | { type: 'protect' }
+  | { type: 'spring'; id: string }
   | { type: 'block'; source: 'hazard' | 'bubble'; id: string }
 );
 
 export type WorldState = {
+  mode: 'game' | 'practice';
   x: number;
   y: number;
   vx: number;
@@ -110,10 +136,14 @@ export type WorldState = {
   jumpWasHeld: boolean;
   protectLatched: boolean;
   protectReadyAt: number;
+  springReadyAt: number;
+  practiceSignal: PracticeSignal | null;
+  practiceSignalReadyAt: number;
 };
 
-export function createWorld(): WorldState {
+export function createWorld(mode: 'game' | 'practice' = 'game'): WorldState {
   return {
+    mode,
     x: AREA_STARTS[0], y: GROUND_Y - PLAYER_HEIGHT, vx: 0, vy: 0,
     facing: 1, grounded: true, time: 0, cameraX: 0, checkpoint: 0,
     shieldUntil: 0, invulnerableUntil: 0, protectCharge: 0,
@@ -121,6 +151,7 @@ export function createWorld(): WorldState {
     stats: { collisions: 0, bubbles: 0, blocks: 0, jumps: 0, distance: 0 },
     finished: false, coyote: 0.1, jumpBuffer: 0, jumpWasHeld: false,
     protectLatched: false, protectReadyAt: 0,
+    springReadyAt: 0, practiceSignal: null, practiceSignalReadyAt: 0,
   };
 }
 
@@ -175,7 +206,7 @@ export function stepWorld(state: WorldState, input: WorldInput, seconds: number)
   if (axis !== 0) state.facing = axis < 0 ? -1 : 1;
   const oldX = state.x;
   const oldBottom = state.y + PLAYER_HEIGHT;
-  state.x = clamp(state.x + state.vx * dt, 0, WORLD_WIDTH - PLAYER_WIDTH);
+  state.x = clamp(state.x + state.vx * dt, 0, state.mode === 'practice' ? 900 : WORLD_WIDTH - PLAYER_WIDTH);
   state.stats.distance += Math.abs(state.x - oldX);
   const gravity = GRAVITY * (state.vy > 0 ? 1.7 : 1);
   state.y += state.vy * dt + 0.5 * gravity * dt * dt;
@@ -185,7 +216,7 @@ export function stepWorld(state: WorldState, input: WorldInput, seconds: number)
   if (state.vy >= 0) {
     let surface = Number.POSITIVE_INFINITY;
     if (oldBottom <= GROUND_Y + 1 && state.y + PLAYER_HEIGHT >= GROUND_Y) surface = GROUND_Y;
-    for (const platform of LEVEL_PLATFORMS) {
+    for (const platform of state.mode === 'practice' ? PRACTICE_PLATFORMS : LEVEL_PLATFORMS) {
       if (state.x + PLAYER_WIDTH > platform.x && state.x < platform.x + platform.width
         && oldBottom <= platform.y + 1 && state.y + PLAYER_HEIGHT >= platform.y) {
         surface = Math.min(surface, platform.y);
@@ -198,10 +229,25 @@ export function stepWorld(state: WorldState, input: WorldInput, seconds: number)
     }
   }
 
+  if (state.mode === 'game' && state.grounded && state.time >= state.springReadyAt) {
+    for (const spring of LEVEL_SPRINGS) {
+      if (state.y + PLAYER_HEIGHT === GROUND_Y
+        && state.x + PLAYER_WIDTH > spring.x + 6 && state.x < spring.x + spring.width - 6) {
+        state.vy = JUMP_SPEED * 1.12;
+        state.grounded = false;
+        state.coyote = 0;
+        state.jumpBuffer = 0;
+        state.springReadyAt = state.time + .35;
+        events.push({ type: 'spring', id: spring.id, ...location() });
+        break;
+      }
+    }
+  }
+
   if (state.y > VIEW_HEIGHT + 80) {
     state.stats.collisions++;
     events.push({ type: 'collision', source: 'fall', ...location() });
-    state.x = AREA_STARTS[clamp(state.checkpoint, 0, 2)];
+    state.x = state.mode === 'practice' ? 90 : AREA_STARTS[clamp(state.checkpoint, 0, 2)];
     state.y = GROUND_Y - PLAYER_HEIGHT;
     state.vx = 0;
     state.vy = 0;
@@ -211,7 +257,7 @@ export function stepWorld(state: WorldState, input: WorldInput, seconds: number)
     state.invulnerableUntil = state.time + 1.2;
   }
 
-  for (const photo of LEVEL_PHOTOS) {
+  for (const photo of state.mode === 'practice' ? PRACTICE_PHOTOS : LEVEL_PHOTOS) {
     if (!state.collected.has(photo.id) && overlaps(state, photo.x - 12, photo.y - 12, 24, 24)) {
       state.collected.add(photo.id);
       events.push({ type: 'photo', id: photo.id, x: photo.x, y: photo.y });
@@ -236,18 +282,49 @@ export function stepWorld(state: WorldState, input: WorldInput, seconds: number)
       events.push({ type: 'bubble', id, ...location() });
     }
   };
-  for (const hazard of LEVEL_HAZARDS) {
-    if (overlaps(state, hazard.x + 3, hazard.y + 3, hazard.width - 6, hazard.height - 3)) {
+  for (const hazard of state.mode === 'practice' ? [] : LEVEL_HAZARDS) {
+    const point = hazardPosition(hazard, state.time);
+    if (overlaps(state, point.x + 3, point.y + 3, hazard.width - 6, hazard.height - 3)) {
       contact('hazard', hazard.id);
     }
   }
-  for (const bubble of LEVEL_BUBBLES) {
+  for (const bubble of state.mode === 'practice' ? [] : LEVEL_BUBBLES) {
     const point = bubblePosition(bubble, state.time);
     const nearestX = clamp(point.x, state.x, state.x + PLAYER_WIDTH);
     const nearestY = clamp(point.y, state.y, state.y + PLAYER_HEIGHT);
     if (Math.hypot(point.x - nearestX, point.y - nearestY) < bubble.radius * 0.83) {
       contact('bubble', bubble.id);
     }
+  }
+
+  if (state.mode === 'practice') {
+    // No pressure before collecting the photo. Returning to the floor starts an
+    // obvious, slow approach with enough time for the 0.7-second protection hold.
+    if (!state.practiceSignal && state.collected.size > 0 && state.stats.blocks === 0
+      && state.grounded && state.y + PLAYER_HEIGHT === GROUND_Y
+      && state.time >= state.practiceSignalReadyAt) {
+      const direction = state.x < 650 ? -1 : 1;
+      state.practiceSignal = {
+        x: clamp(state.x + PLAYER_WIDTH / 2 - direction * 250, 40, 920),
+        y: GROUND_Y - 20, direction,
+      };
+    }
+    const signal = state.practiceSignal;
+    if (signal) {
+      signal.x += signal.direction * 96 * dt;
+      if (overlaps(state, signal.x - 13, signal.y - 13, 26, 26)) {
+        if (state.time >= state.invulnerableUntil) {
+          contact('bubble', 'practice-signal');
+          state.practiceSignal = null;
+          state.practiceSignalReadyAt = Math.max(state.time + 1.5, state.protectReadyAt);
+        }
+      } else if (signal.x < -24 || signal.x > VIEW_WIDTH + 24) {
+        state.practiceSignal = null;
+        state.practiceSignalReadyAt = state.time + .8;
+      }
+    }
+    state.cameraX = 0;
+    return events;
   }
 
   if (state.checkpoint < CHECKPOINTS.length && state.x >= CHECKPOINTS[state.checkpoint]) {

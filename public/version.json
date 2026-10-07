@@ -1,6 +1,7 @@
 {
   "edition": "landscape-pixel",
-  "build": "pixel-20261007-hair",
+  "build": "pixel-20261007-arcade-tutorial",
+  "controls": "six-buttons-two-rows",
   "character": "brown-hair-faceless",
   "date": "2026-10-07"
 }
