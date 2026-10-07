@@ -6,6 +6,15 @@ export const CUE_COOLDOWN: Record<MemoryCue, number> = {
   transition: .3, wake: .4, ready: .3, finish: .5,
 };
 const db = (value: number) => 10 ** (value / 20);
+const CUE_VOICES: Record<MemoryCue, number> = {
+  collect: 2, overwrite: 3, collision: 5, bubble: 3,
+  protect: 4, block: 2, warning: 1, confirm: 1,
+  transition: 3, wake: 1, ready: 2, finish: 3,
+};
+type DuckEnvelope = {
+  start: number; from: number; depth: number;
+  attackEnd: number; holdUntil: number; releaseUntil: number;
+};
 
 /** One shared mix: music / effects -> master compressor -> output.
  * Cue identity comes from rhythm and timbre, not just volume or combo pitch.
@@ -16,6 +25,8 @@ export class MemoryAudio {
   private master: GainNode;
   private effects: GainNode;
   private music: GainNode;
+  private musicDuck: GainNode;
+  private duckEnvelope: DuckEnvelope | null = null;
   private toneFilter: BiquadFilterNode;
   private ambience: HTMLAudioElement;
   private impact: AudioBuffer | null = null;
@@ -38,6 +49,9 @@ export class MemoryAudio {
     this.effects.gain.value = db(-3);
     this.music = context.createGain();
     this.music.gain.value = this.musicLevel;
+    // Keep impact ducking separate from scene volume and tone changes.
+    this.musicDuck = context.createGain();
+    this.musicDuck.gain.value = 1;
     const compressor = context.createDynamicsCompressor();
     compressor.threshold.value = -9;
     compressor.knee.value = 6;
@@ -45,7 +59,8 @@ export class MemoryAudio {
     compressor.attack.value = .003;
     compressor.release.value = .18;
     this.effects.connect(this.master);
-    this.music.connect(this.master);
+    this.music.connect(this.musicDuck);
+    this.musicDuck.connect(this.master);
     this.master.connect(compressor);
     compressor.connect(context.destination);
 
@@ -81,20 +96,23 @@ export class MemoryAudio {
   }
 
   setEnabled(enabled: boolean) {
+    if (this.disposed) return;
     this.enabled = enabled;
     this.master.gain.cancelScheduledValues(this.context.currentTime);
     this.master.gain.setTargetAtTime(enabled ? db(-4) : 0, this.context.currentTime, .012);
-    if (!enabled) { this.stopEffects(); this.ambience.pause(); }
+    if (!enabled) { this.stopEffects(); this.resetDuck(); this.ambience.pause(); }
     else this.unlock();
   }
 
   setActive(active: boolean) {
+    if (this.disposed) return;
     this.active = active;
     if (active) this.unlock();
-    else { this.stopEffects(); this.ambience.pause(); }
+    else { this.stopEffects(); this.resetDuck(); this.ambience.pause(); }
   }
 
   setScene(version: "A" | "B" | "C", paused: boolean) {
+    if (this.disposed) return;
     const now = this.context.currentTime;
     this.musicLevel = db(paused ? -35 : -27);
     this.music.gain.cancelScheduledValues(now);
@@ -149,11 +167,38 @@ export class MemoryAudio {
     this.track(source, [filter, gain], at, duration);
   }
 
+  private duckDepthAt(now: number) {
+    const envelope = this.duckEnvelope;
+    if (!envelope || now >= envelope.releaseUntil) return 0;
+    if (now < envelope.attackEnd) {
+      const progress = Math.max(0, (now - envelope.start) / (envelope.attackEnd - envelope.start));
+      return envelope.from + (envelope.depth - envelope.from) * progress;
+    }
+    if (now <= envelope.holdUntil) return envelope.depth;
+    return envelope.depth * (1 - (now - envelope.holdUntil) / (envelope.releaseUntil - envelope.holdUntil));
+  }
+
+  private resetDuck() {
+    const now = this.context.currentTime;
+    this.duckEnvelope = null;
+    this.musicDuck.gain.cancelScheduledValues(now);
+    this.musicDuck.gain.setValueAtTime(1, now);
+  }
+
   private duck(depth: number, duration: number) {
     const now = this.context.currentTime;
-    this.music.gain.cancelScheduledValues(now);
-    this.music.gain.setTargetAtTime(this.musicLevel * db(depth), now, .015);
-    this.music.gain.setTargetAtTime(this.musicLevel, now + duration, .18);
+    const from = this.duckDepthAt(now);
+    const heldDepth = this.duckEnvelope && now < this.duckEnvelope.holdUntil ? this.duckEnvelope.depth : 0;
+    // A bubble arriving just after a hard hit must not lift its stronger duck.
+    depth = Math.min(depth, from, heldDepth);
+    const holdUntil = Math.max(now + duration, this.duckEnvelope?.holdUntil ?? now);
+    this.duckEnvelope = { start: now, from, depth, attackEnd: now + .008, holdUntil, releaseUntil: holdUntil + .42 };
+    const gain = this.musicDuck.gain;
+    gain.cancelScheduledValues(now);
+    gain.setValueAtTime(db(from), now);
+    gain.exponentialRampToValueAtTime(db(depth), now + .008);
+    gain.setValueAtTime(db(depth), holdUntil);
+    gain.exponentialRampToValueAtTime(1, holdUntil + .42);
   }
 
   play(cue: MemoryCue) {
@@ -161,8 +206,8 @@ export class MemoryAudio {
     const now = this.context.currentTime;
     if (now - (this.lastCue.get(cue) ?? -Infinity) < CUE_COOLDOWN[cue]) return;
     // Bound polyphony during rapid pickups; hard impacts keep priority.
-    if (this.sources.size >= 24 && cue !== "collision") return;
-    if (this.sources.size >= 24) this.stopEffects();
+    if (this.sources.size + CUE_VOICES[cue] > 24 && cue !== "collision") return;
+    if (this.sources.size + CUE_VOICES[cue] > 24) this.stopEffects();
     this.lastCue.set(cue, now);
     this.unlock();
     const variation = 1 + (Math.random() - .5) * .04;
@@ -174,27 +219,30 @@ export class MemoryAudio {
         if (cue === "overwrite") this.burst(.045, -26, 1800);
         break;
       case "collision": {
-        this.duck(-12, .3);
-        this.tone(165, 48, 0, .34, -9, "triangle");
-        this.tone(320, 80, .045, .19, -20, "sawtooth");
-        this.burst(.13, -11, 1800);
+        this.duck(-14, .23);
+        // Dry, low knock + a brief bright crack, unlike the rising pickup chime.
+        this.tone(182 * variation, 52 * variation, 0, .21, -7, "triangle");
+        this.tone(88 * variation, 43 * variation, .009, .18, -15);
+        this.burst(.032, -11, 3300 * variation);
+        this.burst(.10, -17, 920 * variation);
         if (this.impact) {
           const source = this.context.createBufferSource();
           const gain = this.context.createGain();
           source.buffer = this.impact; source.playbackRate.value = variation;
-          const duration = Math.min(.8, this.impact.duration / variation);
-          gain.gain.setValueAtTime(db(-11), now);
-          gain.gain.setTargetAtTime(.0001, now + duration * .65, .045);
+          const duration = Math.min(.34, this.impact.duration / variation);
+          gain.gain.setValueAtTime(.0001, now);
+          gain.gain.linearRampToValueAtTime(db(-16), now + Math.min(.004, duration / 2));
+          gain.gain.exponentialRampToValueAtTime(.0001, now + duration);
           source.connect(gain); gain.connect(this.effects);
           this.track(source, [gain], now, duration);
         }
         break;
       }
       case "bubble":
-        this.duck(-5, .16);
-        this.tone(680, 115, 0, .21, -14);
-        this.tone(430, 170, .09, .19, -21);
-        this.burst(.07, -24, 950);
+        this.duck(-6, .12);
+        this.tone(720 * variation, 125 * variation, 0, .18, -12);
+        this.tone(430 * variation, 170 * variation, .07, .14, -23);
+        this.burst(.045, -22, 1200);
         break;
       case "protect":
         this.burst(.04, -23, 2800);
@@ -230,6 +278,7 @@ export class MemoryAudio {
     this.disposed = true;
     this.abort.abort();
     this.stopEffects();
+    this.resetDuck();
     this.ambience.pause();
     this.ambience.removeAttribute("src");
     this.ambience.load();

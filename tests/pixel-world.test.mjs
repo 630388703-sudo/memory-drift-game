@@ -32,6 +32,36 @@ test('the ground is stable, input deadzone stops drift, and acceleration caps mo
   assert.equal(state.vx, 0);
 });
 
+test('contact feedback is event-based, expires, and cannot change photo or collision rules', () => {
+  const state = createWorld();
+  state.x = LEVEL_PHOTOS[0].x - 14;
+  const events = stepWorld(state, idle, dt);
+  assert.equal(events.filter(e => e.type === 'photo').length, 1);
+  assert.equal(state.feedback.length, 1);
+  assert.equal(state.feedback[0].type, 'photo');
+  assert.equal(state.feedback[0].x, LEVEL_PHOTOS[0].x);
+  frames(state, 90);
+  assert.equal(state.feedback.length, 0);
+  assert.equal(state.collected.size, 1);
+  assert.equal(state.stats.collisions, 0);
+});
+
+test('a protected contact records a block, never the red damage feedback', () => {
+  const state = createWorld();
+  const hazard = LEVEL_HAZARDS[0];
+  state.x = hazard.x;
+  state.shieldUntil = 4;
+  stepWorld(state, idle, dt);
+  assert.equal(state.feedback.length, 1);
+  assert.equal(state.feedback[0].type, 'block');
+  assert.equal(state.stats.collisions, 0);
+  frames(state, 10);
+  assert.equal(state.feedback.length, 1, 'overlap cannot emit repeated feedback during invulnerability');
+  frames(state, 65);
+  assert.equal(state.feedback.length, 0);
+  assert.equal(state.lastContact, 'block', 'successful block cannot turn into damage feedback after its burst expires');
+});
+
 test('held jump reaches roughly 104px; releasing early creates a shorter hop', () => {
   function height(releaseAfter) {
     const state = createWorld();

@@ -1,5 +1,6 @@
 import backgroundAsset from '../game/assets/pixel/background.png';
 import atlasAsset from '../game/assets/pixel/atlas.png';
+import { drawWorldProps } from './pixel-props';
 import {
   CHECKPOINTS, GOAL_X, GROUND_Y, LEVEL_BUBBLES, LEVEL_HAZARDS,
   LEVEL_PHOTOS, LEVEL_PLATFORMS, LEVEL_SPRINGS, PRACTICE_PHOTOS, PRACTICE_PLATFORMS,
@@ -97,6 +98,41 @@ export function drawAtlasSprite(
   ctx.restore();
 }
 
+// Interactive objects share the same silhouette accents in the world and pause guide.
+// Keep the source artwork; only the small action layer uses warm/cool contrast.
+export function drawGameObject(
+  ctx: CanvasRenderingContext2D, art: PixelArt, index: number,
+  x: number, y: number, width: number, height: number,
+): void {
+  ctx.save();
+  ctx.translate(pixel(x), pixel(y));
+  ctx.scale(width / 32, height / 32);
+  if (index === 4) {
+    ctx.fillStyle = '#17294c'; ctx.fillRect(0, 0, 32, 32);
+    ctx.fillStyle = '#ffcd55'; ctx.fillRect(2, 2, 28, 28);
+    drawAtlasSprite(ctx, art, index, 5, 4, 22, 22);
+    ctx.fillStyle = '#fff6d8'; ctx.fillRect(5, 25, 22, 3);
+    ctx.fillStyle = '#17294c'; ctx.fillRect(19, 26, 6, 2);
+  } else if (index === 7) {
+    ctx.fillStyle = '#17294c'; ctx.fillRect(0, 2, 32, 30);
+    ctx.fillRect(4, 0, 24, 2);
+    ctx.fillStyle = '#ff655c'; ctx.fillRect(2, 4, 28, 26);
+    drawAtlasSprite(ctx, art, index, 6, 7, 20, 20);
+    ctx.fillStyle = '#fff0cc'; ctx.fillRect(6, 4, 8, 2);
+    ctx.fillStyle = '#ff655c'; ctx.fillRect(10, 13, 12, 3);
+    ctx.fillRect(10, 20, 12, 3);
+  } else if (index === 5) {
+    ctx.fillStyle = '#17294c'; ctx.fillRect(2, 6, 28, 21);
+    ctx.fillRect(6, 2, 20, 28); ctx.fillRect(8, 26, 6, 6);
+    ctx.fillStyle = '#ed7de1'; ctx.fillRect(4, 8, 24, 17);
+    ctx.fillRect(8, 4, 16, 24); ctx.fillRect(10, 26, 2, 4);
+    drawAtlasSprite(ctx, art, index, 7, 6, 18, 19);
+    ctx.fillStyle = '#fff6eb';
+    for (let i = 0; i < 3; i++) ctx.fillRect(8 + i * 6, 14, 3, 3);
+  } else drawAtlasSprite(ctx, art, index, 0, 0, 32, 32);
+  ctx.restore();
+}
+
 function stageFilter(version: 0 | 1 | 2) {
   return version === 2 ? 'hue-rotate(22deg) saturate(.86)' : version === 1 ? 'saturate(.64)' : 'none';
 }
@@ -146,15 +182,66 @@ function marker(ctx: CanvasRenderingContext2D, art: PixelArt, x: number, label: 
   ctx.restore();
 }
 
-function shieldCorners(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number) {
-  ctx.fillStyle = '#eafcf5';
+function shieldCorners(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, color = '#63ebcb') {
   for (const [cx, cy, sx, sy] of [
     [x, y, 1, 1], [x + width, y, -1, 1],
     [x, y + height, 1, -1], [x + width, y + height, -1, -1],
   ]) {
+    ctx.fillStyle = '#17294c';
+    ctx.fillRect(pixel(cx - (sx < 0 ? 10 : 0)) - 2, pixel(cy) - 2, 14, 6);
+    ctx.fillRect(pixel(cx) - 2, pixel(cy - (sy < 0 ? 10 : 0)) - 2, 6, 14);
+    ctx.fillStyle = color;
     ctx.fillRect(pixel(cx - (sx < 0 ? 10 : 0)), pixel(cy), 10, 2);
     ctx.fillRect(pixel(cx), pixel(cy - (sy < 0 ? 10 : 0)), 2, 10);
   }
+}
+
+function contactFeedback(ctx: CanvasRenderingContext2D, world: WorldState, reducedMotion: boolean) {
+  for (const effect of world.feedback) {
+    const age = world.time - effect.at;
+    if (age < 0 || age > .55) continue;
+    const progress = age / .55;
+    const spread = reducedMotion ? 0 : pixel(18 * (1 - (1 - progress) ** 3));
+    const color = effect.type === 'collision' ? '#ff655c' : effect.type === 'bubble' ? '#ed7de1'
+      : effect.type === 'photo' ? '#ffcd55' : '#63ebcb';
+    ctx.save();
+    ctx.globalAlpha = reducedMotion ? 1 : 1 - progress;
+    if (effect.type === 'photo' || effect.type === 'block') {
+      shieldCorners(ctx, effect.x - 20 - spread / 2, effect.y - 22 - spread / 2, 40 + spread, 44 + spread, color);
+    } else {
+      // Four blocky fragments, no full-screen flash or camera shake.
+      for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+        const x = pixel(effect.x + dx * (16 + spread));
+        const y = pixel(effect.y + dy * (12 + spread / 2));
+        ctx.fillStyle = '#17294c'; ctx.fillRect(x - 2, y - 2, 10, 6);
+        ctx.fillStyle = color; ctx.fillRect(x, y, 6, 2);
+      }
+    }
+    ctx.restore();
+  }
+}
+
+function recalledPrint(ctx: CanvasRenderingContext2D, x: number, y: number, pinkSky: boolean) {
+  // A visibly separate, repeated account, never a modification to the original photo.
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.fillStyle = '#17294c'; ctx.fillRect(6, 5, 104, 80);
+  ctx.fillStyle = '#ed7de1'; ctx.fillRect(4, 3, 100, 77);
+  ctx.fillStyle = '#17294c'; ctx.fillRect(0, 0, 102, 78);
+  ctx.fillStyle = '#fff6d8'; ctx.fillRect(2, 2, 98, 74);
+  ctx.fillStyle = '#233f83'; ctx.font = 'bold 10px monospace';
+  ctx.textBaseline = 'top'; ctx.fillText('RECALLED', 9, 8);
+  ctx.fillStyle = pinkSky ? '#ed7de1' : '#89b7ef'; ctx.fillRect(8, 23, 86, 39);
+  ctx.fillStyle = '#233f83'; ctx.fillRect(8, 57, 86, 5);
+  for (let i = 0; i < 5; i++) {
+    const px = 15 + i * 16;
+    ctx.fillStyle = '#17294c'; ctx.fillRect(px, 30, 6, 6);
+    ctx.fillStyle = '#ffcd55'; ctx.fillRect(px - 2, 37, 10, 11);
+    ctx.fillStyle = '#17294c'; ctx.fillRect(px - 2, 48, 4, 9); ctx.fillRect(px + 4, 48, 4, 9);
+  }
+  ctx.fillStyle = '#233f83'; ctx.fillRect(8, 67, 24, 2); ctx.fillRect(36, 67, 12, 2);
+  ctx.fillStyle = '#ff655c'; ctx.fillRect(88, 66, 6, 5);
+  ctx.restore();
 }
 
 function routeArrow(ctx: CanvasRenderingContext2D, x: number, y: number, direction: 'up' | 'left' | 'right') {
@@ -192,6 +279,15 @@ export function drawPixelWorld(
   for (const platform of practice ? PRACTICE_PLATFORMS : LEVEL_PLATFORMS) {
     if (platform.x + platform.width < camera || platform.x > camera + VIEW_WIDTH) continue;
     tiles(ctx, art, platform.x, platform.y, platform.width, 30);
+    ctx.fillStyle = '#17294c'; ctx.fillRect(pixel(platform.x), platform.y, platform.width, 4);
+    ctx.fillStyle = '#63ebcb'; ctx.fillRect(pixel(platform.x + 4), platform.y, platform.width - 8, 2);
+  }
+  drawWorldProps(ctx, world, options);
+  if (!practice) {
+    // The boards sit alongside the scripted shared-memory comments, above the route.
+    for (const [x, y, pink] of [[1060, 248, false], [2240, 224, true]] as const) {
+      if (x + 112 > camera && x < camera + VIEW_WIDTH) recalledPrint(ctx, x, y, pink);
+    }
   }
   if (!practice) {
     CHECKPOINTS.forEach((x, index) => {
@@ -214,13 +310,13 @@ export function drawPixelWorld(
   for (const photo of practice ? PRACTICE_PHOTOS : LEVEL_PHOTOS) {
     if (world.collected.has(photo.id) || photo.x < camera - 40 || photo.x > camera + VIEW_WIDTH + 40) continue;
     const bob = options.reducedMotion ? 0 : pixel(Math.sin(world.time * 2.4 + photo.x) * 2);
-    drawAtlasSprite(ctx, art, 4, photo.x - 16, photo.y - 16 + bob, 32, 32);
+    drawGameObject(ctx, art, 4, photo.x - 16, photo.y - 16 + bob, 32, 32);
   }
   for (const bubble of practice ? [] : LEVEL_BUBBLES) {
     // The visual follows the same trajectory as the collider, including reduced-motion mode.
     const point = bubblePosition(bubble, world.time);
     if (point.x < camera - 50 || point.x > camera + VIEW_WIDTH + 50) continue;
-    drawAtlasSprite(ctx, art, 5, point.x - bubble.radius, point.y - bubble.radius, bubble.radius * 2, bubble.radius * 2);
+    drawGameObject(ctx, art, 5, point.x - bubble.radius, point.y - bubble.radius, bubble.radius * 2, bubble.radius * 2);
   }
   for (const hazard of practice ? [] : LEVEL_HAZARDS) {
     const point = hazardPosition(hazard, world.time);
@@ -231,11 +327,11 @@ export function drawPixelWorld(
       ctx.fillRect(pixel(hazard.x - hazard.patrol), GROUND_Y - 2, hazard.patrol * 2 + hazard.width, 2);
       ctx.globalAlpha = 1;
     }
-    drawAtlasSprite(ctx, art, 7, point.x, point.y, hazard.width, hazard.height);
+    drawGameObject(ctx, art, 7, point.x, point.y, hazard.width, hazard.height);
   }
   if (practice && world.practiceSignal) {
     const signal = world.practiceSignal;
-    drawAtlasSprite(ctx, art, 5, signal.x - 17, signal.y - 17, 34, 34);
+    drawGameObject(ctx, art, 5, signal.x - 17, signal.y - 17, 34, 34);
     routeArrow(ctx, signal.x - signal.direction * 35, signal.y, signal.direction < 0 ? 'left' : 'right');
   }
 
@@ -243,8 +339,9 @@ export function drawPixelWorld(
   const frame = !world.grounded ? 3 : running ? 1 + Math.floor(world.time * 8) % 2 : 0;
   const protectedNow = world.shieldUntil > world.time;
   const hit = world.invulnerableUntil > world.time;
+  const blocked = hit && world.lastContact === 'block';
   const playerX = pixel(world.x), playerY = pixel(world.y + PLAYER_HEIGHT - 44);
-  if (hit && !options.reducedMotion) ctx.globalAlpha = Math.floor(world.time * 8) % 2 ? .55 : 1;
+  if (hit && !blocked && !options.reducedMotion) ctx.globalAlpha = Math.floor(world.time * 8) % 2 ? .55 : 1;
   drawAtlasSprite(ctx, art, frame, playerX, playerY, PLAYER_WIDTH, 44, world.facing < 0);
   ctx.globalAlpha = 1;
   if (protectedNow || (hit && options.reducedMotion)) {
@@ -254,11 +351,12 @@ export function drawPixelWorld(
     ctx.fillStyle = '#21364e'; ctx.fillRect(playerX - 4, playerY - 10, 36, 4);
     ctx.fillStyle = '#a8f5db'; ctx.fillRect(playerX - 4, playerY - 10, pixel(36 * world.protectCharge / .7), 4);
   }
+  contactFeedback(ctx, world, Boolean(options.reducedMotion));
   ctx.restore();
 
   // One quiet, short signal slip after contact; never a flashing full-screen overlay.
   const hitAge = 1.1 - (world.invulnerableUntil - world.time);
-  if (hit && hitAge >= 0 && hitAge < .16 && !options.reducedMotion) {
+  if (hit && !blocked && hitAge >= 0 && hitAge < .16 && !options.reducedMotion) {
     ctx.fillStyle = '#e0b1ef'; ctx.fillRect(118, 110, 106, 2);
     ctx.fillStyle = '#a5e9e0'; ctx.fillRect(372, 202, 54, 2);
   }

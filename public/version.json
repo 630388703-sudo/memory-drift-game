@@ -1,7 +1,8 @@
 {
   "edition": "landscape-pixel",
-  "build": "pixel-20261007-arcade-tutorial",
+  "build": "pixel-20261007-shared-memory",
   "controls": "six-buttons-two-rows",
   "character": "brown-hair-faceless",
+  "worldProps": 12,
   "date": "2026-10-07"
 }

@@ -9,7 +9,7 @@ const output = join(root, 'gh-pages');
 const html = readFileSync(join(output, 'index.html'), 'utf8');
 
 test('build has a current edition marker and every local entry asset exists', () => {
-  assert.match(html, /pixel-20261007-arcade-tutorial/);
+  assert.match(html, /pixel-20261007-shared-memory/);
   const urls = [...html.matchAll(/(?:src|href)="([^"]+)"/g)].map(match => match[1]);
   assert.ok(urls.some(url => /assets\/.*\.js$/.test(url)));
   for (const url of urls.filter(value => !/^(https?:|data:)/.test(value))) {
@@ -19,6 +19,8 @@ test('build has a current edition marker and every local entry asset exists', ()
     assert.ok(existsSync(file), relative);
   }
   assert.equal(JSON.parse(readFileSync(join(output, 'version.json'), 'utf8')).character, 'brown-hair-faceless');
+  assert.equal(JSON.parse(readFileSync(join(output, 'version.json'), 'utf8')).worldProps, 12);
+  assert.equal(existsSync(join(output, 'qa.html')), false, 'local staged preview is not a public entry');
 });
 
 test('current art and audio are present; obsolete assets are absent', () => {

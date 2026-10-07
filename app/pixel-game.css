@@ -11,6 +11,10 @@
 @media(prefers-reduced-motion:reduce){.px-page *{animation:none!important;transition:none!important}.px-signal i:nth-child(odd){transform:translateY(6px)}}
 
 /* Cabinet onboarding: the control diagram describes actions, not wiring order. */
+.px-evidence{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0;color:#17294c}
+.px-evidence>span{padding:7px 9px;background:#fff0c4;border-left:4px solid #d29b22}
+.px-evidence>span+span{background:#f2d9ee;border-color:#ad4d9b}
+.px-evidence small{display:block;font-size:8px;line-height:1.45;letter-spacing:.03em}.px-evidence b{font-size:15px}
 .px-title-layout{gap:6%;grid-template-columns:1fr 1.05fr}
 .px-title-layout .px-eyebrow{margin:0 0 16px;font-size:10px;letter-spacing:.09em}
 .px-title-layout h1{font-size:clamp(35px,5.4cqw,74px);margin-bottom:20px}

@@ -13,6 +13,10 @@ A non-commercial memory installation game. The current edition is a landscape 2D
 - English on launch; Chinese is available from the header.
 - No advertising, payments, lives or game-over punishment.
 - Start with a short, optional hands-on practice: move, jump, collect a photo, and protect it. Practice does not carry over into the main game.
+- Twelve small route objects: ticket stubs, pinwheels, cassette radios, mailboxes and paper boats. They mark sections without adding collection goals; nearby movement briefly animates pinwheels and radio displays.
+- Amber photo frames, coral hazards, pink interference and mint protection cues share their silhouettes with the pause guide. The blue background and original character assets are unchanged.
+- Two fictional recalled prints reinforce the scripted five-person / pink-sky accounts. They are never the original evidence. The ending places the original four people, the shared five-person account and the visitor's three answers together without asserting why an answer changed.
+- Hard collisions use short layered impacts and a dedicated music duck; collection and successful protection retain different timbres. Actual exhibition speakers still need listening calibration.
 
 ## Controls
 

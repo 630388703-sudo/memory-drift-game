@@ -103,6 +103,10 @@ export type WorldInput = {
 };
 
 type LocatedEvent = { x: number; y: number };
+export type WorldFeedback = LocatedEvent & {
+  type: 'photo' | 'collision' | 'bubble' | 'block' | 'spring';
+  at: number;
+};
 export type WorldEvent = LocatedEvent & (
   | { type: 'photo'; id: string }
   | { type: 'collision'; source: 'hazard' | 'fall'; id?: string }
@@ -139,6 +143,8 @@ export type WorldState = {
   springReadyAt: number;
   practiceSignal: PracticeSignal | null;
   practiceSignalReadyAt: number;
+  feedback: WorldFeedback[];
+  lastContact: 'collision' | 'bubble' | 'block' | null;
 };
 
 export function createWorld(mode: 'game' | 'practice' = 'game'): WorldState {
@@ -152,6 +158,7 @@ export function createWorld(mode: 'game' | 'practice' = 'game'): WorldState {
     finished: false, coyote: 0.1, jumpBuffer: 0, jumpWasHeld: false,
     protectLatched: false, protectReadyAt: 0,
     springReadyAt: 0, practiceSignal: null, practiceSignalReadyAt: 0,
+    feedback: [], lastContact: null,
   };
 }
 
@@ -162,6 +169,18 @@ const approach = (value: number, target: number, amount: number) =>
 function overlaps(state: WorldState, x: number, y: number, width: number, height: number) {
   return state.x + PLAYER_WIDTH > x && state.x < x + width
     && state.y + PLAYER_HEIGHT > y && state.y < y + height;
+}
+
+// Cosmetic event history: never changes collisions, input timing or photo storage.
+function rememberFeedback(state: WorldState, events: WorldEvent[]) {
+  state.feedback = state.feedback.filter(effect => state.time - effect.at < .55);
+  for (const event of events) {
+    if (event.type === 'photo' || event.type === 'collision' || event.type === 'bubble'
+      || event.type === 'block' || event.type === 'spring') {
+      state.feedback.push({ type: event.type, x: event.x, y: event.y, at: state.time });
+    }
+  }
+  if (state.feedback.length > 8) state.feedback.splice(0, state.feedback.length - 8);
 }
 
 /** Call at a fixed 1/60 or 1/120 step. Menus/recall should not call this function. */
@@ -246,6 +265,7 @@ export function stepWorld(state: WorldState, input: WorldInput, seconds: number)
 
   if (state.y > VIEW_HEIGHT + 80) {
     state.stats.collisions++;
+    state.lastContact = 'collision';
     events.push({ type: 'collision', source: 'fall', ...location() });
     state.x = state.mode === 'practice' ? 90 : AREA_STARTS[clamp(state.checkpoint, 0, 2)];
     state.y = GROUND_Y - PLAYER_HEIGHT;
@@ -268,16 +288,19 @@ export function stepWorld(state: WorldState, input: WorldInput, seconds: number)
     if (state.time < state.invulnerableUntil) return;
     state.invulnerableUntil = state.time + 1.1;
     if (state.shieldUntil > state.time) {
+      state.lastContact = 'block';
       state.shieldUntil = 0;
       state.stats.blocks++;
       events.push({ type: 'block', source, id, ...location() });
       return;
     }
     if (source === 'hazard') {
+      state.lastContact = 'collision';
       state.stats.collisions++;
       state.vx = -state.facing * 100;
       events.push({ type: 'collision', source, id, ...location() });
     } else {
+      state.lastContact = 'bubble';
       state.stats.bubbles++;
       events.push({ type: 'bubble', id, ...location() });
     }
@@ -324,6 +347,7 @@ export function stepWorld(state: WorldState, input: WorldInput, seconds: number)
       }
     }
     state.cameraX = 0;
+    rememberFeedback(state, events);
     return events;
   }
 
@@ -345,5 +369,6 @@ export function stepWorld(state: WorldState, input: WorldInput, seconds: number)
   target = clamp(target, 0, WORLD_WIDTH - VIEW_WIDTH);
   state.cameraX += (target - state.cameraX) * (1 - Math.exp(-9 * dt));
   state.cameraX = clamp(state.cameraX, 0, WORLD_WIDTH - VIEW_WIDTH);
+  rememberFeedback(state, events);
   return events;
 }
