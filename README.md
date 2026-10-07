@@ -61,7 +61,8 @@ The static output is `gh-pages/`. GitHub Actions builds from source and deploys 
 ## Sources and cleanup
 
 - [Artwork provenance](game/assets/pixel/README.md): generated project artwork, not extracted Mario assets.
-- [Audio sources](docs/AUDIO-SOURCES.md): Glitch Light by BerryDeep; Impact Thud by Universfield.
+- [Audio sources](docs/AUDIO-SOURCES.md): PYNCHON by James Gargette (cinameng); Impact Sounds and Digital Audio by Kenney. CC0 sources, prepared loop, alternating short impacts and memory-signal interruptions. Earlier Pixabay sources remain documented for rollback.
+- [Language voice](docs/LANGUAGE-VOICE.md): Chinese and English are authored independently, with the same gameplay facts and English retained as the default language.
 - [Cleanup record](docs/PIXEL-RELEASE-20261007.md): removed paths and rollback information.
 - [User testing](docs/USER_TEST_PROTOCOL.md): current validation scope and remaining hardware checks.
 

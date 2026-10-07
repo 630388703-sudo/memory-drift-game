@@ -1,6 +1,8 @@
 {
   "edition": "landscape-pixel",
-  "build": "pixel-20261007-shared-memory",
+  "build": "pixel-20261007-audio-native-zh",
+  "copy": "independent-chinese-voice",
+  "audio": "pynchon-kenney-signal-breaks",
   "controls": "six-buttons-two-rows",
   "character": "brown-hair-faceless",
   "worldProps": 12,

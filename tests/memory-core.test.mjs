@@ -128,7 +128,9 @@ test('comparison records agreement, difference and detail labels without grading
   assert.equal(comparisonState('unknown', 'blue'), 'uncertain');
   assert.equal(recallLabel(4, 'zh'), '4 人');
   assert.equal(recallLabel(4, 'en'), '4 people');
-  assert.equal(recallLabel('right', 'zh'), '右侧');
+  assert.equal(recallLabel('right', 'zh'), '右边');
+  assert.equal(recallLabel('left', 'zh'), '左边');
+  assert.equal(recallLabel('center', 'zh'), '中间');
   assert.equal(recallLabel('right', 'en'), 'Right');
   assert.equal(recallLabel('blue', 'zh'), '蓝色');
   assert.equal(recallLabel('blue', 'en'), 'Blue');

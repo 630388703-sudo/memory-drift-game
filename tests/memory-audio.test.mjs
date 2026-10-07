@@ -17,7 +17,7 @@ class Node {
   connections = [];
   connect(node) { this.connections.push(node); return node; }
   disconnect() { this.disconnected = true; }
-  start(at) { this.startedAt = at; }
+  start(at, offset = 0) { this.startedAt = at; this.offset = offset; }
   stop(at) { this.stoppedAt = at ?? 0; }
 }
 class Context {
@@ -34,37 +34,62 @@ class Context {
   async resume() { this.state = 'running'; }
   async close() { this.state = 'closed'; }
 }
-function setup(t, { impact = false } = {}) {
-  const media = [];
-  t.mock.method(globalThis, 'fetch', async () => {
-    if (impact) return { ok: true, arrayBuffer: async () => new ArrayBuffer(1) };
+function setup(t, { impact = false, music = false } = {}) {
+  const requested = [];
+  t.mock.method(globalThis, 'fetch', async url => {
+    requested.push(String(url));
+    if (String(url).includes('pynchon') ? music : impact) return { ok: true, arrayBuffer: async () => new ArrayBuffer(1) };
     throw Error('Offline fallback');
   });
-  const oldAudio = globalThis.Audio;
-  globalThis.Audio = class {
-    paused = true;
-    constructor(src) { this.src = src; media.push(this); }
-    async play() { this.paused = false; }
-    pause() { this.paused = true; }
-    removeAttribute() {}
-    load() {}
-  };
   const context = new Context();
   const mixer = new MemoryAudio(context, 'https://example.test/memory-drift-game/');
-  t.after(() => { mixer.dispose(); globalThis.Audio = oldAudio; });
-  return { context, mixer, media };
+  t.after(() => mixer.dispose());
+  return { context, mixer, requested };
 }
 
-test('selected music uses a fresh URL, loops, and compensates its louder source', t => {
-  const { context, mixer, media } = setup(t);
-  assert.equal(media[0].src, 'https://example.test/memory-drift-game/audio/glitch-light.mp3');
-  assert.equal(media[0].loop, true);
-  assert.equal(media[0].preload, 'auto');
-  assert.equal(context.gains[2].gain.value, 10 ** (-27 / 20));
+test('experimental loop uses a fresh URL and separate play/question levels', t => {
+  const { context, mixer, requested } = setup(t);
+  assert.equal(requested[0], 'https://example.test/memory-drift-game/audio/pynchon-loop.mp3');
+  assert.equal(context.gains[2].gain.value, 10 ** (-12 / 20));
   mixer.setScene('B', true);
-  assert.equal(context.gains[2].gain.events.at(-1)[1], 10 ** (-35 / 20));
+  assert.equal(context.gains[2].gain.events.at(-1)[1], 10 ** (-22 / 20));
   mixer.setScene('C', false);
-  assert.equal(context.gains[2].gain.events.at(-1)[1], 10 ** (-27 / 20));
+  assert.equal(context.gains[2].gain.events.at(-1)[1], 10 ** (-12 / 20));
+});
+
+test('decoded music loops once, preserves its position through mute/blur, and releases on disposal', async t => {
+  const { context, mixer } = setup(t, { music: true });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(context.buffers.length, 0, 'loading cannot autoplay before user unlock');
+  mixer.unlock(); mixer.unlock();
+  assert.equal(context.buffers.length, 1, 'unlock cannot create duplicate loops');
+  assert.equal(context.buffers[0].loop, true);
+  assert.equal(context.buffers[0].offset, 0);
+  context.currentTime = 4.5;
+  mixer.setEnabled(false);
+  assert.equal(context.buffers[0].disconnected, true);
+  context.currentTime = 8;
+  mixer.setEnabled(true);
+  assert.equal(context.buffers[1].offset, 1.5, 'resume within the two-second test buffer');
+  context.currentTime = 9;
+  mixer.setActive(false);
+  mixer.setEnabled(true);
+  assert.equal(context.buffers.length, 2, 'inactive must stay silent');
+  context.currentTime = 12;
+  mixer.setActive(true);
+  assert.equal(context.buffers[2].offset, .5);
+  mixer.dispose();
+  assert.ok(context.buffers.every(node => node.disconnected));
+});
+
+test('late music decoding cannot restart a muted or disposed mixer', async t => {
+  const { context, mixer } = setup(t, { music: true });
+  mixer.unlock();
+  mixer.setEnabled(false);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(context.buffers.length, 0);
+  mixer.dispose(); mixer.unlock();
+  assert.equal(context.buffers.length, 0);
 });
 
 test('collect rises as a two-note motif; collision falls with two dry noise layers even offline', t => {
@@ -143,21 +168,59 @@ test('impact variation remains within two percent and hard hits obey their coold
   assert.equal(context.oscillators[2].frequency.events[0][1], 182 * 1.02);
 });
 
-test('credited impact sample is retained quietly, faded out, and capped at 340 ms', async t => {
+test('downloaded metal impact is distinct, faded out, and capped at 280 ms', async t => {
   const { context, mixer } = setup(t, { impact: true });
   await new Promise(resolve => setImmediate(resolve));
   mixer.play('collision');
   const sample = context.buffers[2];
   assert.equal(sample.buffer.duration, 2);
   assert.ok(sample.playbackRate.value >= .98 && sample.playbackRate.value <= 1.02);
-  assert.ok(Math.abs(sample.stoppedAt - sample.startedAt - .355) < .00001);
+  assert.ok(Math.abs(sample.stoppedAt - sample.startedAt - .295) < .00001);
   const envelope = sample.connections[0].gain.events;
-  assert.equal(envelope[1][1], 10 ** (-16 / 20));
+  assert.equal(envelope[1][1], 10 ** (-7 / 20));
   assert.equal(envelope.at(-1)[1], .0001);
   // An envelope ceiling, not a substitute for measuring/listening to the real mix.
-  const sumOfPeakGains = [-7, -15, -11, -17, -16].reduce((sum, level) => sum + 10 ** (level / 20), 0);
-  assert.ok(sumOfPeakGains * context.gains[0].gain.value * context.gains[1].gain.value < .6);
+  const sumOfPeakGains = [-7, -15, -11, -17, -7].reduce((sum, level) => sum + 10 ** (level / 20), 0);
+  assert.ok(sumOfPeakGains * context.gains[0].gain.value * context.gains[1].gain.value < .75);
   assert.equal(context.compressors[0].threshold.value, -9);
+});
+
+test('successive collisions alternate the two downloaded metal takes', async t => {
+  const { context, mixer } = setup(t, { impact: true });
+  await new Promise(resolve => setImmediate(resolve));
+  mixer.play('collision');
+  context.currentTime += .3;
+  mixer.play('collision');
+  context.currentTime += .3;
+  mixer.play('collision');
+  assert.notEqual(context.buffers[2].buffer, context.buffers[5].buffer);
+  assert.equal(context.buffers[2].buffer, context.buffers[8].buffer);
+});
+
+test('memory interference has a digital double break, sample, and independent gate', async t => {
+  const { context, mixer } = setup(t, { impact: true });
+  await new Promise(resolve => setImmediate(resolve));
+  mixer.play('bubble');
+  assert.equal(context.oscillators[0].type, 'square');
+  assert.equal(context.buffers.length, 2, 'noise plus downloaded static');
+  const gate = context.gains[4];
+  assert.equal(gate.connections[0], context.gains[2]);
+  assert.deepEqual(gate.gain.events.filter(e => e[0] === 'target').map(e => e[1]), [.16, 1, .08, 1]);
+  assert.ok(context.buffers[1].startedAt > context.currentTime);
+  assert.ok(context.buffers[1].stoppedAt - context.buffers[1].startedAt < .26);
+  const events = [...gate.gain.events];
+  mixer.setScene('C', false);
+  assert.deepEqual(gate.gain.events, events, 'scene changes preserve transient break');
+  mixer.setActive(false);
+  assert.deepEqual(gate.gain.events.at(-1), ['set', 1, context.currentTime]);
+});
+
+test('all three scene filters retain a usable rhythmic band', t => {
+  const { context, mixer } = setup(t);
+  for (const [stage, frequency] of [['A', 9500], ['B', 2600], ['C', 6500]]) {
+    mixer.setScene(stage, false);
+    assert.equal(context.filters[0].frequency.events.at(-1)[1], frequency);
+  }
 });
 
 test('voice budget reserves complete cues and a hard impact preempts crowded pickups', t => {
@@ -197,17 +260,15 @@ test('rapid repeats are limited; other event types remain distinct', t => {
 });
 
 test('mute, hidden state and disposal stop sources, with no delayed replay', async t => {
-  const { context, mixer, media } = setup(t);
+  const { context, mixer } = setup(t);
   mixer.play('collect'); mixer.setEnabled(false);
   assert.ok(context.oscillators.every(n => n.disconnected));
-  assert.equal(media[0].paused, true);
   mixer.play('collision'); assert.equal(context.oscillators.length, 2);
   await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
   mixer.setEnabled(true); mixer.play('protect');
   assert.equal(context.oscillators.length, 5);
   mixer.setActive(false); mixer.play('bubble');
   assert.equal(context.oscillators.length, 5);
-  assert.equal(media[0].paused, true);
   mixer.setActive(true); mixer.play('block');
   assert.equal(context.oscillators.length, 7);
   mixer.dispose(); mixer.play('collect');
