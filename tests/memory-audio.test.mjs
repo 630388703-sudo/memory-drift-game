@@ -119,4 +119,3 @@ test('mute, hidden state and disposal stop sources, with no delayed replay', asy
   assert.equal(context.state, 'closed');
   assert.equal(context.oscillators.length, 7);
 });
-

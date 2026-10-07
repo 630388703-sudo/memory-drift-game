@@ -236,4 +236,3 @@ export class MemoryAudio {
     void this.context.close().catch(() => undefined);
   }
 }
-

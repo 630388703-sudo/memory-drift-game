@@ -1,63 +1,51 @@
-# 忘了自己是什么 / What Was I Again?
+# What Was I Again? / 忘了自己是什么
 
-一件围绕“遗忘是缺陷，还是自我保护”展开的竖屏互动装置。观众先观察同一张记忆图像，再在旅程中选择自己反复查看或忽略的片段。系统会依据这些行为重构下一版画面，并在结尾把最初图像、系统生成版本与观众的三次回想并置。
+A non-commercial memory installation game. The current edition is a landscape 2D pixel game: study a photograph, collect its fragments along the route, answer repeated recall questions, then compare your answers with the original.
 
-作品不证明某个结论，也不以分数判断玩家。它留下一个开放问题：数字技术是在帮助我们保存记忆，还是让我们更依赖反复确认、更难独立回忆并放下过去？
+[Play the current web edition](https://630388703-sudo.github.io/memory-drift-game/)
 
-- 在线体验：<https://630388703-sudo.github.io/memory-drift-game/>
-- 设计基准：1080 × 1920，适配手机、桌面竖屏和展厅装置
-- 单轮时长：引导约 30 秒，旅程 52 秒，结尾对照约 30 秒
-- 输入：触控、键盘、标准手柄、街机摇杆及压力按钮桥接
+## Current edition
 
-## 体验流程
+- 16:9 landscape presentation; a 480 × 270 game canvas scaled without smoothing.
+- Brown-haired, faceless traveler; orange clothing and cyan backpack.
+- Three recall rounds with 3 / 4 / 5 / Not sure choices. Comments are explicitly fictional, not real player submissions.
+- Five photo slots: a sixth replaces the oldest; collisions remove the newest; interference alters a stored photo.
+- English on launch; Chinese is available from the header.
+- No advertising, payments, lives or game-over punishment.
 
-1. **待唤醒**：装置在无人靠近时保持低干扰的休眠画面。
-2. **靠近**：观众触碰、按键或由距离传感器唤醒作品。
-3. **观看**：短暂观察包含人物轮廓的最初图像，界面不泄露人数答案。
-4. **第一次回想**：从 3、4、5 中选择记得的人数。
-5. **穿行**：只需左右移动。照片代表被反复确认的片段；干扰代表注意被打断。
-6. **再次回想**：旅程在约 18 秒和 36 秒停下，再问同一个问题。每一段中收下、遗漏和碰到干扰的情况会共同决定系统下一版呈现 3、4 或 5 个人。
-7. **对照**：约 52 秒后并置“最初画面 4 人 / 系统生成版本 / 观众三次回想”，把结果重新交还给观众判断。
+## Controls
 
-这里没有死亡、Game Over、能力升级或奖惩分数。照片也不是普通积分：反复保存得越多，系统越倾向补入人物；遗漏和干扰越多，系统越倾向删去人物。这是“注意如何改写记忆”的可见机制，不代表谁记对或记错。
+| Action | Keyboard | Default gamepad input |
+| --- | --- | --- |
+| Move / choose an answer | Left / Right or A / D | axis 0 or D-pad 14 / 15 |
+| Jump | Z / Space | button 0 |
+| Protect a collected photo | Hold X for 0.7 seconds | hold button 1 |
+| Confirm | Enter | button 2 |
+| Pause | P / Escape | button 3 |
+| Compare original at ending | C | button 4 |
+| Controls and remapping | H | button 5 |
 
-## 操作输入
+Displayed BTN 1–6 correspond to API indices 0–5, not guaranteed physical cabinet positions. Use Controls to bind the six physical buttons. Physical arcade hardware has not been verified. The retained legacy pressure-sensor bridge has not been migrated; see [hardware notes](docs/HARDWARE-INTEGRATION.md).
 
-- 触控 / 鼠标：在画面中左右拖动；直接点击界面按钮继续。
-- 键盘：`←/→`、`A/D` 或 `J/L` 移动/选择；`Enter`、`Space`、`Z/X` 确认；`P/Escape` 暂停。
-- 手柄和街机：左摇杆 X 轴或 `14/15` 选择/移动；主按钮确认；`Start` 暂停。
-- 压力传感器 / Arduino：参见 [展厅硬件接入说明](docs/HARDWARE-INTEGRATION.md)。
+## Develop and verify
 
-所有输入都共享同一组行为含义：“左右选择或移动”与“确认”。旅程中主按钮不触发技能，避免硬件版本和网页版本形成两套玩法。
+Node 22.13 or later; Node 22 is used in GitHub Actions.
 
-## 双语与展厅运行
-
-设置面板支持完整中文/英文切换、声音开关和故障强度切换。语言选择和上一轮记录只使用本机 `localStorage`；不收集或上传个人身份数据。
-
-结尾保存的不是奖章或身份称号，而是一张可下载的重构记录。数据痕迹用于帮助观众对照自己的观看行为，不用于排名。
-
-## 运行与验证
-
-```bash
-npm install
+```sh
+npm ci
 npm run dev
-npx eslint app/MemoryRushGame.tsx
+npm run typecheck
+npm test
 npm run build:static
 ```
 
-`npm run build:static` 会生成 GitHub Pages 静态产物。推送到 `main` 后，GitHub Actions 自动检查并发布。
+The static output is `gh-pages/`. GitHub Actions builds from source and deploys this directory; old checked-in root bundles are removed so they cannot be mistaken for the current game. Existing optional Sites/Next hosting scaffolding is preserved, but it is not the Pages deployment path.
 
-## 主要文件
+## Sources and cleanup
 
-```text
-app/MemoryRushGame.tsx       体验状态、Canvas 旅程、输入、结果对照
-app/globals.css              竖屏艺术系统、响应式与故障视觉
-game/assets/                 网格化超现实场景、人物与记忆物件
-docs/HARDWARE-INTEGRATION.md 厂家接入接口和验收约定
-docs/USER_TEST_PROTOCOL.md   展厅全流程测试清单
-docs/AUDIO-SOURCES.md        音频作者、来源与 Pixabay 许可记录
-standalone/main.tsx          GitHub Pages 静态入口
-```
+- [Artwork provenance](game/assets/pixel/README.md): generated project artwork, not extracted Mario assets.
+- [Audio sources](docs/AUDIO-SOURCES.md): Glitch Light by BerryDeep; Impact Thud by Universfield.
+- [Cleanup record](docs/PIXEL-RELEASE-20261007.md): removed paths and rollback information.
+- [User testing](docs/USER_TEST_PROTOCOL.md): current validation scope and remaining hardware checks.
 
-视觉语言以“白色透视空间 + 现实景观拼贴 + 彩色数字异常”为核心。故障不是覆盖在画面上的装饰滤镜，而是在被反复确认、遗漏或打断时出现的叙事反馈。
-
+The previous vertical implementation and obsolete images/styles are removed from the current branch, not erased from Git history. Original hardware/vendor documentation is retained as historical integration material. No claim of physical-device compatibility or pressure-sensor validation is implied by publication.

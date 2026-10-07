@@ -8,4 +8,3 @@ export default defineConfig({
   publicDir: "../public",
   build: { outDir: "../gh-pages", emptyOutDir: true, sourcemap: false },
 });
-

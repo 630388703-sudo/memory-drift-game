@@ -1,6 +1,5 @@
-import MemoryRushGame from "./MemoryRushGame";
+import LandscapeMemoryGame from "./LandscapeMemoryGame";
 
 export default function Home() {
-  return <MemoryRushGame />;
+  return <LandscapeMemoryGame />;
 }
-
