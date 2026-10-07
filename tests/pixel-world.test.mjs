@@ -8,9 +8,9 @@ const source = readFileSync(new URL('../app/pixel-world.ts', import.meta.url), '
 const exports = {};
 const code = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
 vm.runInNewContext(code, { exports, Set, Math, Number });
-const { createWorld, stepWorld, PLAYER_HEIGHT, GROUND_Y, LEVEL_PHOTOS, LEVEL_HAZARDS,
+const { createWorld, stepWorld, PLAYER_HEIGHT, PLAYER_WIDTH, GROUND_Y, LEVEL_PHOTOS, LEVEL_HAZARDS,
   LEVEL_PLATFORMS, LEVEL_BUBBLES, LEVEL_SPRINGS, PRACTICE_PLATFORMS, PRACTICE_PHOTOS,
-  CHECKPOINTS, GOAL_X, AREA_STARTS, WORLD_WIDTH, VIEW_WIDTH, bubblePosition, hazardPosition } = exports;
+  CHECKPOINTS, GOAL_X, AREA_STARTS, WORLD_WIDTH, VIEW_WIDTH, bubblePosition, hazardPosition, readingZoneAt } = exports;
 const idle = { axis: 0, jump: false, jumpPressed: false, protect: false };
 const dt = 1 / 120;
 function frames(state, count, input = idle) {
@@ -326,11 +326,94 @@ test('the optional spring gives a readable shortcut to a photo without changing 
   const events = [];
   let landedOnShelf = false;
   for (let i = 0; i < 150; i++) {
-    events.push(...stepWorld(state, { ...idle, axis: state.x < 2140 ? 1 : 0 }, dt));
-    if (state.grounded && state.y + PLAYER_HEIGHT === LEVEL_PLATFORMS[3].y) landedOnShelf = true;
+    events.push(...stepWorld(state, { ...idle, axis: state.x < LEVEL_PHOTOS[11].x + 20 ? 1 : 0 }, dt));
+    if (state.grounded && state.y + PLAYER_HEIGHT === LEVEL_PLATFORMS[4].y) landedOnShelf = true;
   }
   assert.equal(events.filter(e => e.type === 'spring').length, 1);
   assert.equal(state.stats.jumps, 0);
   assert.equal(landedOnShelf, true);
-  assert.ok(events.some(e => e.type === 'photo' && e.id === 'photo-09'));
+  assert.ok(events.some(e => e.type === 'photo' && e.id === 'photo-12'));
+});
+
+test('the UI reading-zone contract includes both edges and excludes the gaps', () => {
+  for (const [x, zone] of [[799.99, 0], [800, 1], [1000, 1], [1200, 1], [1200.01, 0],
+    [1979.99, 0], [1980, 2], [2200, 2], [2440, 2], [2440.01, 0], [NaN, 0]]) {
+    assert.equal(readingZoneAt(x), zone, `zone at ${x}`);
+  }
+});
+
+test('reading intervals are clear of complete patrol, bubble-radius, and spring envelopes', () => {
+  const envelopes = [
+    ...LEVEL_HAZARDS.map(hazard => [hazard.x - (hazard.patrol ?? 0), hazard.x + (hazard.patrol ?? 0) + hazard.width]),
+    ...LEVEL_BUBBLES.map(bubble => [bubble.x - 23 - bubble.radius, bubble.x + 23 + bubble.radius]),
+    ...LEVEL_SPRINGS.map(spring => [spring.x, spring.x + spring.width]),
+  ];
+  for (const [start, end] of [[800, 1200], [1980, 2440]]) {
+    for (const [left, right] of envelopes) {
+      assert.ok(right < start - PLAYER_WIDTH || left > end + PLAYER_WIDTH,
+        `${left}–${right} must not enter the expanded reading interval ${start}–${end}`);
+    }
+  }
+});
+
+test('a player may remain in either reading zone without damage, knockback, or automatic launch', () => {
+  for (const x of [800, 900, 1200, 1980, 2100, 2440]) {
+    const state = createWorld(); state.x = x;
+    const events = frames(state, 2400);
+    assert.equal(state.x, x);
+    assert.equal(state.y, GROUND_Y - PLAYER_HEIGHT);
+    assert.equal(state.vx, 0);
+    assert.equal(state.stats.collisions, 0);
+    assert.equal(state.stats.bubbles, 0);
+    assert.equal(events.filter(event => ['collision', 'bubble', 'block', 'spring'].includes(event.type)).length, 0);
+  }
+  const state = createWorld(); state.x = 900;
+  frames(state, 60, { ...idle, axis: 1 });
+  assert.ok(state.x > 1000, 'the safe interval must not suppress player-directed movement');
+});
+
+test('reading protection covers the entire player at boundaries without consuming a shield', () => {
+  // Synthetic boundary contacts verify the safety rule independently of the authored placement.
+  for (const source of ['hazard', 'bubble']) {
+    for (const x of [800 - PLAYER_WIDTH, 799.99, 800, 1200, 1980 - PLAYER_WIDTH, 1979.99, 1980, 2440]) {
+      const state = createWorld(); state.x = x; state.shieldUntil = 4;
+      const fixture = source === 'hazard'
+        ? { id: 'boundary-hazard', x, y: 400, width: 32, height: 30 }
+        : { id: 'boundary-bubble', x: x - 8 - Math.sin(dt * .83) * 23,
+          y: 410 - Math.sin(dt * 1.4) * 25, radius: 17, phase: 0 };
+      const objects = source === 'hazard' ? LEVEL_HAZARDS : LEVEL_BUBBLES;
+      objects.push(fixture);
+      try {
+        const events = frames(state, 1);
+        assert.equal(events.filter(event => ['collision', 'bubble', 'block'].includes(event.type)).length, 0);
+        assert.equal(state.shieldUntil, 4);
+        assert.equal(state.invulnerableUntil, 0);
+        assert.equal(state.lastContact, null);
+      } finally { objects.pop(); }
+    }
+  }
+});
+
+test('the reading rule ends immediately outside the full-body interval', () => {
+  for (const x of [800 - PLAYER_WIDTH - .1, 1200.1, 1980 - PLAYER_WIDTH - .1, 2440.1]) {
+    const state = createWorld(); state.x = x;
+    LEVEL_HAZARDS.push({ id: 'outside-reading-hazard', x, y: 400, width: 32, height: 30 });
+    try {
+      assert.equal(frames(state, 1).filter(event => event.type === 'collision').length, 1);
+      assert.equal(state.stats.collisions, 1);
+    } finally { LEVEL_HAZARDS.pop(); }
+  }
+});
+
+test('practice signal contacts still work at coordinates shared with the first reading zone', () => {
+  for (const shield of [false, true]) {
+    const state = createWorld('practice'); state.x = 850;
+    state.collected.add(PRACTICE_PHOTOS[0].id);
+    state.practiceSignal = { x: state.x + PLAYER_WIDTH / 2, y: 410, direction: -1 };
+    if (shield) state.shieldUntil = 4;
+    const events = frames(state, 1);
+    assert.equal(events.filter(event => event.type === (shield ? 'block' : 'bubble')).length, 1);
+    assert.equal(state.stats.blocks, shield ? 1 : 0);
+    assert.equal(state.stats.bubbles, shield ? 0 : 1);
+  }
 });

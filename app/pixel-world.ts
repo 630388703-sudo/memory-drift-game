@@ -14,6 +14,13 @@ export const GOAL_X = 3780;
 export const CHECKPOINTS = [1250, 2500] as const;
 export const AREA_STARTS = [90, 1290, 2540] as const;
 
+/** Shared by the dialogue UI and collision rules; both edges belong to the zone. */
+export function readingZoneAt(x: number): 0 | 1 | 2 {
+  if (x >= 800 && x <= 1200) return 1;
+  if (x >= 1980 && x <= 2440) return 2;
+  return 0;
+}
+
 export type Platform = { id: string; x: number; y: number; width: number };
 export type Photo = { id: string; x: number; y: number; area: number };
 export type Hazard = {
@@ -61,16 +68,17 @@ export const LEVEL_PHOTOS: readonly Photo[] = [
 
 export const LEVEL_HAZARDS: readonly Hazard[] = [
   { id: 'noise-a', x: 605, y: 402, width: 28, height: 28 },
-  { id: 'noise-b', x: 1070, y: 398, width: 32, height: 32, patrol: 45, speed: .65 },
+  { id: 'noise-b', x: 1360, y: 398, width: 32, height: 32, patrol: 45, speed: .65 },
   { id: 'noise-c', x: 1770, y: 402, width: 32, height: 28 },
-  { id: 'noise-d', x: 2290, y: 398, width: 34, height: 32, patrol: 50, speed: .55, phase: 1.2 },
+  { id: 'noise-d', x: 2620, y: 398, width: 34, height: 32, patrol: 50, speed: .55, phase: 1.2 },
   { id: 'noise-e', x: 3040, y: 402, width: 32, height: 28 },
   { id: 'noise-f', x: 3555, y: 398, width: 36, height: 32, patrol: 55, speed: .65, phase: 2.1 },
 ];
 
-// An optional shortcut up to shelf-d. Walking past it never gates the main route.
+// An optional shortcut up to shelf-e, outside the second reading zone.
+// Reading never forces a launch or movement; walking past this still cannot gate the route.
 export const LEVEL_SPRINGS: readonly Spring[] = [
-  { id: 'spring-d', x: 2015, width: 46 },
+  { id: 'spring-e', x: 2765, width: 46 },
 ];
 
 export function hazardPosition(hazard: Hazard, time: number) {
@@ -81,9 +89,9 @@ export function hazardPosition(hazard: Hazard, time: number) {
 }
 
 export const LEVEL_BUBBLES: readonly Bubble[] = [
-  { id: 'echo-a', x: 790, y: 365, radius: 17, phase: 0 },
+  { id: 'echo-a', x: 710, y: 365, radius: 17, phase: 0 },
   { id: 'echo-b', x: 1470, y: 363, radius: 19, phase: 1.7 },
-  { id: 'echo-c', x: 1990, y: 371, radius: 18, phase: 3.2 },
+  { id: 'echo-c', x: 1875, y: 371, radius: 18, phase: 3.2 },
   { id: 'echo-d', x: 2725, y: 364, radius: 18, phase: 4.6 },
   { id: 'echo-e', x: 3220, y: 373, radius: 20, phase: 2.5 },
 ];
@@ -285,6 +293,11 @@ export function stepWorld(state: WorldState, input: WorldInput, seconds: number)
   }
 
   const contact = (source: 'hazard' | 'bubble', id: string) => {
+    // Protect the full player body at the boundary, not just its left-side anchor.
+    // This also covers a bubble whose radius reaches in from outside the zone.
+    // Practice has its own signal tutorial, including in this same screen-space range.
+    if (state.mode === 'game'
+      && (readingZoneAt(state.x) !== 0 || readingZoneAt(state.x + PLAYER_WIDTH) !== 0)) return;
     if (state.time < state.invulnerableUntil) return;
     state.invulnerableUntil = state.time + 1.1;
     if (state.shieldUntil > state.time) {

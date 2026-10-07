@@ -13,15 +13,18 @@
 
 ## English
 
-Keep its own short, observational voice: “Take a look.”, “What stayed?” and direct action labels. English is not back-translated from the Chinese rewrite. The Chinese-only copy pass preserves existing English wording.
+Keep its own short, observational voice: “Take a look.”, “Your three answers” and direct action labels. English is not back-translated from the Chinese rewrite. Both languages are edited together for gameplay clarity, but sentences need not follow the same structure.
 
 ## 两边必须一致的事实
 
 - 原始照片：4 人、蓝天、旋转木马在右边。
 - 留言与路边五人照片属于虚构干扰，不是真实玩家记录。
+- 两段留言来自同一对虚构人物：小林 / 阿禾，Lin / Rowan。第二人明确回应前一人，不伪装成独立观察证据。
+- 第二段准确引用本局第二次人数回答。3、4、5、记不清四条分支独立；只有5会被角色当作支持，0不等于未作答或0人。
+- 三轮只问同一个人数问题，不再追加天空或旋转木马题。背景中的天空和旋转木马仍保留。
 - 碰撞丢一张已收集照片；泡泡改动一张照片；空手时不会凭空产生照片。
 - 有照片后，长按保护键 0.7 秒；接下来 4 秒内可挡一次，持续按住不会反复充能。
 - 最多保留 5 张照片，收满后替换最早的一张。
 - 不确定是有效回答。结尾按最后一次人数回答重画的人物，不是被修改过的原始照片。
 
-实现仍使用现有语言选择和独立中英文字符串，不更换默认英文、不重构输入或游戏流程。新增文案要分别检查两种语言在实际界面里的长度和含义。
+实现保留现有语言选择和默认英文。留言模块使用跨语言稳定的 line id 与 replyTo，回答保存在本局，不串入下一局。新增文案要分别检查两种语言在实际界面里的长度和含义。玩家选择改变不等于已证明记忆被改变，结尾不能代替玩家解释原因。

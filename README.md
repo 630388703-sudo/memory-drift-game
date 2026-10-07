@@ -8,14 +8,16 @@ A non-commercial memory installation game. The current edition is a landscape 2D
 
 - 16:9 landscape presentation; a 480 × 270 game canvas scaled without smoothing.
 - Brown-haired, faceless traveler; orange clothing and cyan backpack.
-- Three recall rounds with 3 / 4 / 5 / Not sure choices. Comments are explicitly fictional, not real player submissions.
+- Three count-only recall rounds with 3 / 4 / 5 / Not sure choices. The first answer is recorded before any scripted suggestions. No carousel-position or sky-color follow-up questions.
 - Five photo slots: a sixth replaces the oldest; collisions remove the newest; interference alters a stored photo.
 - English on launch; Chinese is available from the header.
 - No advertising, payments, lives or game-over punishment.
 - Start with a short, optional hands-on practice: move, jump, collect a photo, and protect it. Practice does not carry over into the main game.
 - Twelve small route objects: ticket stubs, pinwheels, cassette radios, mailboxes and paper boats. They mark sections without adding collection goals; nearby movement briefly animates pinwheels and radio displays.
 - Amber photo frames, coral hazards, pink interference and mint protection cues share their silhouettes with the pause guide. The blue background and original character assets are unchanged.
-- Two fictional recalled prints reinforce the scripted five-person / pink-sky accounts. They are never the original evidence. The ending places the original four people, the shared five-person account and the visitor's three answers together without asserting why an answer changed.
+- Two named fictional characters, Lin and Rowan, respond to each other rather than supplying unrelated comments. Their second exchange accurately quotes the visitor's second answer: five strengthens agreement; four challenges it; three introduces doubt; Not sure is not counted as agreement. No live player messages or group statistics are used.
+- Two five-person prints repeat the fictional account against the same blue sky. They are never the original evidence. Both conversation areas are safe to stop in, with nearby hazards and the spring moved outside them. Practice still has its own signal-blocking lesson.
+- The ending preserves all three answers, shows the unchanged four-person original, and traces the conversations displayed during this visit. It does not assert why an answer changed or diagnose a false memory.
 - Hard collisions use short layered impacts and a dedicated music duck; collection and successful protection retain different timbres. Actual exhibition speakers still need listening calibration.
 
 ## Controls
@@ -63,6 +65,7 @@ The static output is `gh-pages/`. GitHub Actions builds from source and deploys 
 - [Artwork provenance](game/assets/pixel/README.md): generated project artwork, not extracted Mario assets.
 - [Audio sources](docs/AUDIO-SOURCES.md): PYNCHON by James Gargette (cinameng); Impact Sounds and Digital Audio by Kenney. CC0 sources, prepared loop, alternating short impacts and memory-signal interruptions. Earlier Pixabay sources remain documented for rollback.
 - [Language voice](docs/LANGUAGE-VOICE.md): Chinese and English are authored independently, with the same gameplay facts and English retained as the default language.
+- [Shared recall design](docs/SHARED-RECALL-DESIGN.md): teacher feedback, branching conversation, evidence boundaries and research references.
 - [Cleanup record](docs/PIXEL-RELEASE-20261007.md): removed paths and rollback information.
 - [User testing](docs/USER_TEST_PROTOCOL.md): current validation scope and remaining hardware checks.
 

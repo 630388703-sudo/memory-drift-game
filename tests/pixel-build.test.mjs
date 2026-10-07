@@ -9,7 +9,7 @@ const output = join(root, 'gh-pages');
 const html = readFileSync(join(output, 'index.html'), 'utf8');
 
 test('build has a current edition marker and every local entry asset exists', () => {
-  assert.match(html, /pixel-20261007-audio-native-zh/);
+  assert.match(html, /pixel-20261007-shared-recall/);
   const urls = [...html.matchAll(/(?:src|href)="([^"]+)"/g)].map(match => match[1]);
   assert.ok(urls.some(url => /assets\/.*\.js$/.test(url)));
   for (const url of urls.filter(value => !/^(https?:|data:)/.test(value))) {

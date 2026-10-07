@@ -221,7 +221,7 @@ function contactFeedback(ctx: CanvasRenderingContext2D, world: WorldState, reduc
   }
 }
 
-function recalledPrint(ctx: CanvasRenderingContext2D, x: number, y: number, pinkSky: boolean) {
+function recalledPrint(ctx: CanvasRenderingContext2D, x: number, y: number) {
   // A visibly separate, repeated account, never a modification to the original photo.
   ctx.save();
   ctx.translate(x, y);
@@ -231,7 +231,8 @@ function recalledPrint(ctx: CanvasRenderingContext2D, x: number, y: number, pink
   ctx.fillStyle = '#fff6d8'; ctx.fillRect(2, 2, 98, 74);
   ctx.fillStyle = '#233f83'; ctx.font = 'bold 10px monospace';
   ctx.textBaseline = 'top'; ctx.fillText('RECALLED', 9, 8);
-  ctx.fillStyle = pinkSky ? '#ed7de1' : '#89b7ef'; ctx.fillRect(8, 23, 86, 39);
+  // Both retellings change the count only. Keep the shared blue-sky baseline.
+  ctx.fillStyle = '#89b7ef'; ctx.fillRect(8, 23, 86, 39);
   ctx.fillStyle = '#233f83'; ctx.fillRect(8, 57, 86, 5);
   for (let i = 0; i < 5; i++) {
     const px = 15 + i * 16;
@@ -285,8 +286,8 @@ export function drawPixelWorld(
   drawWorldProps(ctx, world, options);
   if (!practice) {
     // The boards sit alongside the scripted shared-memory comments, above the route.
-    for (const [x, y, pink] of [[1060, 248, false], [2240, 224, true]] as const) {
-      if (x + 112 > camera && x < camera + VIEW_WIDTH) recalledPrint(ctx, x, y, pink);
+    for (const [x, y] of [[1060, 248], [2240, 224]] as const) {
+      if (x + 112 > camera && x < camera + VIEW_WIDTH) recalledPrint(ctx, x, y);
     }
   }
   if (!practice) {

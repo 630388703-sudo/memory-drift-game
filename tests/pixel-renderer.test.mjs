@@ -56,6 +56,23 @@ test('recalled prints occur along the route, not in practice or the original pho
   assert.equal(people.length, 4, 'world retellings must not alter the original four-person record');
 });
 
+test('both roadside retellings show five people against the same blue-sky baseline', () => {
+  for (const cameraX of [600, 1800]) {
+    const world = createWorld(); world.cameraX = cameraX;
+    const ctx = context(); drawPixelWorld(ctx, world, art);
+    const start = ctx.calls.findIndex(call => call.method === 'fillText' && call.args[0] === 'RECALLED');
+    assert.ok(start >= 0);
+    const remaining = ctx.calls.slice(start + 1);
+    const print = remaining.slice(0, remaining.findIndex(call => call.method === 'restore'));
+    const sky = print.filter(call => call.method === 'fillRect' && call.args.join(',') === '8,23,86,39');
+    assert.equal(sky.length, 1);
+    assert.equal(sky[0].color, '#89b7ef', 'a second account must not introduce a different sky answer');
+    const heads = print.filter(call => call.method === 'fillRect' && call.args[1] === 30
+      && call.args[2] === 6 && call.args[3] === 6 && call.color === '#17294c');
+    assert.equal(heads.length, 5);
+  }
+});
+
 test('all stages and short feedback draw safely in normal and reduced-motion modes', () => {
   for (const version of [0,1,2]) for (const reducedMotion of [false,true]) {
     const world = createWorld(); world.checkpoint = version; world.cameraX = version * 1200;
