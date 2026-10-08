@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MemoryAudio, type MemoryCue } from "./memory-audio";
 import { emptyPhotoSlots, storePhoto, losePhoto, alterPhoto, photoCount, type PhotoSlots } from "./memory-storage";
+import { snapshotPhotos, summarizePhotos, firstCarriedSlot } from "./photo-evidence";
 import { COUNT_OPTIONS, moveChoiceIndex, recallLabel } from "./memory-recall";
 import { createWorld, stepWorld, readingZoneAt, type WorldEvent } from "./pixel-world";
 import { dialogueLines, dialogueSummary, type DialogueZone } from "./memory-dialogue";
@@ -13,7 +14,9 @@ import "./pixel-game.css";
 
 type Screen = "title" | "practice" | "loading" | "observe" | "count" | "play" | "pause" | "controls" | "result";
 type Lang = "en" | "zh";
-type RecordData = { recalls: number[]; dialogueSeen: DialogueZone[]; retained: number; collected: number; altered: number; replaced: number };
+type RecordData = { recalls: number[]; dialogueSeen: DialogueZone[]; photos: PhotoSlots; retained: number; collected: number; altered: number; replaced: number };
+type ResultView = "carried" | "original" | "recall";
+const PHOTO_MISSION: [string, string] = ["捡起原图的副本，带到终点核对。", "Carry copies of the original to check at the end."];
 const ACTIONS: PixelAction[] = ["jump", "protect", "confirm", "pause", "compare", "help"];
 const KEY_LABELS = ["Z / Space", "X", "Enter", "P / Esc", "C", "H"];
 const NAMES = { en: ["Jump", "Protect photo", "Confirm", "Pause", "Compare (ending)", "Controls"], zh: ["跳跃", "保护照片", "确认", "暂停", "结尾看原图", "操作说明"] };
@@ -24,9 +27,21 @@ function Icon({ kind }: { kind: "pause" | "sound" | "muted" | "settings" | "left
   </svg>;
 }
 
-function Photo({ art, count = 4, sky = "blue", carousel = "right", label }: { art: PixelArt | null; count?: number; sky?: string; carousel?: string; label: string }) {
+function Photo({ art, count = 4, sky = "blue", carousel = "right", label, obscured = false }: { art: PixelArt | null; count?: number; sky?: string; carousel?: string; label: string; obscured?: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => { const ctx = ref.current?.getContext("2d"); if (ctx && art) drawMemoryPhoto(ctx, art, { count, sky, carousel }); }, [art, count, sky, carousel]);
+  useEffect(() => {
+    const ctx = ref.current?.getContext("2d");
+    if (!ctx || !art) return;
+    drawMemoryPhoto(ctx, art, { count, sky, carousel });
+    // Interference obscures this carried copy, never changes the original or invents people.
+    if (obscured) {
+      ctx.fillStyle = '#8196b5'; ctx.fillRect(0, 166, 480, 54);
+      for (let i = 0; i < 24; i++) {
+        ctx.fillStyle = i % 3 === 0 ? '#df96b8' : '#70c9de';
+        ctx.fillRect(i * 20, 170 + (i % 4) * 12, 16, 3);
+      }
+    }
+  }, [art, count, sky, carousel, obscured]);
   return <canvas ref={ref} width={480} height={270} className="px-memory-photo" role="img" aria-label={label} />;
 }
 
@@ -47,9 +62,11 @@ export default function LandscapeMemoryGame() {
   const [selection, setSelection] = useState(-1);
   const [recalls, setRecalls] = useState<number[]>([]);
   const [photos, setPhotos] = useState<PhotoSlots>(emptyPhotoSlots);
-  const [feedback, setFeedback] = useState<[string, string]>(["向右走，捡起沿路的照片。", "Walk right and pick up the photographs."]);
+  const [feedback, setFeedback] = useState<[string, string]>(PHOTO_MISSION);
   const [comment, setComment] = useState<0 | DialogueZone>(0);
-  const [showOriginal, setShowOriginal] = useState(true);
+  const [resultView, setResultView] = useState<ResultView>("carried");
+  const [carriedSlot, setCarriedSlot] = useState(-1);
+  const compareReturn = useRef<ResultView>("carried");
   const [bindings, setBindings] = useState(loadPixelBindings);
   const [connection, setConnection] = useState<PixelConnection>({ connected: false, id: '', buttons: 0 });
   const [pressedButton, setPressedButton] = useState<number | null>(null);
@@ -91,15 +108,15 @@ export default function LandscapeMemoryGame() {
   const reset = () => {
     world.current = createWorld();
     runtime.current.recalls = []; runtime.current.dialogueSeen = []; runtime.current.replaced = 0; runtime.current.comment = 0; runtime.current.shield = false;
-    setRecalls([]); setShield(false); setReplaced(0); setComment(0); setSlots(emptyPhotoSlots()); setRecord(null); setShowOriginal(true);
-    setFeedback(["向右走，捡起沿路的照片。", "Walk right and pick up the photographs."]);
+    setRecalls([]); setShield(false); setReplaced(0); setComment(0); setSlots(emptyPhotoSlots()); setRecord(null); setResultView("carried"); setCarriedSlot(-1);
+    setFeedback(PHOTO_MISSION);
     changeScreen("observe");
   };
   const begin = () => {
     if (!artRef.current) return;
     world.current = createWorld();
     runtime.current.shield = false; setShield(false);
-    setFeedback(['向右走，捡起沿路的照片。', 'Walk right and pick up the photographs.']);
+    setFeedback(PHOTO_MISSION);
     unlock(); changeScreen("loading"); cue("wake");
     bootTimer.current = setTimeout(() => { changeScreen("observe"); cue("ready"); }, 2200);
   };
@@ -116,7 +133,7 @@ export default function LandscapeMemoryGame() {
     cue("confirm");
     const next = [...state.recalls]; next[state.stage] = COUNT_OPTIONS[state.selection];
     state.recalls = next; setRecalls(next); changeScreen("play");
-    setFeedback(state.stage === 0 ? ["向右走，捡起沿路的照片。", "Walk right and collect the photographs."] : ["记下了，继续往右走。", "Answer saved. Keep heading right."]);
+    setFeedback(state.stage === 0 ? PHOTO_MISSION : ["记下了。带好照片，继续往右走。", "Answer saved. Keep your copies with you."]);
   };
   const openControls = () => {
     if (runtime.current.screen === "controls" || runtime.current.screen === "loading") return;
@@ -131,16 +148,20 @@ export default function LandscapeMemoryGame() {
   };
   const finish = () => {
     const state = runtime.current;
-    const next: RecordData = { recalls: [...state.recalls], dialogueSeen: [...state.dialogueSeen], retained: photoCount(state.photos), collected: world.current.collected.size, altered: state.photos.filter(p => p?.altered).length, replaced: state.replaced };
-    setRecord(next); setShowOriginal(true); changeScreen("result"); cue("finish");
-    try { localStorage.setItem("memory-drift.pixel-record.v2", JSON.stringify(next)); } catch { /* Visits still work without local storage. */ }
+    const next: RecordData = { recalls: [...state.recalls], dialogueSeen: [...state.dialogueSeen], photos: snapshotPhotos(state.photos), retained: photoCount(state.photos), collected: world.current.collected.size, altered: state.photos.filter(p => p?.altered).length, replaced: state.replaced };
+    setRecord(next); setResultView("carried"); setCarriedSlot(firstCarriedSlot(next.photos)); compareReturn.current = "carried"; changeScreen("result"); cue("finish");
+    try { localStorage.setItem("memory-drift.pixel-record.v3", JSON.stringify(next)); } catch { /* Visits still work without local storage. */ }
   };
 
   actions.current = {
     action(action, pressed) {
       const current = runtime.current.screen;
       if (pressed) unlock();
-      if (action === "compare" && current === "result") { setShowOriginal(pressed); return; }
+      if (action === "compare" && current === "result") {
+        if (pressed) { compareReturn.current = resultView; setResultView("original"); }
+        else setResultView(compareReturn.current);
+        return;
+      }
       if (!pressed) return;
       if (action === "pause") { togglePause(); return; }
       if (action === "help") { if (current === "controls") closeControls(); else openControls(); return; }
@@ -178,11 +199,11 @@ export default function LandscapeMemoryGame() {
         if (full) { state.replaced++; setReplaced(state.replaced); }
         setSlots(storePhoto(state.photos, { id: Number(event.id.split("-")[1]), at: world.current.time, version: (["A", "B", "C"] as const)[world.current.checkpoint], altered: false }));
         cue(full ? "overwrite" : "collect");
-        setFeedback(full ? ["只能带五张，新照片换掉了最早捡到的那张。", "Five slots full. The oldest photo was replaced."] : ["捡到一张照片。", "Photograph collected."]);
+        setFeedback(full ? ["背包满了，换下最早的一张。保住副本，终点再核对。", "Five slots full. The new copy replaces the oldest."] : ["捡到一张原图副本，终点可以拿它核对。", "A copy saved. You can inspect it at the end."]);
       } else if (event.type === "collision") { const hadPhoto = photoCount(state.photos) > 0; setSlots(losePhoto(state.photos)); cue("collision"); setFeedback(hadPhoto ? ["撞到了，丢了一张照片。", "Hit. One stored photo was lost."] : ["撞到障碍了。", "You hit an obstacle."]); }
-      else if (event.type === "bubble") { const hadPhoto = photoCount(state.photos) > 0; setSlots(alterPhoto(state.photos)); cue("bubble"); setFeedback(hadPhoto ? ["碰到泡泡，带着的一张照片变了。", "A bubble changed a stored photo."] : ["碰到泡泡，画面抖了一下。", "A bubble disturbed the picture."]); }
-      else if (event.type === "protect") { cue("protect"); setFeedback(["保护已开启，接下来约四秒能挡一次碰撞。", "Ready to block one hit for four seconds."]); }
-      else if (event.type === "block") { cue("block"); setFeedback(["挡住了，照片还在。", "Blocked. Your photographs are safe."]); }
+      else if (event.type === "bubble") { const hadPhoto = photoCount(state.photos) > 0; setSlots(alterPhoto(state.photos)); cue("bubble"); setFeedback(hadPhoto ? ["副本被干扰了，上面的人看不清了。原图没有变。", "Interference obscured a copy. The original is unchanged."] : ["碰到泡泡，画面抖了一下。", "A bubble disturbed the picture."]); }
+      else if (event.type === "protect") { cue("protect"); setFeedback(["四秒内挡一次撞击或泡泡，保住手里的副本。", "One block for four seconds. Keep your copies intact."]); }
+      else if (event.type === "block") { cue("block"); setFeedback(["挡住了！留住了可以带去核对的照片。", "Blocked. Your copies are still available to check."]); }
       else if (event.type === "checkpoint") { ask(event.index); cue("transition"); }
       else if (event.type === "finish") finish();
       else if (event.type === "spring") { cue('confirm'); setFeedback(['弹起来了，上面有照片！', 'Up you go. There is a photograph above.']); }
@@ -258,12 +279,25 @@ export default function LandscapeMemoryGame() {
   const practiceCopy = {
     move: [tr('先试试左右移动', 'Try moving.'), tr('往右走，到箭头路标那里。', 'Move left or right toward the arrow.'), device === 'keyboard' ? '← → / A D' : tr('摇杆左右', 'STICK ← →')],
     jump: [tr('跳一下试试', 'Now jump.'), tr('轻按跳得低，按住跳得高。', 'Hold Jump for a higher leap. Release for a short hop.'), prompt('jump')],
-    collect: [tr('够到上面的照片', 'Get the photograph.'), tr('往右跳，碰到照片就能捡起。按住跳跃能跳得更高。', 'Jump right to reach it. Hold Jump for extra height.'), `${device === 'keyboard' ? '→' : tr('摇杆', 'STICK')} + ${prompt('jump')}`],
+    collect: [tr('够到上面的照片', 'Get the photograph.'), tr('正式游戏要把副本带到终点核对。先练习：往右跳，碰到就能捡起。', 'In the game, copies are kept for comparison. Practice reaching this one: jump right.'), `${device === 'keyboard' ? '→' : tr('摇杆', 'STICK')} + ${prompt('jump')}`],
     protect: [tr('挡住过来的泡泡', 'Block the signal.'), tr('回到地面，长按保护键。边框亮了就松开，等泡泡过来。', 'Land, then hold Protect. Release when the outline lights up and let the signal reach you.'), prompt('protect')],
-    done: [tr('准备好了', 'You are ready.'), tr('接下来，撞到障碍会丢一张照片，碰到泡泡会让一张照片变样。练习不计入正式游戏。', 'On the route, obstacles lose a photo and bubbles change one. Practice does not carry over.'), prompt('confirm')],
+    done: [tr('准备好了', 'You are ready.'), tr('正式游戏要把副本带到终点。撞击会丢照片，泡泡会遮住人物。这次练习不带入正式游戏。', 'Keep copies to inspect at the end. Hits lose a copy; signals obscure it. Practice does not carry over.'), prompt('confirm')],
   };
   const cabinetLabel = <span className="px-cabinet-label">{tr('六个按键 · 每排三个', '6 BUTTONS · TWO ROWS OF THREE')}</span>;
   const connectionLabel = connection.connected ? tr('手柄已连接', 'USB controller detected') : tr('接好摇杆后，先按一下上面的按键。', 'No controller yet? Press a physical button.');
+  const carried = record?.photos[carriedSlot];
+  const evidence = summarizePhotos(record?.photos ?? photos);
+  const resultCaption = resultView === 'original'
+    ? tr('原图是四个人，从头到尾没有变。副本受损，不代表原图改变。', 'Four people. The original never changed, even when a copy was damaged.')
+    : resultView === 'recall'
+      ? record?.recalls[2] === 0
+        ? tr('你选了“记不清了”，所以这里留空；不是说原图没人。', 'You chose Not sure. The figures are left blank, not counted as zero.')
+        : tr('这里只按你最后选的人数重画，不是原图。', 'This redraw uses your final count. It is not the original.')
+      : carried
+        ? carried.altered
+          ? tr('这张副本被泡泡干扰，已经看不清人数。可以换一张，或查看原图。', 'A signal obscured this copy. Try another, or check the original.')
+          : tr('这张副本保住了，仍能看清四个人。你带回了一份能核对的记录。', 'This copy survived intact: four people. You kept a record you can check.')
+        : tr('这次没有带回副本。仍可查看原图，对照你听到的话和三次回答。', 'No copies made it back. You can still check the original against the story and your answers.');
 
   return <main className="px-page" data-screen={screen}>
     <div className="px-game">
@@ -280,7 +314,7 @@ export default function LandscapeMemoryGame() {
       <div className="px-stage">
         <canvas ref={canvas} className="px-world" width={480} height={270} role="img" aria-label={tr("往右走，跳起来捡照片，躲开障碍和泡泡。", "Side-scrolling pixel level. Move right, jump to collect photographs and avoid interference.")} />
         {screen === "play" && <>
-          <div className="px-hud" aria-label={tr("随身的照片", "Stored photographs")}><div className="px-slots">{photos.map((p, i) => <span key={i} className={p?.altered ? "is-altered" : ""} aria-label={p ? tr(p.altered ? "变了样的照片" : "照片", p.altered ? "Changed photograph" : "Photograph") : tr("空位", "Empty slot")}>{p ? <Sprite art={art} /> : <i />}{p?.altered && <b>×</b>}</span>)}</div><small>{tr("照片", "PHOTOS")} {photoCount(photos)} / 5 {replaced > 0 && <em> · {tr("已换下", "REPLACED")} {replaced}</em>}</small></div>
+          <div className="px-hud" aria-label={tr("随身的照片", "Stored photographs")}><div className="px-slots">{photos.map((p, i) => <span key={i} className={p?.altered ? "is-altered" : ""} aria-label={p ? tr(p.altered ? "被干扰的副本" : "照片", p.altered ? "Obscured copy" : "Photograph") : tr("空位", "Empty slot")}>{p ? <Sprite art={art} /> : <i />}{p?.altered && <b>×</b>}</span>)}</div><small>{tr("带去核对", "COPIES TO CHECK")} {photoCount(photos)} / 5 {replaced > 0 && <em> · {tr("已换下", "REPLACED")} {replaced}</em>}</small></div>
           <div className="px-route" aria-label={tr('回想进度', 'Recall progress')}>{[0, 1, 2].map(n => <span key={n} data-current={area === n} data-complete={area > n}>{n + 1}</span>)}</div>
           <p className="px-feedback" role="status">{tr(...feedback)}</p>
           <span className="px-shield-status" data-ready={shield}>{shield ? tr('保护中 · 还能挡一次', 'READY · ONE BLOCK') : photoCount(photos) ? tr(`按住 ${prompt('protect')} 开启保护`, `HOLD ${prompt('protect')} TO PROTECT`) : tr('先捡一张照片', 'COLLECT A PHOTO FIRST')}</span>
@@ -299,17 +333,27 @@ export default function LandscapeMemoryGame() {
           {practice === 'protect' && <small>{shield ? tr('边框亮了，等泡泡过来。', 'The outline is lit. Wait for the signal.') : tr(...feedback)}</small>}
         </section>}
         {screen !== "play" && screen !== 'practice' && <section ref={overlay} className={`px-overlay px-${screen}`} aria-label={tr("游戏面板", "Game panel")}>
-          {screen === "title" && <div className="px-title-layout"><div><small className="px-eyebrow">{tr('同一张照片，你会记得一样吗？', 'ONE PHOTOGRAPH. THREE RECALLS.')}</small><h1>{language === "en" ? <>What was<br />I again?</> : <>忘了自己<br />是什么</>}</h1><p>{tr("先看照片，再向右走。跳起来捡照片，躲开障碍。途中会三次问你：照片里有几个人？", "Look at a photograph, then head right. Jump for photos and avoid obstacles. You will recall the same picture three times.")}</p><div className="px-start-actions"><button type="button" data-primary className="px-primary" disabled={!art || assetError} onClick={startPractice}>{assetError ? tr("画面没能加载出来", "Art could not load") : art ? tr("先练一下", "Try the controls") : tr("画面加载中…", "Preparing the scene…")}</button><button type="button" className="px-text-button" disabled={!art || assetError} onClick={begin}>{tr('跳过练习，直接开始', 'Skip practice · view photograph')}</button></div>{assetError && <button type="button" onClick={() => location.reload()}>{tr("重新加载", "Reload")}</button>}<small>{tr("不限时。路边的人物和留言均为虚构。", "No timer. Roadside characters and their remarks are fictional.")}</small></div><div className="px-title-controls"><div className="px-cabinet" data-layout={6} aria-hidden="true"><span className="px-stick"><i /></span><div>{ACTIONS.map((action, n) => <i key={action} data-pressed={pressedButton === bindings[action]}>{n + 1}</i>)}</div></div><h2>{tr('一个摇杆，六个按键', 'One stick. Six buttons.')}</h2>{cabinetLabel}<p className="px-layout-note">{tr('左右移动、跳跃、保护。六个按键可以按你的摇杆重新设置。', 'Move, jump, protect. Remap the six buttons to match your controller.')}</p><div className="px-mini-controls">{ACTIONS.map((action,i) => <span key={action}><kbd>{prompt(action)}</kbd>{NAMES[language][i]}</span>)}</div><p className="px-device-note" data-connected={connection.connected}>{connectionLabel}</p><button type="button" className="px-text-button" onClick={openControls}>{tr("检查摇杆 / 设置按键", "Check controller / remap")}</button></div></div>}
+          {screen === "title" && <div className="px-title-layout"><div><small className="px-eyebrow">{tr('同一张照片，你会记得一样吗？', 'ONE PHOTOGRAPH. THREE RECALLS.')}</small><h1>{language === "en" ? <>What was<br />I again?</> : <>忘了自己<br />是什么</>}</h1><p>{tr("路上会有人说起这张照片，他们记得的未必和你一样。捡起原图的副本，带到终点核对：照片里，真的有他们说的那个人吗？", "A photograph starts a story. As you walk, others remember it differently. Collect copies and keep them safe, so you have something to check the story against at the end.")}</p><p className="px-mission-note">{tr("捡照片，是留下记录。保护照片，是不让手里的记录丢失或看不清。", "Collect to keep a record. Protect to keep that record readable.")}</p><div className="px-start-actions"><button type="button" data-primary className="px-primary" disabled={!art || assetError} onClick={startPractice}>{assetError ? tr("画面没能加载出来", "Art could not load") : art ? tr("先练一下", "Try the controls") : tr("画面加载中…", "Preparing the scene…")}</button><button type="button" className="px-text-button" disabled={!art || assetError} onClick={begin}>{tr('跳过练习，直接开始', 'Skip practice · view photograph')}</button></div>{assetError && <button type="button" onClick={() => location.reload()}>{tr("重新加载", "Reload")}</button>}<small>{tr("不限时。路边的人物和留言均为虚构。", "No timer. Roadside characters and their remarks are fictional.")}</small></div><div className="px-title-controls"><div className="px-cabinet" data-layout={6} aria-hidden="true"><span className="px-stick"><i /></span><div>{ACTIONS.map((action, n) => <i key={action} data-pressed={pressedButton === bindings[action]}>{n + 1}</i>)}</div></div><h2>{tr('一个摇杆，六个按键', 'One stick. Six buttons.')}</h2>{cabinetLabel}<p className="px-layout-note">{tr('左右移动、跳跃、保护。六个按键可以按你的摇杆重新设置。', 'Move, jump, protect. Remap the six buttons to match your controller.')}</p><div className="px-mini-controls">{ACTIONS.map((action,i) => <span key={action}><kbd>{prompt(action)}</kbd>{NAMES[language][i]}</span>)}</div><p className="px-device-note" data-connected={connection.connected}>{connectionLabel}</p><button type="button" className="px-text-button" onClick={openControls}>{tr("检查摇杆 / 设置按键", "Check controller / remap")}</button></div></div>}
           {screen === "loading" && <div className="px-boot" role="status"><div className="px-signal">{Array.from({ length: 12 }, (_, n) => <i key={n} style={{ animationDelay: `${n * .09}s` }} />)}</div><p>{tr("正在打开照片", "Opening the photograph")}</p></div>}
-          {screen === "observe" && <div className="px-observe-layout"><div className="px-photo-frame"><Photo art={art} label={tr("原始照片：四个人，右边有旋转木马，天空是蓝色的。", "Original photograph: four people, a carousel on the right and a blue sky.")} /><small>{tr("开头的照片", "ORIGINAL PHOTOGRAPH")}</small></div><div><h1>{tr("先看看这张照片", "Take a look.")}</h1><p>{tr("记住照片里的人。看好了，就开始。", "Take your time with the people in this picture. Continue when you are ready.")}</p><button type="button" data-primary className="px-primary" onClick={() => ask(0)}>{primaryText}</button></div></div>}
+          {screen === "observe" && <div className="px-observe-layout"><div className="px-photo-frame"><Photo art={art} label={tr("原始照片：四个人，右边有旋转木马，天空是蓝色的。", "Original photograph: four people, a carousel on the right and a blue sky.")} /><small>{tr("开头的照片", "ORIGINAL PHOTOGRAPH")}</small></div><div><h1>{tr("先看看这张照片", "Take a look.")}</h1><p>{tr("记住照片里的人。这是原图，路上捡到的是它的副本；到终点再一起核对。", "This is the original. Study the people, then carry copies along the route for a final comparison.")}</p><button type="button" data-primary className="px-primary" onClick={() => ask(0)}>{primaryText}</button></div></div>}
           {isQuestion && <div className="px-question"><small>{tr(`第 ${stage + 1} 次回想`, `RECALL ${stage + 1} / 3`)}</small><h1>{tr("开头那张照片里，有几个人？", "How many people were in the first photograph?")}</h1><div className="px-choices" role="group" aria-label={tr("选择答案", "Choose an answer")}>{options.map((value, i) => <button type="button" key={value} aria-pressed={selection === i} onClick={() => choose(i)}>{label(value)}</button>)}</div><p>{device === 'touch' ? tr('点选答案，再点“选好了”。', 'Tap an answer, then confirm.') : device === 'gamepad' ? tr(`左右拨摇杆选择，按 ${prompt('confirm')} 确认。`, `Tilt left or right to choose. Press ${prompt('confirm')} to confirm.`) : tr('按左右方向键选择，按 Enter 确认。', 'Use ← → to choose. Press Enter to confirm.')}</p><button type="button" data-primary className="px-primary" disabled={selection < 0} onClick={submit}>{tr("选好了", "Keep this answer")}</button></div>}
-          {screen === "pause" && <div className="px-pause-panel"><h1>{tr("已暂停", "Paused")}</h1><p>{tr("接着玩，会从刚才停下的地方继续。", "Your photographs and answers are still here.")}</p><button type="button" data-primary className="px-primary" onClick={() => { unlock(); changeScreen(runtime.current.activeScreen); }}>{tr("接着玩", "Continue")}</button><button type="button" onClick={openControls}>{tr("操作说明", "Controls")}</button><div className="px-object-guide"><span><Sprite art={art} index={4}/>{tr('照片：碰到就捡起', 'Photo: touch to collect')}</span><span><Sprite art={art} index={7}/>{tr('障碍：跳过去，或提前开启保护', 'Obstacle: jump or protect')}</span><span><Sprite art={art} index={5}/>{tr('泡泡：碰到会让照片变样', 'Bubble: changes a photo')}</span></div></div>}
-          {screen === "controls" && <div className="px-controls-panel"><div className="px-controls-heading"><h1>{tr("摇杆和按键怎么用", "Controls & controller")}</h1><button type="button" data-primary onClick={closeControls}>{tr("返回", "Back")}</button></div><div className="px-device-panel">{cabinetLabel}<div role="status"><strong>{connectionLabel}</strong><small>{connection.connected ? connection.id : tr('有些摇杆会被当作键盘，下方按键也能用。没显示手柄名称，不一定是没连上。', 'Keyboard-mode controllers use the keys below. The USB connector alone does not identify the input mode.')}</small>{pressedButton !== null && <kbd>{tr('刚按下：键 ', 'Detected BTN ')}{pressedButton + 1}</kbd>}</div></div><p>{tr("左右推摇杆控制走路。打开菜单后，上下或左右选项目，按确认进入，按暂停键返回。", "Move with the stick. In menus, move it up/down or left/right to choose, Confirm to open, Menu to go back.")}</p><div className="px-binding-list">{ACTIONS.map((action, i) => <div key={action} data-active={pressedButton === bindings[action]}><span>{NAMES[language][i]}</span><kbd>{KEY_LABELS[i]}</kbd><button type="button" aria-label={`${tr("重新设置", "Remap")} ${NAMES[language][i]}`} aria-pressed={bindingAction === action} onClick={() => { input.current?.capture(action); setBindingAction(action); }}>{bindingAction === action ? tr("按一下想用的摇杆按键…", "Press a button…") : `${buttonName(action)} ↗`}</button></div>)}</div><p className="px-control-note">{tr("带着照片时，按住保护键 0.7 秒，亮起边框后约 4 秒内能挡一次碰撞。想换键：先选右侧键号，再按摇杆上的按键。键号不代表按键位置；如果这个键已有用途，两项功能会互换。", "Collect a photo, then hold Protect for 0.7 seconds to block one hit within 4 seconds. Numbers are not cabinet positions: choose a binding, then press the physical button. Conflicting bindings swap.")}</p><div className="px-control-footer"><button type="button" onClick={() => { input.current?.capture(null); setBindingAction(null); input.current?.setBindings({ ...DEFAULT_BUTTONS }); setBindings({ ...DEFAULT_BUTTONS }); }}>{tr("恢复默认按键", "Reset bindings")}</button>{bindingAction && <button type="button" onClick={() => { input.current?.capture(null); setBindingAction(null); }}>{tr("不改了", "Cancel remapping")}</button>}<span>{tr("声音", "AUDIO")}: PYNCHON — James Gargette · SFX — Kenney</span></div></div>}
+          {screen === "pause" && <div className="px-pause-panel"><h1>{tr("已暂停", "Paused")}</h1><p>{tr("接着玩，会从刚才停下的地方继续。", "Your photographs and answers are still here.")}</p><button type="button" data-primary className="px-primary" onClick={() => { unlock(); changeScreen(runtime.current.activeScreen); }}>{tr("接着玩", "Continue")}</button><button type="button" onClick={openControls}>{tr("操作说明", "Controls")}</button><div className="px-object-guide"><span><Sprite art={art} index={4}/>{tr('照片：捡起副本，终点核对', 'Copy: collect to compare later')}</span><span><Sprite art={art} index={7}/>{tr('障碍：跳过去，或提前开启保护', 'Obstacle: jump or protect')}</span><span><Sprite art={art} index={5}/>{tr('泡泡：让副本看不清', 'Signal: obscures a copy')}</span></div></div>}
+          {screen === "controls" && <div className="px-controls-panel"><div className="px-controls-heading"><h1>{tr("摇杆和按键怎么用", "Controls & controller")}</h1><button type="button" data-primary onClick={closeControls}>{tr("返回", "Back")}</button></div><div className="px-device-panel">{cabinetLabel}<div role="status"><strong>{connectionLabel}</strong><small>{connection.connected ? connection.id : tr('有些摇杆会被当作键盘，下方按键也能用。没显示手柄名称，不一定是没连上。', 'Keyboard-mode controllers use the keys below. The USB connector alone does not identify the input mode.')}</small>{pressedButton !== null && <kbd>{tr('刚按下：键 ', 'Detected BTN ')}{pressedButton + 1}</kbd>}</div></div><p>{tr("左右推摇杆控制走路。打开菜单后，上下或左右选项目，按确认进入，按暂停键返回。", "Move with the stick. In menus, move it up/down or left/right to choose, Confirm to open, Menu to go back.")}</p><div className="px-binding-list">{ACTIONS.map((action, i) => <div key={action} data-active={pressedButton === bindings[action]}><span>{NAMES[language][i]}</span><kbd>{KEY_LABELS[i]}</kbd><button type="button" aria-label={`${tr("重新设置", "Remap")} ${NAMES[language][i]}`} aria-pressed={bindingAction === action} onClick={() => { input.current?.capture(action); setBindingAction(action); }}>{bindingAction === action ? tr("按一下想用的摇杆按键…", "Press a button…") : `${buttonName(action)} ↗`}</button></div>)}</div><p className="px-control-note">{tr("保护的是带去终点核对的副本，不会改变你的回答。带着照片时，按住保护键 0.7 秒，亮起边框后约 4 秒内能挡一次撞击或泡泡。想换键：先选右侧键号，再按摇杆上的按键。键号不代表按键位置；如果这个键已有用途，两项功能会互换。", "Protect keeps carried copies intact; it never changes your answer. Hold Protect for 0.7 seconds to block one hit or signal within 4 seconds. Numbers are not cabinet positions: choose a binding, then press the physical button. Conflicting bindings swap.")}</p><div className="px-control-footer"><button type="button" onClick={() => { input.current?.capture(null); setBindingAction(null); input.current?.setBindings({ ...DEFAULT_BUTTONS }); setBindings({ ...DEFAULT_BUTTONS }); }}>{tr("恢复默认按键", "Reset bindings")}</button>{bindingAction && <button type="button" onClick={() => { input.current?.capture(null); setBindingAction(null); }}>{tr("不改了", "Cancel remapping")}</button>}<span>{tr("声音", "AUDIO")}: PYNCHON — James Gargette · SFX — Kenney</span></div></div>}
           {screen === "result" && record && <div className="px-result-layout">
             <div>
-              <div className="px-result-tabs"><button type="button" aria-pressed={showOriginal} onClick={() => setShowOriginal(true)}>{tr("开头的照片", "Original")}</button><button type="button" aria-pressed={!showOriginal} onClick={() => setShowOriginal(false)}>{tr("你选的人数", "From your count")}</button></div>
-              <Photo art={art} count={showOriginal ? 4 : (record.recalls[2] ?? 0)} label={showOriginal ? tr("开头的照片：四个人", "Original photograph: four people") : tr("按你最后选的人数重画的照片，并非原图", "A reconstruction from your final count, not the original")} />
-              <p>{showOriginal ? tr("原图是四个人，从头到尾没有变。", "Four people. The original stayed the same.") : record.recalls[2] === 0 ? tr('你选了“记不清了”，所以这里留空；不是说原图没人。', 'You chose Not sure. The figures are left blank, not counted as zero.') : tr('这里只按你最后选的人数重画，不是原图。', 'This redraw uses your final count. It is not the original.')}</p>
+              <div className="px-result-tabs" role="group" aria-label={tr('选择核对内容', 'Choose what to compare')}>
+                <button type="button" aria-pressed={resultView === 'carried'} onClick={() => setResultView('carried')}>{tr('带回的照片', 'Carried copies')}</button>
+                <button type="button" aria-pressed={resultView === 'original'} onClick={() => setResultView('original')}>{tr('开头的照片', 'Original')}</button>
+                <button type="button" aria-pressed={resultView === 'recall'} onClick={() => setResultView('recall')}>{tr('你选的人数', 'Your count')}</button>
+              </div>
+              {resultView === 'carried' && !carried
+                ? <div className="px-no-copy" role="img" aria-label={tr('没有带回照片', 'No carried copies')}><span>—</span>{tr('手里没有留下副本', 'NO COPIES RETURNED')}</div>
+                : <Photo art={art} count={resultView === 'recall' ? (record.recalls[2] ?? 0) : 4} obscured={resultView === 'carried' && !!carried?.altered} label={resultView === 'original' ? tr('开头的照片：四个人', 'Original photograph: four people') : resultView === 'recall' ? tr('按你最后选的人数重画的照片，并非原图', 'A reconstruction from your final count, not the original') : carried?.altered ? tr('被干扰的副本：人物被遮挡，无法核对人数', 'Obscured copy: the people cannot be counted') : tr('带回的完好副本：四个人', 'Intact carried copy: four people')} />}
+              <div className="px-carried-strip" role="group" aria-label={tr('本局带回的五个照片槽', 'Five carried-photo slots from this visit')}>
+                {record.photos.map((p, i) => <button type="button" key={i} disabled={!p} aria-pressed={resultView === 'carried' && carriedSlot === i} data-photo-state={!p ? 'empty' : p.altered ? 'damaged' : 'clear'} aria-label={tr(`照片槽 ${i + 1}：${!p ? '空位' : p.altered ? '受干扰' : '完好'}`, `Slot ${i + 1}: ${!p ? 'empty' : p.altered ? 'obscured' : 'intact'}`)} onClick={() => { setCarriedSlot(i); setResultView('carried'); }}><span>{String(i + 1).padStart(2, '0')}</span><small>{tr(!p ? '空位' : p.altered ? '受干扰' : '完好', !p ? 'EMPTY' : p.altered ? 'OBSCURED' : 'INTACT')}</small></button>)}
+              </div>
+              <p className="px-carried-total">{tr(`带回 ${evidence.retained} 张 · 完好 ${evidence.clear} 张 · 受干扰 ${evidence.damaged} 张`, `${evidence.retained} returned · ${evidence.clear} intact · ${evidence.damaged} obscured`)}</p>
+              <p className="px-result-caption" role="status">{resultCaption}</p>
               <p className="px-fiction-note">{tr('路边人物和五人照片都是游戏虚构的，不是真实玩家记录。', 'The characters and five-person prints are fiction, not records from other players.')}</p>
             </div>
             <div className="px-result-copy">
@@ -319,9 +363,9 @@ export default function LandscapeMemoryGame() {
               <ol className="px-dialogue-trace">
                 {record.dialogueSeen.includes(1) && <li>{tr('小林先说“好像五个人”，阿禾听后也觉得是五个。', 'Lin suggested five. Rowan then said that sounded familiar.')}</li>}
                 {record.dialogueSeen.includes(2) && <li>{dialogueSummary(record.recalls[1], language)}</li>}
-                <li>{tr('原图一直是四个人。上面保留了你的三次回答。', 'The photograph still showed four. Your answers are preserved above.')}</li>
+                <li>{tr('有人重复五人这个说法，照片里却只有四个。保住副本，就是留下一次自己核对的机会。', 'The repeated story says five; the photograph shows four. An intact copy gives you something to check for yourself.')}</li>
               </ol>
-              <p className="px-final-question">{tr('你记得的，是照片，还是后来听到的话？', 'The picture—or the story that followed?')}</p>
+              <p className="px-final-question">{tr('被反复提起的那个人，照片里真的有吗？', 'The person they kept mentioning—were they ever in the picture?')}</p>
               <button type="button" data-primary className="px-primary" onClick={reset}>{tr("再玩一次", "Look again")}</button>
             </div>
           </div>}

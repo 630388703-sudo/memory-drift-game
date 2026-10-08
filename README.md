@@ -1,6 +1,6 @@
 # What Was I Again? / 忘了自己是什么
 
-A non-commercial memory installation game. The current edition is a landscape 2D pixel game: study a photograph, collect its fragments along the route, answer repeated recall questions, then compare your answers with the original.
+A non-commercial memory installation game. The current edition is a landscape 2D pixel game: study a photograph, carry copies along the route, answer repeated recall questions, then inspect the copies you kept against the original and the story you heard.
 
 [Play the current web edition](https://630388703-sudo.github.io/memory-drift-game/)
 
@@ -9,7 +9,8 @@ A non-commercial memory installation game. The current edition is a landscape 2D
 - 16:9 landscape presentation; a 480 × 270 game canvas scaled without smoothing.
 - Brown-haired, faceless traveler; orange clothing and cyan backpack.
 - Three count-only recall rounds with 3 / 4 / 5 / Not sure choices. The first answer is recorded before any scripted suggestions. No carousel-position or sky-color follow-up questions.
-- Five photo slots: a sixth replaces the oldest; collisions remove the newest; interference alters a stored photo.
+- Five photo slots: a sixth replaces the oldest; collisions remove the newest; interference obscures a stored copy. Every pickup starts as a copy of the unchanged original. A/B/C in storage marks the pickup stage, not a different source or truth value.
+- Collecting keeps a record for the final comparison; protection blocks one hit or signal so that carried copies remain available. Title, practice, pickup feedback, HUD and pause help explain this purpose without adding a new key or recall question.
 - English on launch; Chinese is available from the header.
 - No advertising, payments, lives or game-over punishment.
 - Start with a short, optional hands-on practice: move, jump, collect a photo, and protect it. Practice does not carry over into the main game.
@@ -17,7 +18,8 @@ A non-commercial memory installation game. The current edition is a landscape 2D
 - Amber photo frames, coral hazards, pink interference and mint protection cues share their silhouettes with the pause guide. The blue background and original character assets are unchanged.
 - Two named fictional characters, Lin and Rowan, respond to each other rather than supplying unrelated comments. Their second exchange accurately quotes the visitor's second answer: five strengthens agreement; four challenges it; three introduces doubt; Not sure is not counted as agreement. No live player messages or group statistics are used.
 - Two five-person prints repeat the fictional account against the same blue sky. They are never the original evidence. Both conversation areas are safe to stop in, with nearby hazards and the spring moved outside them. Practice still has its own signal-blocking lesson.
-- The ending preserves all three answers, shows the unchanged four-person original, and traces the conversations displayed during this visit. It does not assert why an answer changed or diagnose a false memory.
+- The ending opens on the actual carried-photo inventory, with five fixed slots and intact/obscured/empty states. Select a non-empty slot to inspect it; use Original and Your count to compare. Hold C (or the bound Compare button) to see the original temporarily and release to return. Obscured copies conceal the people, never invent a fifth person. No copies are required to finish or access the original.
+- The ending preserves all three answers and traces the conversations displayed during this visit. It does not assert why an answer changed or diagnose a false memory. Local result snapshots use `memory-drift.pixel-record.v3`; they are not shared player statistics.
 - Hard collisions use short layered impacts and a dedicated music duck; collection and successful protection retain different timbres. Actual exhibition speakers still need listening calibration.
 
 ## Controls

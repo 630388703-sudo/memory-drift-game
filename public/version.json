@@ -1,11 +1,12 @@
 {
   "edition": "landscape-pixel",
-  "build": "pixel-20261007-shared-recall",
+  "build": "pixel-20261008-photo-purpose",
   "copy": "independent-bilingual-shared-recall",
   "narrative": "three-counts-two-fictional-conversations",
   "audio": "pynchon-kenney-signal-breaks",
   "controls": "six-buttons-two-rows",
   "character": "brown-hair-faceless",
   "worldProps": 12,
-  "date": "2026-10-07"
+  "evidence": "carried-original-copies-final-inspection",
+  "date": "2026-10-08"
 }
