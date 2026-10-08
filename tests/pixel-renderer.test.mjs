@@ -15,8 +15,8 @@ function load(name) {
   modules.set(name, exports);
   return exports;
 }
-const { drawPixelWorld, drawMemoryPhoto, drawGameObject } = load('./pixel-renderer');
-const { createWorld, GROUND_Y } = load('./pixel-world');
+const { drawPixelWorld, drawMemoryPhoto, drawPhotoFragments, drawGameObject } = load('./pixel-renderer');
+const { createWorld, GROUND_Y, VIEW_WIDTH, VIEW_HEIGHT, LEVEL_PHOTOS, PRACTICE_PHOTOS } = load('./pixel-world');
 const art = {
   background: { naturalWidth: 1600, naturalHeight: 900 }, atlas: {},
   frames: Array.from({length:8}, (_, i) => ({x:i * 50,y:0,width:28,height:44})), heroWidth:28,heroHeight:44,
@@ -83,4 +83,87 @@ test('all stages and short feedback draw safely in normal and reduced-motion mod
     assert.ok(ctx.calls.some(c => c.color === '#ff655c'));
     assert.ok(ctx.calls.some(c => c.color === '#63ebcb'));
   }
+});
+
+const clearSlots = () => Array.from({ length: 5 }, (_, index) => ({ id: index + 1, at: index, version:'A', altered:false }));
+const fullStripFills = ctx => ctx.calls.filter(call => call.method === 'fillRect'
+  && call.args[1] === 0 && call.args[2] === VIEW_WIDTH / 5 && call.args[3] === VIEW_HEIGHT);
+
+test('five intact fragments join into the exact original four-person scene with only thin seams', () => {
+  const original = context(); drawMemoryPhoto(original, art, { count:4 });
+  const fragments = context(); drawPhotoFragments(fragments, art, clearSlots());
+  assert.deepEqual(fragments.calls.slice(0, original.calls.length), original.calls,
+    'all original drawing commands must be unchanged, not redrawn as separate miniatures');
+  assert.deepEqual(fullStripFills(fragments), [], 'intact strips must not be obscured');
+  const extraImages = fragments.calls.slice(original.calls.length).filter(call => call.method === 'drawImage');
+  assert.deepEqual(extraImages, [], 'fragment composition cannot invent a fifth person');
+  const seams = fragments.calls.slice(original.calls.length).filter(call => call.method === 'fillRect');
+  assert.deepEqual(seams.map(call => call.args), [1,2,3,4].map(i => [i * VIEW_WIDTH / 5, 0, 2, VIEW_HEIGHT]));
+});
+
+test('each absent fragment is completely covered by opaque paper, not a glimpse of the original', () => {
+  for (let index = 0; index < 5; index++) {
+    const slots = clearSlots(); slots[index] = null;
+    const ctx = context(); drawPhotoFragments(ctx, art, slots);
+    const masks = fullStripFills(ctx);
+    assert.equal(masks.length, 1);
+    assert.deepEqual(masks[0].args, [index * VIEW_WIDTH / 5, 0, VIEW_WIDTH / 5, VIEW_HEIGHT]);
+    assert.equal(masks[0].color, '#fff6d8');
+    assert.equal(masks[0].alpha, 1);
+    assert.ok(ctx.calls.some(call => call.method === 'fillText' && call.args[0] === String(index + 1)));
+    const afterMask = ctx.calls.slice(ctx.calls.indexOf(masks[0]) + 1);
+    assert.equal(afterMask.some(call => call.method === 'drawImage'), false,
+      'nothing may draw original pixels back over a missing strip');
+  }
+});
+
+test('each damaged fragment is fully opaque; signal lines remain inside its own fixed strip', () => {
+  for (let index = 0; index < 5; index++) {
+    const slots = clearSlots(); slots[index].altered = true;
+    const ctx = context(); drawPhotoFragments(ctx, art, slots);
+    const masks = fullStripFills(ctx);
+    assert.equal(masks.length, 1);
+    assert.deepEqual(masks[0].args, [index * VIEW_WIDTH / 5, 0, VIEW_WIDTH / 5, VIEW_HEIGHT]);
+    assert.equal(masks[0].color, '#8196b5');
+    assert.equal(masks[0].alpha, 1);
+    const signals = ctx.calls.filter(call => call.method === 'fillRect' && ['#df96b8','#70c9de'].includes(call.color));
+    assert.equal(signals.length, 18);
+    for (const signal of signals) {
+      const [x,y,w,h] = signal.args;
+      assert.ok(x >= index * VIEW_WIDTH / 5 && x + w <= (index + 1) * VIEW_WIDTH / 5);
+      assert.ok(y >= 0 && y + h <= VIEW_HEIGHT);
+    }
+    assert.equal(ctx.calls.slice(ctx.calls.indexOf(masks[0]) + 1).some(call => call.method === 'drawImage'), false);
+  }
+});
+
+test('all-missing, all-damaged and mixed inventories preserve five fixed regions', () => {
+  for (const slots of [Array(5).fill(null), clearSlots().map(photo => ({ ...photo, altered:true })),
+    clearSlots().map((photo, i) => i % 2 ? { ...photo, altered:true } : null)]) {
+    const ctx = context(); drawPhotoFragments(ctx, art, slots);
+    const masks = fullStripFills(ctx);
+    assert.equal(masks.length, 5);
+    assert.deepEqual(masks.map(call => call.args[0]), [0,192,384,576,768]);
+    assert.equal(ctx.calls.filter(call => call.method === 'drawImage' && call.args[0] === art.atlas && call.args[1] === 0).length, 4);
+    assert.equal(ctx.calls.filter(call => call.method === 'fillText' && call.args[0] === 'RECALLED').length, 0);
+    assert.equal(ctx.calls.filter(call => call.method === 'save').length, ctx.calls.filter(call => call.method === 'restore').length);
+  }
+});
+
+test('all 15 route pickups identify their fixed fragment 1–5; practice defaults to fragment 1', () => {
+  for (const photo of LEVEL_PHOTOS) {
+    const world = createWorld(); world.cameraX = Math.max(0, photo.x - 450);
+    // Isolate this pickup so wayfinding text cannot conceal a numbering mismatch.
+    world.collected = new Set(LEVEL_PHOTOS.filter(other => other.id !== photo.id).map(other => other.id));
+    const ctx = context(); drawPixelWorld(ctx, world, art, { reducedMotion:true });
+    const labels = ctx.calls.filter(call => call.method === 'fillText' && /^[1-5]$/.test(call.args[0]));
+    const part = (Number(photo.id.match(/(\d+)$/)[1]) - 1) % 5;
+    assert.equal(labels.length, 1);
+    assert.equal(labels[0].args[0], String(part + 1));
+    assert.ok(ctx.calls.some(call => call.method === 'fillRect' && call.color === '#63ebcb'
+      && call.args.join(',') === `${2 + part * 6},34,4,6`));
+  }
+  assert.equal(PRACTICE_PHOTOS[0].id, 'practice-photo');
+  const practice = context(); drawPixelWorld(practice, createWorld('practice'), art, { reducedMotion:true });
+  assert.deepEqual(practice.calls.filter(call => call.method === 'fillText' && /^[1-5]$/.test(call.args[0])).map(call => call.args[0]), ['1']);
 });

@@ -1,7 +1,8 @@
 import type { PhotoSlots } from "./memory-storage";
 
-// Every carried photo is a copy of the opening image. A/B/C record the pickup
-// stage, not a different source; interference can obscure a copy, not rewrite it.
+// Each fixed slot holds one left-to-right fragment of the opening image.
+// A/B/C record the pickup stage, not a different source. Interference obscures
+// that fragment; it never changes the opening image or the player's answers.
 export function snapshotPhotos(slots: PhotoSlots): PhotoSlots {
   return slots.map(photo => photo ? { ...photo } : null);
 }

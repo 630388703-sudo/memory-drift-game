@@ -1,6 +1,7 @@
 import backgroundAsset from '../game/assets/pixel/background.png';
 import atlasAsset from '../game/assets/pixel/atlas.png';
 import { drawWorldProps } from './pixel-props';
+import type { PhotoSlots } from './memory-storage';
 import {
   CHECKPOINTS, GOAL_X, GROUND_Y, LEVEL_BUBBLES, LEVEL_HAZARDS,
   LEVEL_PHOTOS, LEVEL_PLATFORMS, LEVEL_SPRINGS, PRACTICE_PHOTOS, PRACTICE_PLATFORMS,
@@ -260,6 +261,25 @@ function routeArrow(ctx: CanvasRenderingContext2D, x: number, y: number, directi
   ctx.restore();
 }
 
+/** The number and highlighted strip identify the same fixed part in each route section. */
+function fragmentMarker(ctx: CanvasRenderingContext2D, id: string, x: number, y: number) {
+  const suffix = Number(id.match(/(\d+)$/)?.[1] ?? 1);
+  const part = (Math.max(1, suffix) - 1) % 5;
+  ctx.save();
+  ctx.translate(pixel(x), pixel(y));
+  ctx.fillStyle = '#17294c'; ctx.fillRect(22, -8, 18, 18);
+  ctx.fillStyle = '#fff6d8'; ctx.fillRect(24, -6, 14, 14);
+  ctx.fillStyle = '#17294c';
+  ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(String(part + 1), 31, 1);
+  ctx.fillStyle = '#17294c'; ctx.fillRect(0, 32, 32, 10);
+  for (let i = 0; i < 5; i++) {
+    ctx.fillStyle = i === part ? '#63ebcb' : '#fff6d8';
+    ctx.fillRect(2 + i * 6, i === part ? 34 : 38, 4, i === part ? 6 : 2);
+  }
+  ctx.restore();
+}
+
 /** Draw into a 480×270 backing canvas; the simulation remains 960×540 logical pixels. */
 export function drawPixelWorld(
   ctx: CanvasRenderingContext2D, world: WorldState, art: PixelArt, options: PixelWorldOptions = {},
@@ -312,6 +332,7 @@ export function drawPixelWorld(
     if (world.collected.has(photo.id) || photo.x < camera - 40 || photo.x > camera + VIEW_WIDTH + 40) continue;
     const bob = options.reducedMotion ? 0 : pixel(Math.sin(world.time * 2.4 + photo.x) * 2);
     drawGameObject(ctx, art, 4, photo.x - 16, photo.y - 16 + bob, 32, 32);
+    fragmentMarker(ctx, photo.id, photo.x - 16, photo.y - 16 + bob);
   }
   for (const bubble of practice ? [] : LEVEL_BUBBLES) {
     // The visual follows the same trajectory as the collider, including reduced-motion mode.
@@ -384,5 +405,49 @@ export function drawMemoryPhoto(ctx: CanvasRenderingContext2D, art: PixelArt, op
     const x = VIEW_WIDTH / 2 - total / 2 + i * spacing - 28;
     drawAtlasSprite(ctx, art, 0, x, GROUND_Y - 88, 56, 88, i % 2 === 1);
   }
+  ctx.restore();
+}
+
+/**
+ * The five slots reveal five fixed strips of the original, never five alternate photos.
+ * Missing and damaged strips are opaque across their whole area; no hidden person can
+ * peek through a gap or be replaced with an invented reconstruction.
+ */
+export function drawPhotoFragments(ctx: CanvasRenderingContext2D, art: PixelArt, slots: PhotoSlots): void {
+  drawMemoryPhoto(ctx, art, { count: 4 });
+  ctx.save();
+  ctx.setTransform(ctx.canvas.width / VIEW_WIDTH, 0, 0, ctx.canvas.height / VIEW_HEIGHT, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.globalAlpha = 1;
+  const width = VIEW_WIDTH / 5;
+  for (let index = 0; index < 5; index++) {
+    const photo = slots[index];
+    const x = index * width;
+    if (!photo) {
+      ctx.fillStyle = '#fff6d8'; ctx.fillRect(x, 0, width, VIEW_HEIGHT);
+      ctx.fillStyle = '#8196b5';
+      // Dashed paper outline: absence is legible without depending on colour alone.
+      for (let y = 8; y < VIEW_HEIGHT - 8; y += 20) {
+        ctx.fillRect(x + 6, y, 2, Math.min(10, VIEW_HEIGHT - 8 - y));
+        ctx.fillRect(x + width - 8, y, 2, Math.min(10, VIEW_HEIGHT - 8 - y));
+      }
+      for (let dx = 8; dx < width - 8; dx += 20) {
+        ctx.fillRect(x + dx, 6, Math.min(10, width - 8 - dx), 2);
+        ctx.fillRect(x + dx, VIEW_HEIGHT - 8, Math.min(10, width - 8 - dx), 2);
+      }
+      ctx.fillStyle = '#233f83'; ctx.font = 'bold 28px monospace';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(String(index + 1), x + width / 2, VIEW_HEIGHT / 2);
+    } else if (photo.altered) {
+      ctx.fillStyle = '#8196b5'; ctx.fillRect(x, 0, width, VIEW_HEIGHT);
+      for (let row = 0; row < 18; row++) {
+        ctx.fillStyle = row % 3 === 0 ? '#df96b8' : '#70c9de';
+        ctx.fillRect(x + 12 + row % 3 * 28, 14 + row * 30, 70 + row % 2 * 28, 2);
+      }
+    }
+  }
+  // Exact adjoining crops with quiet seams, not separated or rearranged miniatures.
+  ctx.fillStyle = '#233f83';
+  for (let index = 1; index < 5; index++) ctx.fillRect(index * width, 0, 2, VIEW_HEIGHT);
   ctx.restore();
 }

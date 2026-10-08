@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  emptyPhotoSlots, storePhoto, losePhoto, alterPhoto, photoCount,
+  emptyPhotoSlots, fragmentIndex, storePhoto, losePhoto, alterPhoto, photoCount,
 } from '../app/memory-storage.ts';
 import {
   COUNT_OPTIONS, moveChoiceIndex, moveCount, recallLabel, comparisonState,
@@ -20,43 +20,80 @@ test('each collection starts with five independent empty slots', () => {
   assert.equal(second[0], null);
 });
 
-test('collection fills the first empty slot without moving existing photos', () => {
+test('all fifteen pickups map to three sets of five fixed fragment positions', () => {
+  for (let set = 0; set < 3; set++) {
+    let slots = emptyPhotoSlots();
+    for (const position of [4, 2, 0, 3, 1]) {
+      const id = set * 5 + position + 1;
+      assert.equal(fragmentIndex(id), position);
+      slots = storePhoto(slots, photo(id));
+      assert.equal(slots[position].id, id);
+    }
+    assert.deepEqual(slots.map(item => item.id), [1, 2, 3, 4, 5].map(id => id + set * 5));
+    assert.equal(photoCount(slots), 5);
+  }
+});
+
+test('fragment ids must be positive safe integers', () => {
+  for (const invalid of [0, -1, 1.5, NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1, '1', null, undefined]) {
+    assert.throws(() => fragmentIndex(invalid), RangeError);
+    assert.throws(() => storePhoto(emptyPhotoSlots(), photo(invalid)), RangeError);
+  }
+});
+
+test('collection fills its matching position, not the first empty slot', () => {
   const first = photo(1);
   const third = photo(3);
   const before = freezeSlots(first, null, third, null, null);
   const incoming = photo(4);
   const after = storePhoto(before, incoming);
-  assert.deepEqual(after, [first, incoming, third, null, null]);
+  assert.deepEqual(after, [first, null, third, incoming, null]);
   assert.equal(after.length, 5);
   assert.equal(photoCount(after), 3);
   assert.notEqual(after, before);
   assert.deepEqual(before, [first, null, third, null, null]);
 });
 
-test('a sixth photo replaces the oldest timestamp, not a fixed slot or lowest id', () => {
-  const before = freezeSlots(photo(1, 50), photo(2, 40), photo(99, 10), photo(4, 30), photo(5, 20));
-  const incoming = photo(100, 60);
+test('duplicate clear fragments never occupy gaps, replace other pieces or refresh age', () => {
+  const before = freezeSlots(photo(1, 50), null, photo(3, 10), photo(4, 30), photo(5, 20));
+  for (const id of [3, 8, 13]) {
+    const after = storePhoto(before, photo(id, 100));
+    assert.equal(after, before);
+    assert.equal(after[2].id, 3);
+    assert.equal(after[2].at, 10);
+    assert.equal(after[1], null);
+    assert.equal(photoCount(after), 4);
+  }
+  const full = freezeSlots(photo(1), photo(2), photo(3), photo(4), photo(5));
+  assert.equal(storePhoto(full, photo(6, 100)), full);
+});
+
+test('a replacement repairs only the matching damaged fragment', () => {
+  const before = freezeSlots(photo(1, 10, true), photo(2, 20), photo(3, 30, true), null, null);
+  const incoming = photo(8, 80);
   const after = storePhoto(before, incoming);
   assert.equal(after[2], incoming);
+  assert.equal(after[2].altered, false);
+  assert.equal(after[2].at, 80);
   for (const index of [0, 1, 3, 4]) assert.equal(after[index], before[index]);
-  assert.equal(photoCount(after), 5);
-  assert.equal(before[2].id, 99);
+  assert.equal(before[2].altered, true);
+  assert.equal(photoCount(after), 3);
 });
 
 test('collision removes the newest photo and leaves its slot empty', () => {
-  const before = freezeSlots(photo(5, 20), photo(2, 70), null, photo(3, 30), photo(4, 40));
+  const before = freezeSlots(photo(1, 20), photo(2, 70), null, photo(4, 30), photo(5, 40));
   const after = losePhoto(before);
   assert.deepEqual(after, [before[0], null, null, before[3], before[4]]);
   assert.equal(photoCount(after), 3);
   assert.notEqual(after, before);
   assert.equal(before[1].id, 2);
-  const refilled = storePhoto(after, photo(6, 80));
-  assert.equal(refilled[1].id, 6);
+  const refilled = storePhoto(after, photo(7, 80));
+  assert.equal(refilled[1].id, 7);
   assert.equal(refilled[2], null);
 });
 
 test('interference changes only the oldest photo, preserving identity and input', () => {
-  const before = freezeSlots(photo(1, 30), null, photo(2, 10), photo(3, 20), null);
+  const before = freezeSlots(photo(1, 30), null, photo(3, 10), photo(4, 20), null);
   const after = alterPhoto(before);
   assert.notEqual(after, before);
   assert.notEqual(after[2], before[2]);
@@ -67,11 +104,10 @@ test('interference changes only the oldest photo, preserving identity and input'
 });
 
 test('equal timestamps use photo id as the age tie-breaker', () => {
-  const before = freezeSlots(photo(8, 100), photo(2, 100), photo(5, 100), photo(9, 100), photo(3, 100));
-  assert.equal(storePhoto(before, photo(10, 101))[1].id, 10);
+  const before = freezeSlots(photo(6, 100), photo(2, 100), photo(8, 100), photo(9, 100), photo(5, 100));
   assert.equal(alterPhoto(before)[1].altered, true);
   assert.equal(losePhoto(before)[3], null);
-  assert.deepEqual(before.map(item => item.id), [8, 2, 5, 9, 3]);
+  assert.deepEqual(before.map(item => item.id), [6, 2, 8, 9, 5]);
   assert.ok(before.every(item => !item.altered));
 });
 
@@ -83,13 +119,19 @@ test('empty slots are safe for loss and interference and never create a photo', 
   assert.deepEqual(before, [null, null, null, null, null]);
 });
 
-test('repeated interference never changes the oldest photo identity or age', () => {
-  const before = freezeSlots(photo(1, 10, true), photo(2, 20), null, null, null);
+test('repeated interference skips damaged fragments and obscures the next clear one', () => {
+  const before = freezeSlots(photo(1, 10, true), photo(2, 20), photo(3, 30), null, null);
   const after = alterPhoto(before);
-  assert.deepEqual(after[0], before[0]);
-  assert.notEqual(after[0], before[0]);
-  assert.equal(after[1], before[1]);
-  assert.equal(after[1].altered, false);
+  assert.equal(after[0], before[0]);
+  assert.notEqual(after[1], before[1]);
+  assert.deepEqual(after[1], { ...before[1], altered: true });
+  assert.equal(after[2], before[2]);
+  const allDamaged = alterPhoto(after);
+  assert.deepEqual(allDamaged[2], { ...before[2], altered: true });
+  assert.equal(alterPhoto(allDamaged), allDamaged);
+  assert.equal(photoCount(allDamaged), 3);
+  assert.equal(before[1].altered, false);
+  assert.equal(before[2].altered, false);
 });
 
 test('an unanswered count remains distinct from an explicit Not sure choice', () => {

@@ -4,16 +4,16 @@
 
 ## 中文
 
-- 操作提示写“玩家现在要做什么”：向右走、跳起来、捡照片、按住哪个键。避免“绑定”“提交”“转述”等后台或论文用语出现在短提示里。
+- 操作提示写“玩家现在要做什么”：向右走、跳起来、捡碎片、按住哪个键。避免“绑定”“提交”“转述”等后台或论文用语出现在短提示里。
 - 场景标签指向看得见的东西。路边出现的是留言，不是能捡走的“别人的记忆”。
 - 留言像具体的人在回忆：“我记得……”；标明游戏虚构，不能冒充真实玩家评论。
-- 碰撞、照片被改动、挡住干扰要分开说。照片数量和图像变化是游戏事件，不宣称改变了玩家的真实记忆。
-- 结尾先对照原图、留言和三次回答，再提问。不替玩家解释为什么改变答案，也不判定记不清就是失败。
+- 碰撞丢片、碎片受遮挡、挡住干扰要分开说。这些是游戏事件，不宣称改变了玩家的真实记忆。
+- 结尾先看实际带回的碎片，明确揭晓后再对照原图、留言和三次回答。不替玩家解释为什么改变答案，也不判定记不清就是失败。
 - 艺术性保留在照片、声音和最后的问题里；不让基础操作提示承担隐喻。
 
 ## English
 
-Keep its own short, observational voice: “Take a look.”, “Your three answers” and direct action labels. English is not back-translated from the Chinese rewrite. Both languages are edited together for gameplay clarity, but sentences need not follow the same structure.
+Keep its own short, observational voice: “Take a look.”, “Your three answers” and direct action labels. English is not back-translated from the Chinese rewrite. Both languages are edited together for gameplay clarity, but sentences need not follow the same structure. Use “fragments” for the complementary pieces, not interchangeable whole-photo copies. Explain collection before damage, and review before reveal; do not introduce “the person they mentioned” before the characters have said anything.
 
 ## 两边必须一致的事实
 
@@ -22,14 +22,17 @@ Keep its own short, observational voice: “Take a look.”, “Your three answe
 - 两段留言来自同一对虚构人物：小林 / 阿禾，Lin / Rowan。第二人明确回应前一人，不伪装成独立观察证据。
 - 第二段准确引用本局第二次人数回答。3、4、5、记不清四条分支独立；只有5会被角色当作支持，0不等于未作答或0人。
 - 三轮只问同一个人数问题，不再追加天空或旋转木马题。背景中的天空和旋转木马仍保留。
-- 碰撞丢一张已收集照片；泡泡改动一张照片；空手时不会凭空产生照片。
-- 有照片后，长按保护键 0.7 秒；接下来 4 秒内可挡一次，持续按住不会反复充能。
-- 最多保留 5 张照片，收满后替换最早的一张。
+- 五个编号对应原图从左到右的五块互补竖向碎片，不是五张完整副本。路上重复出现同号碎片；同号空缺就补上，受损就修复，已有完好碎片则保留原片，不增加数量、不刷新拾取时间，也不挤掉其他编号。
+- 碰撞丢掉最新的一块已收集碎片；泡泡遮挡最早且仍完好的碎片；空手或全部受损时不会凭空产生碎片。A/B/C 只表示拾取阶段，不表示不同原图。
+- 有碎片后，长按保护键 0.7 秒；接下来 4 秒内可挡一次，持续按住不会反复充能。保护阻挡接触，不修复已有损伤；修复来自再次捡到同号碎片。
+- 结尾先查看带回的碎片，此时没有原图入口，C 也不能提前查看原图。按确认键明确揭晓后，才提供原图、碎片和按回答重画的画面；这时 C 可临时对照原图，松开返回。
+- 即使一块也没有带回，仍能经过查看阶段并揭晓原图。查看和揭晓不是第四次人数作答，不覆盖已有的三次回答。
 - 不确定是有效回答。结尾按最后一次人数回答重画的人物，不是被修改过的原始照片。
 
-实现保留现有语言选择和默认英文。留言模块使用跨语言稳定的 line id 与 replyTo，回答保存在本局，不串入下一局。新增文案要分别检查两种语言在实际界面里的长度和含义。玩家选择改变不等于已证明记忆被改变，结尾不能代替玩家解释原因。
-# 照片目的补充（2026-10-08）
+实现保留现有语言选择和默认英文。留言模块使用跨语言稳定的 line id 与 replyTo，回答保存在本局，不串入下一局。本地结果使用 `memory-drift.pixel-record.v4` 独立快照；不把旧版整张副本记录当成当前碎片结果。新增文案要分别检查两种语言在实际界面里的长度和含义。玩家选择改变不等于已证明记忆被改变，结尾不能代替玩家解释原因。
 
-中文用“捡起原图的副本，带到终点核对”“保住手里的副本”，不使用“守护真实记忆”“恢复自我”等抽象操作提示。英文围绕 keep a record / check the story / carried copies 独立成句；两套文字共享实际机制，不逐字翻译。
+## 碎片目的与信息顺序（2026-10-08）
 
-“受干扰”专指本局副本人物区域不可辨认；“原图”“带回的照片”“按最后人数重画”必须分开标注。保护只防止丢失或干扰，不承诺恢复照片、修改答案或抵抗心理暗示。
+中文围绕“把散落的碎片带到终点”“保住能看清的部分”“先看带回了什么，再揭晓原图”说明实际目的，不使用“守护真实记忆”“恢复自我”等抽象操作提示。英文围绕 collect the missing pieces / keep them clear / review before revealing the original 独立组织句子。两套文字必须在同一阶段提供同样的信息，不能一边提前透露五人说法、另一边还没有介绍。
+
+“受干扰”专指本局碎片受遮挡；“开头的原图”“带回的碎片”“按最后人数重画”必须分开标注。照片受损是收集机制，不等于曼德拉效应。保护只防止丢失或新干扰，不承诺恢复照片、修改答案或抵抗心理暗示。

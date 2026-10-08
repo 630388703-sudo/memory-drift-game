@@ -5,7 +5,7 @@ import { snapshotPhotos, summarizePhotos, firstCarriedSlot } from '../app/photo-
 
 const photo = (id, at = id, version = 'A', altered = false) => ({ id, at, version, altered });
 
-test('empty collections have no evidence and no selected photo', () => {
+test('empty collections have no evidence and no selected fragment', () => {
   const slots = emptyPhotoSlots();
   assert.deepEqual(summarizePhotos(slots), { retained: 0, clear: 0, damaged: 0 });
   assert.equal(firstCarriedSlot(slots), -1);
@@ -13,69 +13,86 @@ test('empty collections have no evidence and no selected photo', () => {
   assert.notEqual(snapshotPhotos(slots), slots);
 });
 
-test('collecting a photo makes one clear copy available', () => {
-  const slots = storePhoto(emptyPhotoSlots(), photo(1));
+test('collecting a fragment makes only its matching image strip available', () => {
+  const slots = storePhoto(emptyPhotoSlots(), photo(4));
   assert.deepEqual(summarizePhotos(slots), { retained: 1, clear: 1, damaged: 0 });
-  assert.equal(firstCarriedSlot(slots), 0);
-  assert.deepEqual(snapshotPhotos(slots), [photo(1), null, null, null, null]);
+  assert.equal(firstCarriedSlot(slots), 3);
+  assert.deepEqual(snapshotPhotos(slots), [null, null, null, photo(4), null]);
 });
 
 test('losing a photo reduces evidence without filling or reordering empty slots', () => {
-  const slots = [photo(1, 30), null, photo(2, 10), photo(3, 20), null];
+  const slots = [photo(1, 30), null, photo(3, 10), photo(4, 20), null];
   const after = losePhoto(slots);
   assert.deepEqual(summarizePhotos(after), { retained: 2, clear: 2, damaged: 0 });
   assert.equal(firstCarriedSlot(after), 2);
-  assert.deepEqual(snapshotPhotos(after), [null, null, photo(2, 10), photo(3, 20), null]);
+  assert.deepEqual(snapshotPhotos(after), [null, null, photo(3, 10), photo(4, 20), null]);
 });
 
-test('interference marks an existing copy unreadable without changing its source or identity', () => {
-  const slots = [photo(1, 10, 'A'), null, photo(2, 20, 'C'), null, null];
+test('interference progressively obscures clear fragments without changing source or identity', () => {
+  const slots = [photo(1, 10, 'A'), null, photo(13, 20, 'C'), null, null];
   const after = alterPhoto(slots);
   assert.deepEqual(summarizePhotos(after), { retained: 2, clear: 1, damaged: 1 });
   assert.deepEqual(snapshotPhotos(after)[0], { ...slots[0], altered: true });
   assert.equal(firstCarriedSlot(after), 0);
-  assert.deepEqual(summarizePhotos(alterPhoto(after)), { retained: 2, clear: 1, damaged: 1 });
+  const allDamaged = alterPhoto(after);
+  assert.deepEqual(summarizePhotos(allDamaged), { retained: 2, clear: 0, damaged: 2 });
+  assert.deepEqual(allDamaged[2], { ...slots[2], altered: true });
+  assert.equal(alterPhoto(allDamaged), allDamaged);
   assert.deepEqual(summarizePhotos(slots), { retained: 2, clear: 2, damaged: 0 });
 });
 
-test('full storage replaces the oldest copy and summaries reflect the new state', () => {
-  const slots = [photo(1, 50), photo(2, 40), photo(99, 10, 'A', true), photo(4, 30), photo(5, 20)];
+test('later pickup repairs its damaged strip while a duplicate clear strip does nothing', () => {
+  const slots = [photo(1, 50), photo(2, 40), photo(3, 10, 'A', true), photo(4, 30), photo(5, 20)];
   const before = snapshotPhotos(slots);
-  const after = storePhoto(slots, photo(100, 60, 'C'));
+  assert.equal(storePhoto(slots, photo(11, 55, 'C')), slots);
+  const after = storePhoto(slots, photo(13, 60, 'C'));
   assert.deepEqual(summarizePhotos(before), { retained: 5, clear: 4, damaged: 1 });
   assert.deepEqual(summarizePhotos(after), { retained: 5, clear: 5, damaged: 0 });
-  assert.equal(after[2].id, 100);
-  assert.equal(before[2].id, 99);
+  assert.equal(after[2].id, 13);
+  assert.equal(before[2].id, 3);
+  assert.equal(before[2].altered, true);
   assert.equal(firstCarriedSlot(after), 0);
 });
 
-test('all pickup stages have the same evidence meaning and preserve only existing photo fields', () => {
-  const slots = [photo(1, 1, 'A'), photo(2, 2, 'B'), photo(3, 3, 'C'), null, null];
+test('pickup stages describe when a fragment was collected rather than different image sources', () => {
+  const slots = [photo(1, 1, 'A'), photo(7, 2, 'B'), photo(13, 3, 'C'), null, null];
   const snapshot = snapshotPhotos(slots);
   assert.deepEqual(summarizePhotos(snapshot), { retained: 3, clear: 3, damaged: 0 });
   assert.deepEqual(snapshot, slots);
-  for (const copy of snapshot.filter(Boolean)) {
-    assert.deepEqual(Object.keys(copy).sort(), ['altered', 'at', 'id', 'version']);
-    assert.equal('recall' in copy, false);
-    assert.equal('count' in copy, false);
+  for (const fragment of snapshot.filter(Boolean)) {
+    assert.deepEqual(Object.keys(fragment).sort(), ['altered', 'at', 'id', 'version']);
+    assert.equal('recall' in fragment, false);
+    assert.equal('count' in fragment, false);
   }
 });
 
-test('snapshots isolate every photo from later gameplay operations and direct mutation', () => {
-  const slots = [photo(1), null, photo(2, 2, 'B'), null, null];
+test('snapshots isolate every fragment from later gameplay operations and direct mutation', () => {
+  const slots = [photo(1), null, photo(8, 2, 'B'), null, null];
   const snapshot = snapshotPhotos(slots);
   assert.notEqual(snapshot, slots);
   assert.notEqual(snapshot[0], slots[0]);
   assert.notEqual(snapshot[2], slots[2]);
-  const later = storePhoto(losePhoto(alterPhoto(slots)), photo(3, 3, 'C'));
-  assert.deepEqual(snapshot, [photo(1), null, photo(2, 2, 'B'), null, null]);
+  const later = storePhoto(losePhoto(alterPhoto(slots)), photo(13, 3, 'C'));
+  assert.deepEqual(snapshot, [photo(1), null, photo(8, 2, 'B'), null, null]);
   slots[0].altered = true;
   slots[2].version = 'C';
   slots[2] = null;
-  assert.deepEqual(snapshot, [photo(1), null, photo(2, 2, 'B'), null, null]);
+  assert.deepEqual(snapshot, [photo(1), null, photo(8, 2, 'B'), null, null]);
   snapshot[0].id = 999;
   assert.equal(slots[0].id, 1);
   assert.deepEqual(summarizePhotos(later), { retained: 2, clear: 1, damaged: 1 });
+});
+
+test('a replay reset leaves the previous evidence snapshot intact without carrying pieces over', () => {
+  const previous = snapshotPhotos([photo(6, 10, 'B'), null, photo(13, 20, 'C', true), null, null]);
+  const nextRun = emptyPhotoSlots();
+  assert.deepEqual(summarizePhotos(nextRun), { retained: 0, clear: 0, damaged: 0 });
+  assert.deepEqual(summarizePhotos(previous), { retained: 2, clear: 1, damaged: 1 });
+  const collected = storePhoto(nextRun, photo(3, 1));
+  assert.equal(collected[2].altered, false);
+  assert.equal(previous[2].altered, true);
+  assert.equal(previous[2].id, 13);
+  assert.equal(nextRun[2], null);
 });
 
 test('summaries and selection read frozen slots without mutating them', () => {
